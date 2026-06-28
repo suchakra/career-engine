@@ -1,0 +1,75 @@
+[build-system]
+requires = ["setuptools>=74.0.0"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "career-engine"
+version = "0.1.0"
+description = "Privacy-first AI career-portfolio platform on Google ADK 2.0"
+requires-python = ">=3.12"
+dependencies = [
+    # Google ADK 2.0 — pin to exact GA release; verify import paths at install time
+    "google-adk==2.0.0",
+    # Pydantic v2 — strict typing for all boundaries
+    "pydantic==2.13.4",
+    # Settings management (pydantic extension)
+    "pydantic-settings==2.10.1",
+    # Templating
+    "jinja2==3.1.6",
+    # Web frontend (Phase 2; installed now so the import stub type-checks)
+    "streamlit==1.58.0",
+    # Google Cloud
+    "google-cloud-firestore==2.28.0",
+    "google-cloud-secret-manager==2.29.0",
+    # Transitive deps pinned for reproducibility (already pulled by google-adk 2.0.0)
+    "google-genai==1.75.0",
+    "google-auth==2.55.1",
+    "pydantic-core==2.46.4",
+    "python-dotenv==1.2.2",
+    "anyio==4.14.1",
+    "httpx==0.28.1",
+    "starlette==0.52.1",
+    "fastapi==0.138.1",
+    "uvicorn==0.49.0",
+    "pyyaml==6.0.3",
+    "tenacity==9.1.4",
+    "click==8.4.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    # Linting
+    "ruff==0.15.20",
+    # Type checking
+    "mypy==2.1.0",
+    # Testing
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    # Type stubs for cloud libs (mypy strict)
+    "types-requests==2.32.4.20250611",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "RUF"]
+ignore = [
+    "E501",   # line-length handled by formatter
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["career_engine"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+# Allow untyped stubs for third-party packages that lack them
+ignore_missing_imports = true
+# Exclude non-source directories
+exclude = ["infrastructure/", "evaluation/", "templates/"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
