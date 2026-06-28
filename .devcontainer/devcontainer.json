@@ -1,0 +1,21 @@
+{
+  "name": "career-engine",
+  "image": "mcr.microsoft.com/devcontainers/python:3",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "runArgs": [
+    "--env-file",
+    ".env"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "anthropic.claude-code",
+        "github.copilot",
+        "github.copilot-chat"
+      ]
+    }
+  },
+  "postCreateCommand": "git config --global user.email \"chakraborty.sumanta@gmail.com\" && git config --global user.name \"Sumanta Chakraborty\" && git config --global user.signingkey 0EB88FD4440DE6B0 && git config --global commit.gpgsign true"
+}
