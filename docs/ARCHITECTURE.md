@@ -332,10 +332,15 @@ pillar). Flow:
 > tailor against. Keep them distinct.
 
 ### 12.4 Progressive discovery (the return loop)
-- **Apply-readiness gate (mandatory minimum):** `is_apply_ready(state, reference_date)` is a pure
-  predicate — *every role within the last 5 years has ≥1 validated StarStory or is explicitly
-  acknowledged.* New-grad case: "last 5 years **or** all roles, whichever is shorter." Tailoring /
-  "apply for jobs" is gated on this.
+- **Apply-readiness gate — a lookback WINDOW, never a required amount.** `is_apply_ready(state,
+  reference_date)` is a pure predicate: *every experience entry dated within the trailing 5-year window
+  `[reference_date − 5y, reference_date]` is validated or explicitly acknowledged.* The "5 years" caps
+  how far back the **mandatory** part reaches; it is **not** a minimum to accumulate. So:
+  - 18 months of experience → document those 18 months → **ready**. Never blocked for "lacking 5 years."
+  - 25-year veteran → document only the last 5 years → **ready**; older roles are optional backlog.
+  - Truly zero work history → the window holds projects/internships/education entries (12.6); document a
+    few of those → ready. (Safety floor: ≥1 validated entry of any type, so the gate is reachable.)
+  Tailoring / "apply for jobs" is gated on this. The same one rule serves everyone, 0–5+ years.
 - **Backward-chronological continuation:** a **grill frontier** pointer tracks how far back we've
   grilled. Each return session offers the next ungrilled role *older than the frontier*. Default is
   backward (recent matters most, freshest memory) but a role is **jumpable** on request.
@@ -362,9 +367,15 @@ pillar). Flow:
 - `is_apply_ready` and the progress meter are **derived** (pure functions), not stored.
 This reworks WS-A's grill loop + router and the ingest prompt; it's the deliberate v1.2.0 amendment.
 
-### 12.6 New graduates / no formal experience
-A fresh grad with zero jobs is a first-class user — the same machinery serves them once "role" is
-generalized to **experience entry** (12.5). What changes:
+### 12.6 Early-career (0–5 years) — no "must have 5 years" trap
+Early-career users (0–5 years, including zero jobs) are first-class. Two things make this work, and
+neither special-cases them — they're the general rules:
+- The **apply-readiness gate is a trailing-5-year window, not a minimum** (12.4): you document whatever
+  exists in that window and you're ready. Nobody is ever told "come back when you have 5 years."
+- "Role" is generalized to **experience entry** (12.5), so people with little/no formal work still have
+  grillable material.
+
+What that looks like in practice:
 - **Ingest** extracts education, internships, capstone/side **projects**, research, open-source,
   leadership (clubs/TA), competitions — not just employment. A grad's resume is education-heavy; the
   vision prompt must capture these entry types.

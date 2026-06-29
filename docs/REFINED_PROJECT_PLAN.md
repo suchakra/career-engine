@@ -52,9 +52,10 @@ at turn 5, and renders a PDF. ✅ **DONE** (tag `phase-1-mvp`, 228 tests).
 ### Phase 1.5 — Resume-aware ingestion & progressive discovery  *(contract v1.2.0)*
 Full spec in [ARCHITECTURE.md §12](ARCHITECTURE.md). Backward-compatible contract amendment; reworks
 WS-A's grill loop. Scope:
-- **Serves new grads too:** `work_timeline` holds **experience entries** (jobs, internships, projects,
-  research, leadership, …), not just jobs; apply-readiness falls back to entry-count for zero-job users
-  (see [ARCHITECTURE.md §12.6](ARCHITECTURE.md)).
+- **Serves 0–5yr / early-career too:** `work_timeline` holds **experience entries** (jobs, internships,
+  projects, research, leadership, …), not just jobs. Apply-readiness is a **trailing-5-year window, NOT a
+  minimum** — you document whatever exists in that window and you're ready; nobody is gated on "having 5
+  years" (see [ARCHITECTURE.md §12.4/§12.6](ARCHITECTURE.md)).
 - **Contract v1.2.0:** add `work_timeline: list[Entry]`, `coverage_through`, `reference_date` (injected
   clock); add `role_id` to `StarStory`; **replace** pillar fields (`target_competencies`/`active_gaps`/
   `current_pillar`) with role-based equivalents + `grill_frontier`. `is_apply_ready` + progress meter derived.
@@ -62,7 +63,7 @@ WS-A's grill loop. Scope:
   Add a multimodal entry point to the model-client adapter. PDF + images first; DOCX later.
 - **Rework `ingest_node` + grill loop** to be role-based; add the **discovery turn** (confirm coverage,
   append missing roles). Reuse the existing STAR grilling per role; skip already-quantified bullets.
-- **Progressive discovery engine:** `is_apply_ready` gate (last-5-years mandatory; new-grad fallback),
+- **Progressive discovery engine:** `is_apply_ready` gate (trailing-5-year **window**, not a minimum; ≥1-entry safety floor),
   `grill_frontier` for backward-chronological continuation (jumpable; soft horizon ~10–15 yrs),
   derived progress meter. (The login **nudge UI** surfaces in Phase 2 on the Pending Action panel.)
 - **Tailoring gated** on `is_apply_ready`.
