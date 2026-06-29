@@ -3,7 +3,7 @@
 > Single source of truth for **what's done vs. pending**. Update this at the end of every work
 > session / sub-agent run. Keep entries terse. Legend: ✅ done · 🟡 in progress · ⬜ not started · 🚫 blocked.
 
-Last updated: **2026-06-29** — *Phase 0 + Phase 1 + Phase 1.3 built & merged (contract v1.1.x, 230 tests). Review hardening complete (optional #6 deferred to Phase 2). Next: Phase 1.5 (contract v2.0.0). See [REVIEW.md §7](REVIEW.md).*
+Last updated: **2026-06-29** — *Phase 0 + Phase 1 + Phase 1.3 + **Phase 1.5 CORE** built & merged. Contract bumped to **v2.0.0** (BREAKING; tag `contract-v2.0.0`), 285 tests. CORE = CONTRACT+GRILL+METRICS. Next: fan out 1.5-INGEST ∥ 1.5-DISCOVERY.*
 
 ---
 
@@ -14,7 +14,7 @@ Last updated: **2026-06-29** — *Phase 0 + Phase 1 + Phase 1.3 built & merged (
 | Phase 0 — Contract Freeze | ✅ | Sonnet-built, Opus-reviewed (1 round: dead model IDs + Free-mode grilling fixed). Frozen, tag `contract-v1.0.0`. |
 | Phase 1 — Core loop (CLI) | ✅ | WS-A/B/C/D + integration all merged & Opus-PASS. Turn-based CLI discovery loop runs end-to-end → PDF. 228 tests. Contract v1.1.0. |
 | Phase 1.3 — Review hardening (no contract change) | ✅ | Done; stays v1.1.x, 230 tests. Required items from [REVIEW.md §7](REVIEW.md) all merged: docs truth (#7,#8), upgrade-signal band-aid + E2E test (#1,#11), model_client errors (#4), Firestore loud-fallback (#3). Optional #6 (FakeFirestore move) DEFERRED to Phase 2. |
-| Phase 1.5 — Resume-aware + progressive discovery | ⬜ | Spec'd ([ARCHITECTURE.md §12](ARCHITECTURE.md)). Vision ingest, role-based `work_timeline` (replaces pillars), gap-as-roles, apply-readiness gate, backward continuation. Contract v2.0.0. Absorbs SSRF guard (#2, INGEST), upgrade-required typed event (#1b, CONTRACT), stale-docstring (#9, DISCOVERY). |
+| Phase 1.5 — Resume-aware + progressive discovery | 🟡 | **CORE done** (CONTRACT+GRILL+METRICS, contract v2.0.0, tag `contract-v2.0.0`, 285 tests, Opus-PASS & merged). Vision ingest (1.5-INGEST) + progressive-discovery CLI (1.5-DISCOVERY) remain — fan out in parallel. SSRF guard (#2) folds into INGEST; stale-docstring (#9) into DISCOVERY. |
 | Phase 2 — Web / Infra / Async | ⬜ | |
 | Phase 3 — Hardening / Eval | ⬜ | |
 
@@ -60,13 +60,13 @@ Stabilize the foundation before launching 1.5 builders. Triage + rationale: [REV
 - ⬜ **#6** *(optional — DEFERRED to Phase 2 / next Firestore touch)* move `FakeFirestoreClient` + its `_Fake*` helper hierarchy out of `database/firestore_session.py` into `tests/`; low value now, per [REVIEW.md §7.3](REVIEW.md)
 
 ## Phase 1.5 — Resume-aware ingestion & progressive discovery  *(contract v2.0.0)*
-Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) · **groomed prompts + status: [GROOMING.md](GROOMING.md)**. Not started — but **grooming COMPLETE: all 5 pieces are launchable sonnet prompts** ([GROOMING.md](GROOMING.md)).
-- ⬜ Contract v2.0.0: `work_timeline: list[Role]`, `coverage_through`, `reference_date` (injected clock); `role_id` on `StarStory`; replace pillar fields with role-based + `grill_frontier`
-- ⬜ `tools/resume_parser.py` — vision ingest (file/photo → multimodal Flash → timeline); multimodal entry point on model-client adapter
-- ⬜ Rework `ingest_node` + grill loop to role-based; add discovery turn (confirm coverage, append missing roles); skip already-quantified bullets
-- ⬜ Progressive discovery: `discovery_completeness` signal over the trailing-5-yr **window** (a measure, NOT a gate/minimum), `grill_frontier` backward continuation (jumpable; soft horizon), derived progress meter
-- ⬜ Applying/tailoring NEVER blocked — persistent, snooze-able **nudge** when the window is incomplete (autonomy first)
-- ⬜ Exit demo: stale resume image → timeline → discovery adds roles → role grilling → readiness unlocks tailoring → later session resumes backward
+Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) · **groomed prompts + status: [GROOMING.md](GROOMING.md)**. **CORE merged; 2 follow-ups remain.**
+- ✅ **CONTRACT** v2.0.0: `work_timeline: list[Entry]`, `coverage_through`, `reference_date` (injected clock), `grill_frontier`; `entry_id` on `StarStory`; pillar fields removed; pure helpers `discovery_completeness` / `recent_window_complete`. Tag `contract-v2.0.0`.
+- ✅ **GRILL**: entry-based grill loop (backward-chronological, jumpable frontier), discovery turn (confirm coverage, append discovered entries), skip already-quantified, ~15-yr soft horizon → summarized, 5-turn brake + HITL preserved. Minimal entry-based `ingest_node` seam (INGEST upgrades it).
+- ✅ **METRICS**: `_contains_real_metric` extended (users/downloads/stars, team size, rank, dataset scale, citations, GPA) with per-pattern tests; eng patterns retained.
+- ⬜ **1.5-INGEST** `tools/resume_parser.py` — vision ingest (file/photo → multimodal Flash → timeline); multimodal entry point on model-client adapter; full `ingest_node`. Absorbs SSRF guard (#2).
+- ⬜ **1.5-DISCOVERY** (cli/): `discovery_completeness` progress meter, never-block nudge (snooze-able), backward return loop. Absorbs stale-docstring (#9).
+- ⬜ Exit demo: stale resume image → timeline → discovery adds roles → role grilling → readiness nudge → later session resumes backward
 
 ## Phase 2 — Web, Infra, Async
 - ⬜ `main.py` Streamlit path — dashboard + pending-action surface (incl. progressive-discovery login nudge, consent-respecting)
@@ -101,6 +101,8 @@ Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.
 - 2026-06-28 — **Phase 0 contract FROZEN** after Opus PASS (tag `contract-v1.0.0`). Any change to schema.py / config.py / public interfaces now requires a `CONTRACT_VERSION` bump.
 - 2026-06-29 — **Contract amended 1.0.0 → 1.1.0** (backward-compatible MINOR; user-approved). Added optional `CareerEngineState` fields: `pending_user_answer`, `current_question`, `professional_summary`, `master_resume_json`, `tailored_resume_json`, `jd_text`. Reason: WS-A had overloaded `raw_history_text` / `checkpoint_delta_summary` (colliding with WS-B's resume rendering). WS-B `pdf_renderer` now reads `professional_summary`. WS-A reworked to use dedicated fields. Existing 1.0.0 docs still load (defaults; WS-C version gate allows minor diffs).
 - 2026-06-29 — Build fix: `config.py` uses `import google.cloud.firestore as firestore` form (mypy namespace-package quirk surfaced once cloud SDKs were installed).
+- 2026-06-29 — **Contract amended 1.1.0 → 2.0.0** (BREAKING MAJOR; user-approved, no migration — no production data). Tag `contract-v2.0.0`. Added `Entry` model + `ExperienceType`/`EntryStatus` enums; `CareerEngineState` gains `work_timeline`/`coverage_through`/`reference_date`/`grill_frontier` and **loses** pillar fields (`target_competencies`, `active_gaps`, `current_pillar`); `StarStory` gains `entry_id`. Pure helpers `discovery_completeness`/`recent_window_complete` (nudge/meter only; gate nothing; use injected `reference_date`, never `datetime.now()`).
+- 2026-06-29 — **Phase 1.5 CORE COMPLETE** (CONTRACT+GRILL+METRICS, one Sonnet worktree, Opus-PASS, merged `--no-ff`; 230→285 tests). Grill loop is now entry-based (backward-chronological, jumpable frontier), with discovery turn, already-quantified skip, ~15-yr soft horizon, and extended metric patterns; 5-turn brake + HITL preserved. Reviewer notes (non-blocking): `discovery_completeness` counts SKIPPED as done; `recent_window_complete` treats DOCUMENTED as incomplete (stricter than spec) — both defensible. Remaining 1.5: INGEST ∥ DISCOVERY.
 - 2026-06-29 — **Phase 1.3 hardening COMPLETE** (stays contract v1.1.x; 228→230 tests). Merged #1 (upgrade-signal band-aid via `read_raw_state` + `TurnResult.upgrade_message`), #11 (CLI upgrade-required E2E test), #4 (model_client errors propagate, no `""` swallow), #3 (loud Firestore in-memory fallback). Optional #6 (FakeFirestore move) deferred to Phase 2 — moving it means relocating the whole `_Fake*` hierarchy; low value until the next Firestore touch. Root-cause fixes (#1b typed event, #2 SSRF, #9 stale docstring) remain folded into Phase 1.5 per the triage.
 
 ## Blockers / open questions

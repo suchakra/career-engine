@@ -12,13 +12,13 @@
 ## Phase 1.5 — grooming status (contract v2.0.0)
 | WS | Scope | Depends on | Grooming |
 |----|-------|-----------|----------|
-| **1.5-CONTRACT** | schema v2.0.0: Entry timeline, replace pillar fields, version bump, golden test | — (blocking) | ✅ Ready |
-| **1.5-GRILL** | entry-based grill loop, discovery turn, `grill_frontier`, skip-quantified | built WITH CONTRACT (1 merge unit) | ✅ Ready |
-| **1.5-METRICS** | extend `_contains_real_metric` for early-career/non-eng metrics | folded into GRILL | ✅ Ready (in GRILL) |
-| **1.5-INGEST** | vision resume parser + multimodal client + `ingest_node` upgrade | after CORE merged (touches `nodes.py`) | ✅ Ready |
-| **1.5-DISCOVERY** | `discovery_completeness` nudge, progress meter, return loop, never-block tailoring | after CORE (CLI-only) | ✅ Ready |
+| **1.5-CONTRACT** | schema v2.0.0: Entry timeline, replace pillar fields, version bump, golden test | — (blocking) | ✅✅ **BUILT & MERGED** (tag `contract-v2.0.0`) |
+| **1.5-GRILL** | entry-based grill loop, discovery turn, `grill_frontier`, skip-quantified | built WITH CONTRACT (1 merge unit) | ✅✅ **BUILT & MERGED** |
+| **1.5-METRICS** | extend `_contains_real_metric` for early-career/non-eng metrics | folded into GRILL | ✅✅ **BUILT & MERGED** (in GRILL) |
+| **1.5-INGEST** | vision resume parser + multimodal client + `ingest_node` upgrade | after CORE merged (touches `nodes.py`) | ✅ Ready — **next** |
+| **1.5-DISCOVERY** | `discovery_completeness` nudge, progress meter, return loop, never-block tailoring | after CORE (CLI-only) | ✅ Ready — **next** |
 
-**🎉 GROOMING COMPLETE for Phase 1.5 — all 5 pieces ✅ launchable. Nothing left to groom; ready to build.**
+**CORE (CONTRACT+GRILL+METRICS) is MERGED (contract v2.0.0, 285 tests).** Remaining: 1.5-INGEST ∥ 1.5-DISCOVERY — launchable, disjoint files, run in parallel.
 
 **Sequencing:** `[CONTRACT + GRILL + METRICS]` = one worktree / one Opus review / one merge (CORE; master
 stays green) → then `INGEST` ∥ `DISCOVERY` (disjoint files: INGEST=`nodes.py`/`tools`, DISCOVERY=`cli/` —

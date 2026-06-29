@@ -1,15 +1,18 @@
 # CareerEngine — Session Handoff / Resume Point
 
 ## 👉 YOU ARE HERE (updated 2026-06-29)
-**`master`, Phase 1.3 just landed — verify clean & push.** Phase 0 + Phase 1 + **Phase 1.3** are built
-(230 tests; `make check` green: ruff + mypy --strict + pytest). Phase 1.3 was the review-hardening pass
-from **[REVIEW.md §7](REVIEW.md)** (no contract change, stays v1.1.x): #1 upgrade-signal band-aid, #11
-CLI upgrade E2E test, #4 model_client errors propagate, #3 loud Firestore fallback. Optional #6
-(FakeFirestore move) deferred to Phase 2. Next is **Phase 1.5** (fully GROOMED, 5 launchable Sonnet
-prompts in [GROOMING.md](GROOMING.md)).
-- **NEXT (recommended):** **build Phase 1.5** (contract v2.0.0). The root-cause fixes for review
-  findings #1b (typed upgrade event), #2 (SSRF), #9 (stale docstring) are folded into the 1.5 prompts.
-- **To BUILD 1.5:** say "build Phase 1.5" → CORE (`1.5-CONTRACT`+`1.5-GRILL` in ONE worktree) → Opus-review → merge → `1.5-INGEST` ∥ `1.5-DISCOVERY`. The 3 review open-questions are RESOLVED ([REVIEW.md §5](REVIEW.md)).
+**`master`, Phase 1.5 CORE just landed (contract v2.0.0) — verify clean & push; then fan out INGEST ∥ DISCOVERY.**
+Phase 0 + Phase 1 + Phase 1.3 + **Phase 1.5 CORE** are built (285 tests; `make check` green: ruff +
+mypy --strict + pytest). CORE = `1.5-CONTRACT` + `1.5-GRILL` + `1.5-METRICS`, built in one Sonnet
+worktree, Opus-reviewed PASS, merged `--no-ff`, tagged **`contract-v2.0.0`**. The contract is now
+**BREAKING v2.0.0**: `Entry` timeline replaces pillar fields; entry-based grill loop (backward-chronological,
+jumpable frontier); `discovery_completeness`/`recent_window_complete` helpers; extended metric patterns.
+- **NEXT (recommended):** **fan out the two remaining 1.5 workstreams in PARALLEL** — `1.5-INGEST`
+  (vision parser; `nodes.py`/`tools/`) ∥ `1.5-DISCOVERY` (CLI nudge/meter/return-loop; `cli/` only).
+  Disjoint files → safe to run concurrently. Each: Sonnet builder in worktree → Opus-review → merge.
+- **To BUILD:** say "build 1.5-INGEST" and/or "build 1.5-DISCOVERY" → launch the GROOMING.md prompts
+  (Sonnet, worktree) → Opus-review the diff → merge (master stays green). The 3 review open-questions
+  are RESOLVED ([REVIEW.md §5](REVIEW.md)); #2 SSRF folds into INGEST, #9 stale-docstring into DISCOVERY.
 - **To IDEATE:** read this file, then [ARCHITECTURE.md](ARCHITECTURE.md) + [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md); capture new ideas back into the docs (don't mutate a spec that's mid-build — version-gate instead).
 
 ---
@@ -20,24 +23,24 @@ prompts in [GROOMING.md](GROOMING.md)).
 
 ## Where we are
 - **Branch `master`, pushed to origin** at the commit that adds this file (run `git log --oneline -1`).
-- **Contract: v1.1.0** (tags `contract-v1.0.0`, `contract-v1.1.0`). Changing `schema.py`/`config.py`/
-  public interfaces requires a `CONTRACT_VERSION` bump.
+- **Contract: v2.0.0** (tags `contract-v1.0.0`, `contract-v1.1.0`, `contract-v2.0.0`). Changing
+  `schema.py`/`config.py`/public interfaces requires a `CONTRACT_VERSION` bump.
 - **Phase 0:** ✅ frozen. **Phase 1 (WS-A/B/C/D + integration):** ✅ COMPLETE, all Opus-PASS & merged.
   **Phase 1.3 (review hardening):** ✅ done (stays v1.1.x). `make check` = ruff clean, mypy --strict
   clean, **230 tests pass (~8s)**. The CLI discovery loop runs end-to-end (turn-based HITL) and renders
   a PDF; the upgrade-required path now reads the real `_upgrade_required` signal.
 - All Phase-0/Phase-1 worktrees pruned after merge. Phase 1.3 was done in-place on `master`.
 
-## NEXT: Phase 1.5 (groomed) — then Phase 2
+## NEXT: Phase 1.5 fan-out (CORE done) — then Phase 2
 **Phase 1.5** (resume-aware vision ingest + role/entry timeline + progressive discovery, contract
-**v2.0.0**) is spec'd ([ARCHITECTURE.md §12](ARCHITECTURE.md)) and partly groomed into sonnet-ready
-prompts — see **[GROOMING.md](GROOMING.md)** for the grooming status table and launchable prompts.
-- **Grooming COMPLETE** — all 5 Phase-1.5 pieces are ✅ launchable in [GROOMING.md](GROOMING.md). Nothing
-  left to groom; ready to build.
-- **Build order:** CORE = `1.5-CONTRACT` + `1.5-GRILL` (+METRICS) in ONE Sonnet worktree → Opus-review the
-  combined diff → merge (master green). Then fan out `1.5-INGEST` (nodes.py/tools) ∥ `1.5-DISCOVERY` (cli/)
+**v2.0.0**) is spec'd ([ARCHITECTURE.md §12](ARCHITECTURE.md)) and groomed into sonnet-ready
+prompts — see **[GROOMING.md](GROOMING.md)** for the status table and launchable prompts.
+- **CORE = DONE** — `1.5-CONTRACT` + `1.5-GRILL` + `1.5-METRICS` merged (contract v2.0.0, 285 tests, tag
+  `contract-v2.0.0`). Remaining: `1.5-INGEST` ∥ `1.5-DISCOVERY` (both ✅ launchable in [GROOMING.md](GROOMING.md)).
+- **Build order:** CORE ✅ merged (master green). Now fan out `1.5-INGEST` (nodes.py/tools) ∥ `1.5-DISCOVERY` (cli/)
   — disjoint files → Opus-review + merge each.
-- To launch CORE: run the 1.5-CONTRACT prompt then the 1.5-GRILL prompt (both in GROOMING.md) in one worktree.
+- To launch each follow-up: run its GROOMING.md prompt in a Sonnet worktree → Opus-review → merge. They
+  touch disjoint files (INGEST=`nodes.py`/`tools`, DISCOVERY=`cli/`) so they can run concurrently.
 
 Phase 2 (after 1.5) proceeds per [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md):
 - **Phase 2:** Streamlit web workspace (reuse the `cli/` runtime seam), `infrastructure/` Terraform
