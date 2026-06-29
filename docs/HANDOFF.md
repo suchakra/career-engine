@@ -12,11 +12,16 @@
   master = ruff clean, mypy --strict clean, **201 tests pass**.
 - Worktrees for WS-A/B/C/D were pruned after merge.
 
-## IN-FLIGHT when this was written: Phase-1 integration
-- A Sonnet builder is/was building the CLI integration: `main.py` (thin entrypoint) + `cli/` runtime +
-  `tests/test_integration.py` (live end-to-end smoke: ingest → grill → checkpoint@5 → finalize → PDF).
-- Background agent id: **`ad00b283a660575a5`**. Worktree (on disk, survives reset):
-  **`.claude/worktrees/agent-ad00b283a660575a5`**. It was told NOT to commit (work left in the worktree).
+## IN-FLIGHT: Phase-1 integration (INCOMPLETE — being fixed)
+- A Sonnet builder is building the CLI integration: `main.py` (thin entrypoint) + `cli/` runtime +
+  `integration/model_client.py` + `tests/test_integration.py`, plus a minimal change to
+  `workflows/discovery_graph.py`.
+- Background agent id: **`ad00b283a660575a5`**. Worktree: **`.claude/worktrees/agent-ad00b283a660575a5`**,
+  branch `worktree-agent-ad00b283a660575a5`. **WIP is COMMITTED at `1a2f77d`** (snapshot — reset-safe).
+- **Known-broken, fix in progress:** the e2e test `TestEndToEndRunnerFlow::test_vague_answer_rejected_
+  no_story_committed` HANGS (infinite loop): the discovery loop is turn-based/HITL but was driven via a
+  single `run_async` that loops with no pause for input. Fix = drive ONE turn per invocation, human input
+  in the CLI layer (never inside run_async); every test must finish fast. Also 28 ruff + 6 mypy errors to clear.
 
 ### Resume the integration (do this first)
 1. `git -C .claude/worktrees/agent-ad00b283a660575a5 status` and `... diff master --stat` to see its work.
