@@ -116,10 +116,26 @@ def _ingest_shim(ctx: object) -> None:
     _write_state(ctx, new_state)
 
 
-def _router_shim(ctx: object) -> str:
-    """ADK shim: reads state from ctx, calls discovery_router, returns route string."""
+def _router_shim(ctx: object) -> None:
+    """ADK shim: reads state from ctx, calls discovery_router, sets ctx.route.
+
+    INTEGRATION NOTE: FunctionNode wraps a plain str return value as
+    Event(output=...), which lands in child_ctx.output — NOT in child_ctx.route.
+    The ADK Workflow's _buffer_downstream_triggers uses child_ctx.route to
+    select the matching Edge, so a string return value causes all router
+    branches to be silently skipped (falls back to DEFAULT_ROUTE only, which
+    doesn't exist for the router → the graph terminates after ingest).
+
+    Setting ctx.route directly writes to ctx._route_value, which
+    _flush_output_and_deltas then emits as Event(route=...) → tracked by
+    _track_event_in_context as ctx.route → used by _buffer_downstream_triggers.
+    This is the correct ADK 2.0 pattern for routing FunctionNodes.
+    """
     state = _read_state(ctx)
-    return discovery_router(state)
+    route = discovery_router(state)
+    # Set route on the context object; ADK flushes it as Event(route=...) so
+    # _buffer_downstream_triggers can select the correct outgoing edge.
+    setattr(ctx, "route", route)  # ctx is the ADK Context; mypy sees 'object'
 
 
 def _grill_shim(ctx: object) -> None:
@@ -184,7 +200,7 @@ def build_discovery_workflow() -> Workflow:
     tailor = FunctionNode(func=_tailor_shim, name="tailor_node")
 
     # ── Wire edges ────────────────────────────────────────────────────────────
-    # Route strings returned by _router_shim must match Edge.route values.
+    # Route strings set on ctx.route by _router_shim must match Edge.route values.
     edges: list[Edge] = [
         # Entry: START → ingest
         Edge(from_node=START, to_node=ingest, route=DEFAULT_ROUTE),
