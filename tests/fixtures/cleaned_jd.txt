@@ -1,0 +1,31 @@
+Senior Backend Engineer
+Location: San Francisco, CA (Hybrid 3 days/week)
+Department: Platform Engineering
+
+Role Overview
+We are looking for a Senior Backend Engineer to join our Platform Engineering team. You will design, build, and operate distributed systems that process over 5 million events per day with 99.9% uptime SLA.
+
+Required Qualifications
+5+ years of professional software engineering experience
+Strong proficiency in Python (3.10+) or Go
+Experience designing and operating distributed systems at scale (1M+ RPS)
+Hands-on experience with PostgreSQL, including query optimization and indexing
+Deep knowledge of REST API design and gRPC
+Experience with containerization (Docker) and Kubernetes orchestration
+Proficiency with Google Cloud Platform (GCP) or AWS
+Strong understanding of asynchronous programming (asyncio, Celery, or equivalent)
+Experience with CI/CD pipelines (GitHub Actions, Jenkins, or equivalent)
+
+Preferred Qualifications
+Experience with Apache Kafka or Google Pub/Sub for event streaming
+Familiarity with Terraform for infrastructure-as-code
+Contributions to open-source projects
+Experience with large language model (LLM) APIs and RAG pipelines
+Knowledge of observability tooling (Datadog, Prometheus, Grafana)
+
+Key Responsibilities
+Design and implement scalable microservices handling 1M+ daily active users
+Reduce p99 API latency from current 800ms to under 200ms through profiling and optimization
+Lead architecture reviews and mentor 2-3 junior engineers per quarter
+Maintain 99.9% uptime for core platform services
+Drive incident response and post-mortems to root cause within 24 hours

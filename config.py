@@ -18,7 +18,7 @@ from pydantic_settings import BaseSettings
 load_dotenv()
 
 # ── Contract version ──────────────────────────────────────────────────────────
-CONTRACT_VERSION: str = "1.0.0"
+CONTRACT_VERSION: str = "1.1.0"
 """Semver version of the shared schema contract.
 
 Every persisted document and every inter-agent message envelope is stamped
@@ -97,7 +97,7 @@ def get_firestore_client() -> Any:
     Raises OSError if no GCP credentials can be resolved.
     """
     try:
-        from google.cloud import firestore
+        import google.cloud.firestore as firestore
     except ImportError as exc:
         raise ImportError(
             "google-cloud-firestore is required. Run: pip install google-cloud-firestore"
@@ -114,7 +114,7 @@ def get_secret_manager_client() -> Any:
     Raises ImportError if google-cloud-secret-manager is not installed.
     """
     try:
-        from google.cloud import secretmanager
+        import google.cloud.secretmanager as secretmanager
     except ImportError as exc:
         raise ImportError(
             "google-cloud-secret-manager is required. "
