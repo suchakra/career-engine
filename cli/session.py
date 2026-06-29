@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from google.adk.events import Event, EventActions
 from google.adk.sessions import BaseSessionService, Session
 
 from schema import CareerEngineState
@@ -95,13 +96,16 @@ async def patch_state(
 ) -> None:
     """Apply field-level patches to the CareerEngineState of an ADK session.
 
-    Reads the current session, updates the specified fields in the backing
-    flat dict, and writes the result back.  Used by the CLI loop to inject
+    Injects the patched fields into the session by appending an Event carrying
+    an ``EventActions(state_delta=...)``.  Used by the CLI loop to inject
     ``pending_user_answer`` and ``checkpoint_verified`` between Runner turns.
 
-    Note: ``InMemorySessionService`` holds sessions in a dict that the Runner
-    also references; patching the dict's values is visible to the next
-    ``runner.run_async`` call.
+    Why an event (and not a direct dict write): ADK session services return a
+    COPY of the session from ``get_session``, so mutating that copy's ``state``
+    is not persisted and is invisible to the next ``runner.run_async`` call.
+    The canonical ADK mechanism for committing external state is to append an
+    event whose ``actions.state_delta`` the service merges into the stored
+    session — exactly how the workflow's own node writes are persisted.
 
     Args:
         session_service: The ADK session service.
@@ -122,8 +126,11 @@ async def patch_state(
         raise ValueError(
             f"Session {session_id!r} not found for user {user_id!r} / app {app_name!r}."
         )
-    for key, value in fields.items():
-        session.state[key] = value
+    event = Event(
+        author="user",
+        actions=EventActions(state_delta=dict(fields)),
+    )
+    await session_service.append_event(session, event)
 
 
 def run_sync(coro: Any) -> Any:

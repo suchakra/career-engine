@@ -63,6 +63,27 @@ def discovery_router(state: CareerEngineState) -> str:
     Implements the 5-turn checkpoint brake: every 5 questions, force a
     user checkpoint before continuing.
 
+    Turn-based / human-in-the-loop note:
+        Each ``runner.run_async`` invocation advances the workflow by exactly
+        ONE work node (grill, checkpoint, or finalize→tailor) and then the
+        graph terminates, returning control to the CLI which collects the next
+        human input (a new ``pending_user_answer`` or ``checkpoint_verified``).
+        This router therefore selects the single node to run THIS turn; it does
+        not loop.  The grill and checkpoint nodes are terminal within a turn
+        (no back-edge to the router) so the run cannot spin without new input.
+
+        A verified checkpoint (``checkpoint_verified=True``) is resolved at the
+        graph entry (``_ingest_shim``) which advances the phase back to GRILLING
+        BEFORE this router runs, so the frozen rule below — "suppress the brake
+        while phase==CHECKPOINT" — keeps holding without re-triggering the
+        checkpoint node.
+
+    Routing rules (FROZEN Phase-0 contract — unchanged):
+        - phase == COMPLETE or no active_gaps → finalize_master_resume_node.
+        - 5-turn brake: question_count > 0, a multiple of 5, and phase is NOT
+          already CHECKPOINT → user_checkpoint_node.
+        - otherwise → execute_grill_turn_node.
+
     Args:
         state: Current session state.
 
@@ -110,10 +131,42 @@ def _write_state(ctx: object, new_state: CareerEngineState) -> None:
 
 
 def _ingest_shim(ctx: object) -> None:
-    """ADK shim: reads state from ctx, calls ingest_node, writes result back."""
+    """ADK graph-entry shim: seed pillars once and resolve a verified checkpoint.
+
+    TURN-BASED NOTE: every ``runner.run_async`` call restarts the graph from
+    START, so this is the entry node on every turn.  It does two boundary jobs:
+
+    1. Idempotent ingest.  ``ingest_node`` resets ``question_count`` to 0 and
+       re-seeds pillars — if it re-ran every turn the 5-turn brake could never
+       accumulate and prior progress (closed gaps, question_count) would be
+       clobbered.  So ingest runs ONLY while the phase is still INGESTING (the
+       first turn); later turns pass the seeded state straight through.
+
+    2. Checkpoint resolution.  When the CLI has set ``checkpoint_verified=True``
+       on a paused checkpoint, this entry step calls ``user_checkpoint_node`` to
+       advance the phase back to GRILLING (and reset the flag/summary) BEFORE the
+       router runs.  This keeps the FROZEN router contract intact — the router
+       still suppresses the brake while phase==CHECKPOINT and never has to
+       re-enter the checkpoint node — while giving the HITL gate a single,
+       deterministic resolution point.  An un-verified checkpoint is left as-is
+       so the router routes onward (grill) without losing the pause semantics.
+    """
     state = _read_state(ctx)
-    new_state = ingest_node(state)
-    _write_state(ctx, new_state)
+    if state.current_phase == PhaseStatus.INGESTING:
+        state = ingest_node(state)
+        _write_state(ctx, state)
+    elif (
+        state.current_phase == PhaseStatus.CHECKPOINT and state.checkpoint_verified
+    ):
+        # Advance CHECKPOINT → GRILLING (resets the flag + summary).
+        state = user_checkpoint_node(state)
+        # The checkpoint consumed the turn at question_count == 5k; step the
+        # counter off that multiple so the router's "% 5" brake does not
+        # immediately re-fire on the very next router evaluation this same turn.
+        state = state.model_copy(
+            update={"question_count": state.question_count + 1}
+        )
+        _write_state(ctx, state)
 
 
 def _router_shim(ctx: object) -> None:
@@ -135,7 +188,9 @@ def _router_shim(ctx: object) -> None:
     route = discovery_router(state)
     # Set route on the context object; ADK flushes it as Event(route=...) so
     # _buffer_downstream_triggers can select the correct outgoing edge.
-    setattr(ctx, "route", route)  # ctx is the ADK Context; mypy sees 'object'
+    # ctx is the ADK Context (a runtime attribute); the annotation is 'object'
+    # to keep this module decoupled from ADK internals, so cast for the write.
+    cast("Any", ctx).route = route
 
 
 def _grill_shim(ctx: object) -> None:
@@ -201,6 +256,13 @@ def build_discovery_workflow() -> Workflow:
 
     # ── Wire edges ────────────────────────────────────────────────────────────
     # Route strings set on ctx.route by _router_shim must match Edge.route values.
+    #
+    # TURN-BASED TOPOLOGY: there is NO back-edge from grill or checkpoint to the
+    # router.  Each run_async invocation flows START → ingest → router → ONE of
+    # {grill, checkpoint, finalize→tailor} and then terminates, returning control
+    # to the CLI to collect the next human input.  Looping grill→router→grill in
+    # a single run would spin forever (the grill node keeps asking questions with
+    # no new answer to consume), so grill and checkpoint are terminal-per-turn.
     edges: list[Edge] = [
         # Entry: START → ingest
         Edge(from_node=START, to_node=ingest, route=DEFAULT_ROUTE),
@@ -210,11 +272,11 @@ def build_discovery_workflow() -> Workflow:
         Edge(from_node=router, to_node=grill, route="execute_grill_turn_node"),
         Edge(from_node=router, to_node=checkpoint, route="user_checkpoint_node"),
         Edge(from_node=router, to_node=finalize, route="finalize_master_resume_node"),
-        # After grill → back to router (loop)
-        Edge(from_node=grill, to_node=router, route=DEFAULT_ROUTE),
-        # After checkpoint → back to router (loop — router will branch based on
-        # checkpoint_verified; the CLI sets checkpoint_verified=True before resuming)
-        Edge(from_node=checkpoint, to_node=router, route=DEFAULT_ROUTE),
+        # grill is terminal-per-turn: it surfaces a question (or commits a story)
+        # and the run ends; the CLI injects the next pending_user_answer.
+        # checkpoint is terminal-per-turn: it emits the delta summary and pauses;
+        # the CLI sets checkpoint_verified=True, then the NEXT turn re-routes to
+        # checkpoint (phase==CHECKPOINT) which advances back to GRILLING.
         # After finalize → tailor
         Edge(from_node=finalize, to_node=tailor, route=DEFAULT_ROUTE),
         # tailor is terminal (no outgoing edges)

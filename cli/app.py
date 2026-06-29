@@ -46,11 +46,10 @@ from __future__ import annotations
 import pathlib
 import sys
 import uuid
-from typing import Any
+from typing import cast
 
 from google.adk.runners import Runner
 from google.adk.sessions import BaseSessionService, InMemorySessionService
-from typing import cast
 
 import cli.session as session_helpers
 from config import AccessMode, get_settings
@@ -59,7 +58,6 @@ from schema import CareerEngineState, PhaseStatus
 from tools.pdf_renderer import render_pdf
 from workflows.discovery_graph import build_runner
 from workflows.nodes import set_model_client_factory
-
 
 # ── Runner / session assembly ─────────────────────────────────────────────────
 
@@ -236,7 +234,7 @@ class DiscoverySession:
         )
         return state.current_question
 
-    async def answer(self, user_answer: str) -> "TurnResult":
+    async def answer(self, user_answer: str) -> TurnResult:
         """Submit a user answer and run one grill turn.
 
         Injects ``pending_user_answer`` into the session state, runs the
@@ -286,6 +284,19 @@ class DiscoverySession:
         )
         return state.current_question
 
+    async def advance(self) -> TurnResult:
+        """Advance the workflow by one turn WITHOUT supplying a user answer.
+
+        Used by the CLI driver to run a non-interactive turn — e.g. once the
+        last competency gap is closed (grill is terminal-per-turn, so the
+        finalize node runs on the FOLLOWING turn).  Injects no human input.
+
+        Returns:
+            A ``TurnResult`` describing the state after the turn.
+        """
+        await self._run_turn()
+        return await self._read_turn_result()
+
     async def current_state(self) -> CareerEngineState:
         """Return the current CareerEngineState for this session.
 
@@ -332,7 +343,7 @@ class DiscoverySession:
         ):
             pass
 
-    async def _read_turn_result(self) -> "TurnResult":
+    async def _read_turn_result(self) -> TurnResult:
         """Read state after a grill turn and build a TurnResult."""
         state = await session_helpers.read_state(
             session_service=self._svc,
@@ -374,7 +385,7 @@ class TurnResult:
         self.stories_count = stories_count
 
     @classmethod
-    def from_state(cls, state: CareerEngineState) -> "TurnResult":
+    def from_state(cls, state: CareerEngineState) -> TurnResult:
         """Build a TurnResult from a CareerEngineState.
 
         Args:
@@ -456,11 +467,15 @@ def run_interactive_session(
             state = asyncio.run(session.current_state())
             if state.current_phase == PhaseStatus.COMPLETE:
                 break
-            # No question yet (e.g. ingest-only turn) — run another turn
-            result = asyncio.run(session._read_turn_result())
+            # No question and all gaps closed → drive the finalize turn.
+            # (grill is terminal-per-turn, so finalize runs on the NEXT turn.)
+            result = asyncio.run(session.advance())
             if result.is_complete:
                 break
             question = result.next_question
+            if not question and not asyncio.run(session.current_state()).active_gaps:
+                # Gaps closed but not yet complete — keep advancing to finalize.
+                continue
             if not question:
                 # Still nothing — session may be stuck; exit gracefully
                 print("\n[No question surfaced; ending session]")
