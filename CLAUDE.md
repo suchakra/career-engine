@@ -19,6 +19,39 @@ decision, finish a chunk of work, change direction, or learn something worth kee
 - This repo is worked on across **multiple AI tools** (Claude Code, GitHub Copilot, Antigravity).
   Treat `docs/` as the shared, tool-agnostic source of truth so any tool can pick up cleanly.
 
+## Docs governance
+- Every core doc has one job only.
+  `docs/HANDOFF.md` is the session resume point and current next-action banner.
+  `docs/PROGRESS.md` is the delivery ledger and only canonical milestone/workstream status.
+  `docs/ARCHITECTURE.md` is the design truth and accepted architectural decisions.
+  `docs/REFINED_PROJECT_PLAN.md` is the roadmap and sequencing truth.
+  `docs/GROOMING.md` is the build-launch spec for upcoming work only.
+- Status is canonical in `docs/PROGRESS.md` only. Other docs may summarize status, but must not
+  become the authoritative source for complete/in-progress/blocked/not-started state.
+- "You are here" state is canonical in `docs/HANDOFF.md` only. Current branch cleanliness, work
+  in flight, and immediate next action belong there.
+- Planning docs describe intended behavior, not shipped reality. If a planning doc mentions build
+  status, it must point back to `docs/PROGRESS.md`.
+- Any design-heavy doc must declare freshness explicitly at the top using: status (`draft`,
+  `active`, `frozen`, or `superseded`), last reviewed date, and a pointer to the replacement if
+  superseded.
+- If code changes affect behavior, workflow topology, contract shape, build sequencing, or
+  milestone completion, reconcile the relevant docs in the same session before stopping.
+- If you notice contradiction between docs, do not leave it implicit. Fix it, mark one source as
+  stale, or record the follow-up in `docs/HANDOFF.md` before ending the session.
+- `docs/GROOMING.md` is for executable build prompts, not unresolved design debate. Update
+  architecture/plan first, then regenerate grooming.
+- If text is no longer current but still useful, mark it `superseded` or `historical` rather than
+  leaving ambiguous stale guidance in place.
+- Avoid copying the same fact into multiple docs unless each copy serves a different purpose.
+  Milestone completion belongs in `docs/PROGRESS.md`; next action belongs in `docs/HANDOFF.md`;
+  rationale belongs in `docs/ARCHITECTURE.md`.
+- Start of session: read `docs/HANDOFF.md` first, then `docs/PROGRESS.md` if delivery state may
+  be affected.
+- End of session: if you changed implementation state, plan, architecture, or resolved a docs
+  contradiction, update the owning doc before stopping.
+- Work is not complete until code state and docs state agree.
+
 ## Before switching tools or ending a session
 1. Commit or stash so the git working tree is **clean** — the next tool/session starts from a
    known state. Uncommitted half-edits are the main thing that breaks a hand-off.
