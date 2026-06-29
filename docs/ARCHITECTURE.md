@@ -332,15 +332,16 @@ pillar). Flow:
 > tailor against. Keep them distinct.
 
 ### 12.4 Progressive discovery (the return loop)
-- **Apply-readiness gate — a lookback WINDOW, never a required amount.** `is_apply_ready(state,
-  reference_date)` is a pure predicate: *every experience entry dated within the trailing 5-year window
-  `[reference_date − 5y, reference_date]` is validated or explicitly acknowledged.* The "5 years" caps
-  how far back the **mandatory** part reaches; it is **not** a minimum to accumulate. So:
-  - 18 months of experience → document those 18 months → **ready**. Never blocked for "lacking 5 years."
-  - 25-year veteran → document only the last 5 years → **ready**; older roles are optional backlog.
-  - Truly zero work history → the window holds projects/internships/education entries (12.6); document a
-    few of those → ready. (Safety floor: ≥1 validated entry of any type, so the gate is reachable.)
-  Tailoring / "apply for jobs" is gated on this. The same one rule serves everyone, 0–5+ years.
+- **Discovery completeness — a NUDGE, never a hard gate.** Applying and tailoring are **never blocked.**
+  If someone needs to manage applications right now with a half-filled portfolio, they can — autonomy
+  first. `discovery_completeness(state, reference_date)` is a derived signal: how much of the trailing
+  5-year window `[now − 5y, now]` is documented (the 5 years is a **lookback window, not an amount to
+  accumulate**). It drives a **persistent, consent-respecting nudge**: each apply/tailor action while the
+  window is incomplete reminds the user — *"tailored resumes come out noticeably stronger once the rest of
+  your recent history is filled in — do it now / remind me later."* Shown every time, snooze-able, never enforced.
+  - 18 months in → that *is* "complete" for them; the nudge quiets. 25-yr veteran → only the last 5 yrs
+    count toward the meter; older is optional backlog. Zero jobs → projects/education entries count (12.6).
+  The same signal serves everyone 0–25+ yrs; it informs the nudge + progress meter — it does **not** gate.
 - **Backward-chronological continuation:** a **grill frontier** pointer tracks how far back we've
   grilled. Each return session offers the next ungrilled role *older than the frontier*. Default is
   backward (recent matters most, freshest memory) but a role is **jumpable** on request.
@@ -370,8 +371,9 @@ This reworks WS-A's grill loop + router and the ingest prompt; it's the delibera
 ### 12.6 Early-career (0–5 years) — no "must have 5 years" trap
 Early-career users (0–5 years, including zero jobs) are first-class. Two things make this work, and
 neither special-cases them — they're the general rules:
-- The **apply-readiness gate is a trailing-5-year window, not a minimum** (12.4): you document whatever
-  exists in that window and you're ready. Nobody is ever told "come back when you have 5 years."
+- Discovery is a **nudge, not a gate** (12.4): nobody is blocked from applying, and nobody is ever told
+  "come back when you have 5 years." The trailing-5-year window is just what the completeness signal /
+  nudge measures.
 - "Role" is generalized to **experience entry** (12.5), so people with little/no formal work still have
   grillable material.
 
@@ -391,3 +393,16 @@ What that looks like in practice:
   `nodes._contains_real_metric` patterns beyond the latency/% / $ set it ships with.
 - **Value framing differs:** for grads the win isn't "recover the gap," it's "turn thin project bullets
   into quantified, recruiter-legible achievements + surface forgotten work." Same griller, different emphasis.
+
+---
+
+## 13. Future / post-v1 backlog (NOT in scope for v1)
+
+Captured so the vision is recorded; explicitly **deferred** — do not build in v1.
+
+- **Interview preparedness.** When a tracked application reaches "interview scheduled" at company X for
+  role Y, research (web search) the typical interview shape for that company+role — coding round, system
+  design, behavioral — and run **mock interviews**: the agent asks representative questions, the user
+  answers, the agent gives feedback. Reuses the conversational/grilling machinery + the user's portfolio
+  (for behavioral/STAR answers), the web-search tool, and the existing application tracking / Pending
+  Action surface (§8). Uses the user's key; same privacy posture. **Distant future, not v1.**

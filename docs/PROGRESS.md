@@ -53,8 +53,8 @@ Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.
 - ⬜ Contract v1.2.0: `work_timeline: list[Role]`, `coverage_through`, `reference_date` (injected clock); `role_id` on `StarStory`; replace pillar fields with role-based + `grill_frontier`
 - ⬜ `tools/resume_parser.py` — vision ingest (file/photo → multimodal Flash → timeline); multimodal entry point on model-client adapter
 - ⬜ Rework `ingest_node` + grill loop to role-based; add discovery turn (confirm coverage, append missing roles); skip already-quantified bullets
-- ⬜ Progressive discovery: `is_apply_ready` gate (trailing-5-yr **window**, NOT a minimum — 0–5yr users document what they have; ≥1-entry floor), `grill_frontier` backward continuation (jumpable; soft horizon), derived progress meter
-- ⬜ Gate tailoring on `is_apply_ready`
+- ⬜ Progressive discovery: `discovery_completeness` signal over the trailing-5-yr **window** (a measure, NOT a gate/minimum), `grill_frontier` backward continuation (jumpable; soft horizon), derived progress meter
+- ⬜ Applying/tailoring NEVER blocked — persistent, snooze-able **nudge** when the window is incomplete (autonomy first)
 - ⬜ Exit demo: stale resume image → timeline → discovery adds roles → role grilling → readiness unlocks tailoring → later session resumes backward
 
 ## Phase 2 — Web, Infra, Async
@@ -66,6 +66,9 @@ Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.
 - ⬜ `jobs/pending_action_sweep.py` + Cloud Scheduler wiring (14-day)
 - ⬜ `skills/cloud_ops/SKILL.md`
 - ⬜ Exit: `make deploy` to dev; web+CLI share state; sweep flags stale apps
+
+## Backlog — post-v1 (NOT scheduled)
+- ⬜ Interview preparedness (mock interviews from researched company+role question shapes) — [ARCHITECTURE.md §13](ARCHITECTURE.md)
 
 ## Phase 3 — Hardening & Eval
 - ⬜ `evaluation/user_simulator.py` + `test_config.json` (vague-applicant scenarios)

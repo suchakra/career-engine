@@ -53,8 +53,8 @@ at turn 5, and renders a PDF. ✅ **DONE** (tag `phase-1-mvp`, 228 tests).
 Full spec in [ARCHITECTURE.md §12](ARCHITECTURE.md). Backward-compatible contract amendment; reworks
 WS-A's grill loop. Scope:
 - **Serves 0–5yr / early-career too:** `work_timeline` holds **experience entries** (jobs, internships,
-  projects, research, leadership, …), not just jobs. Apply-readiness is a **trailing-5-year window, NOT a
-  minimum** — you document whatever exists in that window and you're ready; nobody is gated on "having 5
+  projects, research, leadership, …), not just jobs. Discovery is a **nudge, not a gate** over a
+  trailing-5-year **window** (not a minimum) — applying is never blocked and nobody is gated on "having 5
   years" (see [ARCHITECTURE.md §12.4/§12.6](ARCHITECTURE.md)).
 - **Contract v1.2.0:** add `work_timeline: list[Entry]`, `coverage_through`, `reference_date` (injected
   clock); add `role_id` to `StarStory`; **replace** pillar fields (`target_competencies`/`active_gaps`/
@@ -63,10 +63,13 @@ WS-A's grill loop. Scope:
   Add a multimodal entry point to the model-client adapter. PDF + images first; DOCX later.
 - **Rework `ingest_node` + grill loop** to be role-based; add the **discovery turn** (confirm coverage,
   append missing roles). Reuse the existing STAR grilling per role; skip already-quantified bullets.
-- **Progressive discovery engine:** `is_apply_ready` gate (trailing-5-year **window**, not a minimum; ≥1-entry safety floor),
-  `grill_frontier` for backward-chronological continuation (jumpable; soft horizon ~10–15 yrs),
-  derived progress meter. (The login **nudge UI** surfaces in Phase 2 on the Pending Action panel.)
-- **Tailoring gated** on `is_apply_ready`.
+- **Progressive discovery engine:** `discovery_completeness` derived signal over the trailing-5-year
+  **window** (a measure, not a gate); `grill_frontier` for backward-chronological continuation (jumpable;
+  soft horizon ~10–15 yrs); derived progress meter. (The login **nudge UI** surfaces in Phase 2 on the
+  Pending Action panel.)
+- **Applying/tailoring is NEVER blocked.** Discovery is a persistent, consent-respecting **nudge** shown
+  on each apply/tailor when the window is incomplete ("results are stronger with more filled in — now /
+  later"), snooze-able. Autonomy first.
 
 **Exit criteria:** upload a stale resume (image/PDF) → timeline parsed → "since 2022?" discovery adds
 missing roles → role-by-role grilling → `is_apply_ready` unlocks tailoring; returning a later session
@@ -87,6 +90,11 @@ resumes grilling backward from the frontier.
 - Monitoring/logging dashboards for graph hangs
 - Security review (key handling, IAM least-privilege, injection in scraper/PDF)
 - CoT prompt tuning to push Flash-Lite coverage; measure Pro-escalation rate
+
+### Future / Backlog — post-v1 (NOT in scope)
+- **Interview preparedness** ([ARCHITECTURE.md §13](ARCHITECTURE.md)): on "interview scheduled," research
+  the company+role's typical interview shape (coding / system design / behavioral) and run agent-driven
+  **mock interviews** with feedback, reusing the grilling machinery + portfolio + web search. Distant future.
 
 ---
 
