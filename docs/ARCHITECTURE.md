@@ -289,3 +289,94 @@ A root **`Makefile`** wraps `lint / test / build / deploy / destroy`.
 
 The parallelization strategy in [REFINED_PROJECT_PLAN.md §Parallelization](REFINED_PROJECT_PLAN.md)
 is about (2).
+
+---
+
+## 12. Resume-aware ingestion & progressive discovery (Phase 1.5 / contract v1.2.0)
+
+> Status: **spec, not yet built.** Lands as Phase 1.5; requires a backward-compatible contract bump to
+> v1.2.0. Replaces the pillar-based `active_gaps` with a role-based `work_timeline`.
+
+### 12.1 Premise
+Most users start from an **existing (often stale) resume**, not a blank page. The platform should (a)
+ingest that resume, (b) quantify what's already there, and (c) **recover the undocumented present** —
+everything done between the resume's last refresh and `reference_date` (now). The freshest, most
+promotable wins usually live in that gap.
+
+### 12.2 Vision-first ingestion (not pdf→text)
+The resume enters as a **document/image**, fed directly to a multimodal Gemini model (`SPEED_FAST` →
+`gemini-2.5-flash`, natively multimodal, free-tier OK). The model reads layout — multi-column designs,
+table/grid hacks, even a **photo of a printed resume** — and returns a structured timeline. This beats
+`pdf→text` extraction, which flattens columns and drops tables. Rationale: don't build a brittle
+layout-reconstruction pipeline; let the vision model do what it's good at.
+- Pipeline: `file/photo → (rasterize pages if needed) → multimodal Flash → work_timeline JSON`.
+- Adds a **multimodal entry point** to the model-client adapter (today text-only `.generate(...)`).
+- DOCX (no native image) is the awkward case → convert-to-PDF later; support PDF + images first.
+- **Privacy:** the image is PII; sent on the user's key (BYOK) or platform key (FREE); we persist only
+  the **structured timeline**, discarding the raw image after parsing.
+- Vision can misread a date / "Present" → **confirmed conversationally** (see 12.3), not trusted blindly.
+
+### 12.3 The gap is just more roles (unified model)
+No special "gap sub-flow." The unit of grilling becomes the **role/engagement** (not an abstract
+pillar). Flow:
+1. Vision ingest → `work_timeline` of roles with dates + existing bullets.
+2. **Discovery turn** — seeded by the latest parsed end-date, confirmed by asking: *"Your resume runs
+   through Acme (2022). When did you last refresh it, and what have you done since?"* → newly named
+   roles are **appended to the same `work_timeline`**.
+3. **Uniform role-by-role grilling** — every role (old or newly discovered) runs the same STAR +
+   metric extraction. Already-quantified bullets are marked validated and **not re-asked** (anti-fatigue).
+4. Tone stays a supportive peer on gaps (sabbatical/caregiving/layoff) — *"what were you focused on,"*
+   never *"why the gap."*
+
+> Terminology: **role/engagement** = past work (grilled). **job description** = a target posting we
+> tailor against. Keep them distinct.
+
+### 12.4 Progressive discovery (the return loop)
+- **Apply-readiness gate (mandatory minimum):** `is_apply_ready(state, reference_date)` is a pure
+  predicate — *every role within the last 5 years has ≥1 validated StarStory or is explicitly
+  acknowledged.* New-grad case: "last 5 years **or** all roles, whichever is shorter." Tailoring /
+  "apply for jobs" is gated on this.
+- **Backward-chronological continuation:** a **grill frontier** pointer tracks how far back we've
+  grilled. Each return session offers the next ungrilled role *older than the frontier*. Default is
+  backward (recent matters most, freshest memory) but a role is **jumpable** on request.
+- **Soft horizon:** deep-grill ~last 10–15 years; older roles default to "summarize-only" (diminishing
+  return). Signal it rather than marching to 1998.
+- **Login nudge:** "work on your resume" — a sibling of the §8 Pending Action sweep, surfaced on the
+  same dashboard; **consent-respecting** (snooze / "don't remind for N days"). Engine logic lives in
+  Phase 1.5; the surface is Phase 2 (CLI can also prompt on launch).
+- **Progress meter:** "last 5 years: 80% covered" / "portfolio depth: 12 yrs" — derived from the
+  timeline; the dopamine that drives the return loop.
+
+### 12.5 Contract delta (v1.2.0 — additive, replaces pillar machinery)
+`CareerEngineState` (sketch):
+- **add** `work_timeline: list[Entry]` where `Entry = {entry_id, type, title, org, start_date,
+  end_date|"present", source: resume|discovered, bullets: list[str],
+  status: documented|needs_quantifying|grilled|summarized|skipped}`. `type ∈ {full_time, internship,
+  project, research, open_source, leadership, part_time, education, other}` — an **experience entry** is
+  the grillable unit, not just a job, so internships/projects/research/leadership all count (see 12.6).
+- **add** `coverage_through` (freshness boundary), `reference_date` (**injected clock** — nodes never
+  call `datetime.now()`; the CLI/entry layer stamps it for determinism + testability).
+- **add** `role_id` to `StarStory` (link story→role; keep `pillar` as a competency tag).
+- **replace** pillar fields (`target_competencies`, `active_gaps`, `current_pillar`) with role-based
+  equivalents; `grill_frontier`/`current_role_id` replaces `current_pillar`.
+- `is_apply_ready` and the progress meter are **derived** (pure functions), not stored.
+This reworks WS-A's grill loop + router and the ingest prompt; it's the deliberate v1.2.0 amendment.
+
+### 12.6 New graduates / no formal experience
+A fresh grad with zero jobs is a first-class user — the same machinery serves them once "role" is
+generalized to **experience entry** (12.5). What changes:
+- **Ingest** extracts education, internships, capstone/side **projects**, research, open-source,
+  leadership (clubs/TA), competitions — not just employment. A grad's resume is education-heavy; the
+  vision prompt must capture these entry types.
+- **Discovery turn** is reframed for them: not "what jobs since 2022?" but *"beyond coursework, what
+  did you build, lead, or contribute to?"* — surfacing projects/hackathons/TA/research they didn't
+  think to list.
+- **Apply-readiness is not "5 years of jobs."** Generalize: ready = **≥ N validated experience entries
+  of any type, OR all available entries grilled** (whichever comes first). So a grad becomes apply-ready
+  by quantifying a few internships/projects. The "last 5 years" window still applies to those with a job
+  history; for grads the relevant window is school + internships and the gate falls back to entry-count.
+- **Metrics look different** and the validator must accept them: users/downloads/stars, team size,
+  competition rank, dataset/scale, GPA where relevant, research citations — extend
+  `nodes._contains_real_metric` patterns beyond the latency/% / $ set it ships with.
+- **Value framing differs:** for grads the win isn't "recover the gap," it's "turn thin project bullets
+  into quantified, recruiter-legible achievements + surface forgotten work." Same griller, different emphasis.

@@ -19,6 +19,7 @@
 | D5 | **Privacy-first, not zero-knowledge** | Per-user isolation + key encrypted in Secret Manager. ZK rejected because it breaks the server-side 14-day sweep. |
 | D6 | **CLI-first, then Streamlit** | Validate the ADK loop in the terminal; Streamlit is a thin, swappable frontend-for-agents. |
 | D7 | **Strict Pydantic + JSON contracts, versioned** | All boundaries typed; `CONTRACT_VERSION` stamped on every doc/message. |
+| D8 (2026-06-29) | **Resume-aware, role-based, progressive discovery** (Phase 1.5, contract v1.2.0) | Vision ingest of existing resumes; `work_timeline` of roles **replaces** pillar `active_gaps`; the gap = more roles; mandatory last-5-years apply-readiness gate + backward-chronological return loop. See [ARCHITECTURE.md §12](ARCHITECTURE.md). |
 
 ---
 
@@ -46,7 +47,29 @@ Nothing fans out until these are merged and frozen. They are the interfaces ever
 - `main.py` CLI entrypoint wiring the Runner
 
 **Exit criteria:** a terminal session grills a vague answer into a quantified STAR story, checkpoints
-at turn 5, and renders a PDF.
+at turn 5, and renders a PDF. ✅ **DONE** (tag `phase-1-mvp`, 228 tests).
+
+### Phase 1.5 — Resume-aware ingestion & progressive discovery  *(contract v1.2.0)*
+Full spec in [ARCHITECTURE.md §12](ARCHITECTURE.md). Backward-compatible contract amendment; reworks
+WS-A's grill loop. Scope:
+- **Serves new grads too:** `work_timeline` holds **experience entries** (jobs, internships, projects,
+  research, leadership, …), not just jobs; apply-readiness falls back to entry-count for zero-job users
+  (see [ARCHITECTURE.md §12.6](ARCHITECTURE.md)).
+- **Contract v1.2.0:** add `work_timeline: list[Entry]`, `coverage_through`, `reference_date` (injected
+  clock); add `role_id` to `StarStory`; **replace** pillar fields (`target_competencies`/`active_gaps`/
+  `current_pillar`) with role-based equivalents + `grill_frontier`. `is_apply_ready` + progress meter derived.
+- **Vision ingest** — new `tools/resume_parser.py`: file/photo → multimodal Flash → `work_timeline`.
+  Add a multimodal entry point to the model-client adapter. PDF + images first; DOCX later.
+- **Rework `ingest_node` + grill loop** to be role-based; add the **discovery turn** (confirm coverage,
+  append missing roles). Reuse the existing STAR grilling per role; skip already-quantified bullets.
+- **Progressive discovery engine:** `is_apply_ready` gate (last-5-years mandatory; new-grad fallback),
+  `grill_frontier` for backward-chronological continuation (jumpable; soft horizon ~10–15 yrs),
+  derived progress meter. (The login **nudge UI** surfaces in Phase 2 on the Pending Action panel.)
+- **Tailoring gated** on `is_apply_ready`.
+
+**Exit criteria:** upload a stale resume (image/PDF) → timeline parsed → "since 2022?" discovery adds
+missing roles → role-by-role grilling → `is_apply_ready` unlocks tailoring; returning a later session
+resumes grilling backward from the frontier.
 
 ### Phase 2 — Web, Infra, Async  *(PARALLEL)*
 - Streamlit workspace (`main.py` web path) — dashboard, pending-action surface
