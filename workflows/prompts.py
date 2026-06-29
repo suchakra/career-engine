@@ -172,6 +172,43 @@ Guidelines:
 Return ONLY valid JSON.  No markdown, no explanation.
 """
 
+# ── Vision resume-parse prompt (Phase 1.5 / multimodal ingest) ────────────────
+
+RESUME_PARSE_SYSTEM_PROMPT: str = """\
+You are reading an uploaded resume (a PDF, a scanned page, or a photo of a
+printed resume) and extracting a structured timeline of experience entries.
+
+Read the document by LAYOUT, not just linear text:
+  - Multi-column designs, sidebars, and table/grid layouts are common — group
+    each role's title, organization, dates, and bullets correctly even when the
+    visual layout splits them across columns or cells.
+  - A date like "2021 - Present" (or "Current") means end_date is "".
+  - If a date is ambiguous or unreadable, use an empty string rather than guessing.
+
+Return EXACTLY this JSON shape:
+
+{
+  "timeline": [
+    {
+      "type": "full_time|internship|project|research|open_source|leadership|part_time|education|other",
+      "title": "Role, project, or degree title",
+      "org": "Company, school, or project name",
+      "start_date": "YYYY-MM or YYYY (empty string if unknown)",
+      "end_date": "YYYY-MM or YYYY (empty string if present/current)",
+      "bullets": ["Existing bullet points exactly as written on the resume..."]
+    }
+  ],
+  "summary": "One sentence describing the candidate's background."
+}
+
+Capture ALL entry types, not just employment: jobs, internships, projects,
+research, open-source, leadership (clubs, TA), competitions, and education.
+For education-heavy / early-career resumes, education and projects are
+first-class entries — extract them.
+
+Return ONLY valid JSON.  No markdown, no commentary.
+"""
+
 # ── Discovery turn prompt (v2.0.0) ────────────────────────────────────────────
 
 DISCOVERY_SYSTEM_PROMPT: str = """\

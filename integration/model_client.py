@@ -31,9 +31,23 @@ in by the caller (resolved via ``models.registry.get_registry().get_model_id()``
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from config import AccessMode, get_settings
+
+
+@dataclass(frozen=True)
+class MediaPart:
+    """A single binary media part for a multimodal model call.
+
+    Carries raw bytes plus their MIME type (e.g. ``application/pdf``,
+    ``image/png``).  Treated as PII by callers — never persisted to state.
+    """
+
+    data: bytes
+    mime_type: str
 
 
 class GeminiModelClient:
@@ -89,6 +103,50 @@ class GeminiModelClient:
         response = self._client.models.generate_content(
             model=model_id,
             contents=user,
+            config=gtypes.GenerateContentConfig(system_instruction=system),
+        )
+        return response.text or ""
+
+    # ── Multimodal entry point (Phase 1.5 / vision ingest) ────────────────────
+
+    def generate_multimodal(
+        self,
+        *,
+        model_id: str,
+        system: str,
+        prompt: str,
+        media: Sequence[MediaPart],
+    ) -> str:
+        """Generate text from a text prompt plus one or more binary media parts.
+
+        Gemini is natively multimodal, so PDF and image bytes are sent directly
+        as inline parts (no local OCR / rasterization pipeline).  Used by the
+        vision resume parser (``tools/resume_parser.py``).
+
+        Args:
+            model_id: Model identifier resolved from the capability registry.
+            system: System instruction for the model.
+            prompt: The text-turn instruction accompanying the media.
+            media: Binary parts (PDF/image bytes + MIME type).  Treated as PII;
+                this method does not persist them.
+
+        Returns:
+            The model's plain-text response (empty string only when the model
+            genuinely returns no text).
+
+        Raises:
+            Exception: transport / API errors propagate to the caller rather
+                than being swallowed (mirrors :meth:`generate`).
+        """
+        from google.genai import types as gtypes
+
+        parts: list[Any] = [
+            gtypes.Part.from_bytes(data=m.data, mime_type=m.mime_type) for m in media
+        ]
+        parts.append(gtypes.Part.from_text(text=prompt))
+        response = self._client.models.generate_content(
+            model=model_id,
+            contents=parts,
             config=gtypes.GenerateContentConfig(system_instruction=system),
         )
         return response.text or ""

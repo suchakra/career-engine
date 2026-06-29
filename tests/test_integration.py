@@ -758,6 +758,28 @@ class TestModelClientAdapterBothInterfaces:
         adapter = self._adapter(None)
         assert adapter.generate("m", "sys", "user") == ""
 
+    def test_generate_multimodal_sends_binary_and_prompt(self) -> None:
+        """AC-2h: .generate_multimodal() passes a contents list to one client."""
+        from integration.model_client import MediaPart
+
+        adapter = self._adapter("parsed timeline")
+        result = adapter.generate_multimodal(
+            model_id="vision-model",
+            system="Read the resume.",
+            prompt="Extract entries.",
+            media=[MediaPart(data=b"%PDF-1.4", mime_type="application/pdf")],
+        )
+        assert result == "parsed timeline"
+        mock_gen = adapter._client.models.generate_content
+        assert isinstance(mock_gen, MagicMock)
+        mock_gen.assert_called_once()
+        assert mock_gen.call_args.kwargs["model"] == "vision-model"
+        # contents is a list of parts (>=1 binary media + the text prompt),
+        # not a bare string.
+        contents = mock_gen.call_args.kwargs["contents"]
+        assert isinstance(contents, list)
+        assert len(contents) >= 2  # at least one media part + the prompt
+
     def test_generate_content_text_raises_scraper_error_on_empty(self) -> None:
         """AC-2e: .generate_content_text() raises ScraperError on empty output."""
         from tools.web_scraper import ScraperError

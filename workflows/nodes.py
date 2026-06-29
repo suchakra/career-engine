@@ -305,40 +305,105 @@ def _update_entry_in_timeline(
     ]
 
 
+def _latest_end_date(timeline: list[Entry]) -> str:
+    """Return the latest (max) end_date across the timeline.
+
+    An empty end_date means 'present' and wins outright (returns "").  Returns
+    "" when the timeline is empty or no entry has a parseable end_date.
+    """
+    if not timeline:
+        return ""
+    best_year: int | None = None
+    best_date = ""
+    for entry in timeline:
+        if not entry.end_date:
+            return ""  # a 'present' role is the freshest boundary
+        year = _parse_year_from_date(entry.end_date)
+        if year is not None and (best_year is None or year > best_year):
+            best_year = year
+            best_date = entry.end_date
+    return best_date
+
+
+_PROCESSED_STATUSES = (
+    EntryStatus.GRILLED,
+    EntryStatus.SUMMARIZED,
+    EntryStatus.SKIPPED,
+)
+
+
+def _apply_entry_status_rules(entries: list[Entry], reference_date: str) -> None:
+    """Apply soft-horizon and already-quantified-skip rules to fresh entries IN PLACE.
+
+    Intended for freshly-built entries (just parsed/seeded).  Entries that
+    already carry progress (grilled / summarized / skipped) are left untouched,
+    so a pre-seeded timeline with prior progress is never silently reset.
+    - Soft horizon (end_date > ~15y before reference_date) → summarized.
+    - Documented AND already has a metric-bearing bullet → grilled (not re-asked).
+    - Otherwise → needs_quantifying.
+    """
+    for entry in entries:
+        if entry.status in _PROCESSED_STATUSES:
+            continue  # preserve existing progress
+        if _is_soft_horizon(entry, reference_date):
+            entry.status = EntryStatus.SUMMARIZED
+        elif entry.status == EntryStatus.DOCUMENTED and _has_metric_bullet(entry):
+            entry.status = EntryStatus.GRILLED
+        else:
+            entry.status = EntryStatus.NEEDS_QUANTIFYING
+
+
 # ── Node implementations ──────────────────────────────────────────────────────
 
 
 def ingest_node(state: CareerEngineState) -> CareerEngineState:
-    """Seed the work_timeline from raw_history_text and set phase=GRILLING.
+    """Seed the work_timeline and set phase=GRILLING.
 
-    Minimal entry-based ingest: uses INGEST_SYSTEM_PROMPT to parse
-    raw_history_text into a list of role/experience entries.  Applies soft-
-    horizon logic and already-quantified skip logic immediately.
+    Two entry paths converge here (both run once, on the INGESTING turn):
 
-    1.5-INGEST will replace this with the full vision parser; keep the seam
-    clean by writing only to work_timeline and setting current_phase=GRILLING.
+    1. **Vision-preseeded** — when ``state.work_timeline`` is already populated
+       (the CLI ran :func:`tools.resume_parser.parse_resume` on the uploaded
+       document and seeded the entries into the initial state).  The raw image
+       is PII and never reaches this node; only the structured entries do.
+    2. **Text fallback** — when no timeline is present, parse
+       ``raw_history_text`` with ``INGEST_SYSTEM_PROMPT``.
+
+    Both paths apply soft-horizon + already-quantified rules, derive
+    ``coverage_through`` from the latest end_date, and set the initial
+    ``grill_frontier``.
 
     Args:
-        state: Input state with raw_history_text populated.
+        state: Input state with either ``work_timeline`` (vision) or
+            ``raw_history_text`` (text) populated.
 
     Returns:
-        Updated state with work_timeline seeded, grill_frontier set,
-        and current_phase=GRILLING.
+        Updated state with work_timeline finalized, coverage_through and
+        grill_frontier set, and current_phase=GRILLING.
     """
     model_id = _resolve_model(Capability.SPEED_FAST)
     if isinstance(model_id, UpgradeRequired):
         # SPEED_FAST is always resolvable in both modes; guard defensively.
         return state
 
-    # If a work_timeline already exists, skip re-seeding (idempotent)
+    ref_date = state.reference_date
+
+    # ── Path 1: vision-preseeded timeline (parsed upstream from a document) ──
     if state.work_timeline:
+        new_timeline = [e.model_copy() for e in state.work_timeline]
+        _apply_entry_status_rules(new_timeline, ref_date)
+        coverage = state.coverage_through or _latest_end_date(new_timeline)
         return state.model_copy(
             update={
                 "current_phase": PhaseStatus.GRILLING,
+                "work_timeline": new_timeline,
+                "coverage_through": coverage,
+                "grill_frontier": state.grill_frontier
+                or _next_frontier(new_timeline, ""),
                 "question_count": 0,
             }
         )
 
+    # ── Path 2: text fallback — parse raw_history_text into entries ──────────
     client = _get_model_client()
     raw = state.raw_history_text.strip() or "(no career history provided)"
     response_text = client.generate(
@@ -348,10 +413,8 @@ def ingest_node(state: CareerEngineState) -> CareerEngineState:
     )
     parsed = _parse_json_response(response_text)
 
-    # Build a list of Entry objects from parsed timeline
     entries_raw: list[dict[str, Any]] = parsed.get("timeline", [])
-    new_timeline: list[Entry] = []
-
+    new_timeline = []
     for item in entries_raw:
         try:
             exp_type = ExperienceType(item.get("type", "other"))
@@ -381,24 +444,14 @@ def ingest_node(state: CareerEngineState) -> CareerEngineState:
             )
         ]
 
-    # Apply soft-horizon and already-quantified skip logic
-    ref_date = state.reference_date
-    for entry in new_timeline:
-        if _is_soft_horizon(entry, ref_date):
-            entry.status = EntryStatus.SUMMARIZED
-        elif entry.status == EntryStatus.DOCUMENTED and _has_metric_bullet(entry):
-            entry.status = EntryStatus.GRILLED
-        else:
-            entry.status = EntryStatus.NEEDS_QUANTIFYING
-
-    # Pick the initial grill frontier (most-recent entry needing work)
-    initial_frontier = _next_frontier(new_timeline, "")
+    _apply_entry_status_rules(new_timeline, ref_date)
 
     return state.model_copy(
         update={
             "current_phase": PhaseStatus.GRILLING,
             "work_timeline": new_timeline,
-            "grill_frontier": initial_frontier,
+            "coverage_through": state.coverage_through or _latest_end_date(new_timeline),
+            "grill_frontier": _next_frontier(new_timeline, ""),
             "question_count": 0,
         }
     )
