@@ -15,13 +15,16 @@
 | **1.5-CONTRACT** | schema v2.0.0: Entry timeline, replace pillar fields, version bump, golden test | — (blocking) | ✅ Ready |
 | **1.5-GRILL** | entry-based grill loop, discovery turn, `grill_frontier`, skip-quantified | built WITH CONTRACT (1 merge unit) | ✅ Ready |
 | **1.5-METRICS** | extend `_contains_real_metric` for early-career/non-eng metrics | folded into GRILL | ✅ Ready (in GRILL) |
-| **1.5-INGEST** | vision resume parser + multimodal client + `ingest_node` upgrade | after CORE merged | ✅ Ready |
-| **1.5-DISCOVERY** | `discovery_completeness` nudge, progress meter, never-block tailoring | after CORE + INGEST | ⬜ To groom |
+| **1.5-INGEST** | vision resume parser + multimodal client + `ingest_node` upgrade | after CORE merged (touches `nodes.py`) | ✅ Ready |
+| **1.5-DISCOVERY** | `discovery_completeness` nudge, progress meter, return loop, never-block tailoring | after CORE (CLI-only) | ✅ Ready |
 
-**Sequencing (serial — everything touches `nodes.py`, NO parallel fan-out in 1.5):**
-`[CONTRACT + GRILL + METRICS] one worktree, one Opus review, merge (master green)` → `INGEST` → `DISCOVERY`.
-**Groomed so far:** CONTRACT, GRILL, METRICS, INGEST (all ✅ launchable). **Next to groom:** DISCOVERY (the only ⬜).
-**To build now:** launch the CORE unit — run the 1.5-CONTRACT prompt then the 1.5-GRILL prompt in one Sonnet worktree, Opus-review the combined diff, merge.
+**🎉 GROOMING COMPLETE for Phase 1.5 — all 5 pieces ✅ launchable. Nothing left to groom; ready to build.**
+
+**Sequencing:** `[CONTRACT + GRILL + METRICS]` = one worktree / one Opus review / one merge (CORE; master
+stays green) → then `INGEST` ∥ `DISCOVERY` (disjoint files: INGEST=`nodes.py`/`tools`, DISCOVERY=`cli/` —
+safe to fan out). CONTRACT+GRILL is the only coupled bit; the rest is straightforward.
+**To build now:** run the 1.5-CONTRACT prompt then the 1.5-GRILL prompt in ONE Sonnet worktree → Opus-review
+the combined diff → merge → fan out INGEST + DISCOVERY (Sonnet worktrees) → Opus-review + merge each.
 
 ---
 
@@ -162,10 +165,46 @@ DoD: `make check` fully green (ALL suites updated to v2.0.0), no hardcoded "gemi
 REVIEW (combined CONTRACT+GRILL+METRICS diff), do NOT commit.
 ```
 
-## ⬜ 1.5-DISCOVERY — completeness nudge + progress meter (TO GROOM)
-- Surface `discovery_completeness`/`recent_window_complete` as a **nudge** on each apply/tailor (CLI now,
-  Streamlit Phase 2), snooze-able; tailoring NEVER blocked. Progress meter from the derived helpers.
-- Depends on CONTRACT (helpers) + GRILL (frontier). Groom after GRILL.
+## ✅ 1.5-DISCOVERY — completeness nudge + progress meter + return loop (after CORE)
+> CLI-only (no `nodes.py`) → can run **in parallel with 1.5-INGEST** once CORE is merged. Consumes the
+> derived helpers `discovery_completeness` / `recent_window_complete` (defined in CONTRACT) and the
+> entry-based grill loop (GRILL). Read first: [ARCHITECTURE.md §12.4](ARCHITECTURE.md) + Shared preamble + DoD.
+
+```
+You are 1.5-DISCOVERY for CareerEngine. Surface progressive discovery in the CLI. Build against the
+merged v2.0.0 contract + entry-based grill loop. Stay in: cli/app.py, cli/session.py, main.py, a new
+cli/prefs.py (snooze), and your tests. Do NOT touch workflows/nodes.py, schema.py, or config.py.
+
+Core principle: discovery is a NUDGE, never a gate. Applying/tailoring is NEVER blocked.
+
+Scope:
+- PROGRESS METER: a `status`/start surface that renders from schema.discovery_completeness(state) and
+  recent_window_complete(state) — e.g. "Recent 5-yr window: 80% documented · portfolio depth: 12 yrs".
+  Pure read of the derived helpers; pass reference_date in (no datetime.now() in logic).
+- NUDGE on apply/tailor AND on launch: if recent_window_complete is False (and not snoozed), print the
+  consent-respecting message ("tailored resumes are stronger with the rest of your recent history filled
+  in — continue now / remind me later"). The action ALWAYS proceeds regardless of the user's choice.
+- TAILORING NEVER GATED: verify the tailor/apply path has no readiness check that blocks; it only emits
+  the nudge.
+- RETURN LOOP: on launch, if work_timeline has entries needing work older than grill_frontier, offer
+  "continue working on your resume?" → if yes, drive grilling BACKWARD from the frontier via the Runner
+  (reuse the CORE grill loop / turn-based CLI driver); if no, proceed without grilling.
+- SNOOZE (cli/prefs.py): persist a `snooze_until` date in a small local JSON under a user-config path
+  (NOT in CareerEngineState — that carries no UI state). The nudge respects it; "today" is injected for
+  determinism (read now() only at the CLI boundary, like reference_date). NOTE in a docstring: Phase 2
+  migrates snooze to the cross-device workspace doc (§8 dashboard).
+
+Acceptance criteria (named tests; deterministic with fixed reference_date / injected "today"):
+- Progress meter renders correct % + depth from a fixture state via the helpers.
+- Nudge IS shown when recent_window_complete is False; NOT shown when True; NOT shown when snoozed.
+- Apply/tailor with an incomplete window STILL proceeds (returns a result) — only the nudge is emitted.
+- Snooze suppresses the nudge until snooze_until, then it returns once "today" passes it.
+- Return-loop: launch with older ungrilled entries shows the "continue?" offer; declining proceeds
+  cleanly; accepting drives one backward grill turn (mock the runner/grill).
+- No CareerEngineState mutation for UI/snooze state.
+
+DoD: `make check` green; no hardcoded "gemini-"; report READY FOR REVIEW; do NOT commit.
+```
 
 ## ✅ 1.5-METRICS — metric validator extension (FOLDED INTO 1.5-GRILL)
 Groomed inside the 1.5-GRILL prompt (same file, `workflows/nodes._contains_real_metric` + per-pattern

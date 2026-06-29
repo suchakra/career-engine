@@ -17,12 +17,12 @@
 **Phase 1.5** (resume-aware vision ingest + role/entry timeline + progressive discovery, contract
 **v2.0.0**) is spec'd ([ARCHITECTURE.md §12](ARCHITECTURE.md)) and partly groomed into sonnet-ready
 prompts — see **[GROOMING.md](GROOMING.md)** for the grooming status table and launchable prompts.
-- **Ready to launch now:** the **CORE unit** = `1.5-CONTRACT` + `1.5-GRILL` + `1.5-METRICS` built in
-  ONE Sonnet worktree (serial), Opus-review the combined diff, merge (master stays green); then `1.5-INGEST`.
-- **Still to groom:** `1.5-DISCOVERY` only.
-- Phase 1.5 is **serial, not parallel** — every piece touches `workflows/nodes.py`.
-To build: run the CONTRACT prompt then the GRILL prompt in one worktree → Opus review → merge → INGEST →
-groom + build DISCOVERY.
+- **Grooming COMPLETE** — all 5 Phase-1.5 pieces are ✅ launchable in [GROOMING.md](GROOMING.md). Nothing
+  left to groom; ready to build.
+- **Build order:** CORE = `1.5-CONTRACT` + `1.5-GRILL` (+METRICS) in ONE Sonnet worktree → Opus-review the
+  combined diff → merge (master green). Then fan out `1.5-INGEST` (nodes.py/tools) ∥ `1.5-DISCOVERY` (cli/)
+  — disjoint files → Opus-review + merge each.
+- To launch CORE: run the 1.5-CONTRACT prompt then the 1.5-GRILL prompt (both in GROOMING.md) in one worktree.
 
 Phase 2 (after 1.5) proceeds per [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md):
 - **Phase 2:** Streamlit web workspace (reuse the `cli/` runtime seam), `infrastructure/` Terraform

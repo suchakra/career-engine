@@ -49,7 +49,7 @@ Last updated: **2026-06-28** — *Phase 0 contract FROZEN (Opus PASS). Ready for
 - No live `runner.run_async` end-to-end smoke yet — owned by integration / WS-F.
 
 ## Phase 1.5 — Resume-aware ingestion & progressive discovery  *(contract v2.0.0)*
-Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) · **groomed prompts + status: [GROOMING.md](GROOMING.md)**. Not started (CONTRACT + INGEST groomed & launchable).
+Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) · **groomed prompts + status: [GROOMING.md](GROOMING.md)**. Not started — but **grooming COMPLETE: all 5 pieces are launchable sonnet prompts** ([GROOMING.md](GROOMING.md)).
 - ⬜ Contract v2.0.0: `work_timeline: list[Role]`, `coverage_through`, `reference_date` (injected clock); `role_id` on `StarStory`; replace pillar fields with role-based + `grill_frontier`
 - ⬜ `tools/resume_parser.py` — vision ingest (file/photo → multimodal Flash → timeline); multimodal entry point on model-client adapter
 - ⬜ Rework `ingest_node` + grill loop to role-based; add discovery turn (confirm coverage, append missing roles); skip already-quantified bullets
