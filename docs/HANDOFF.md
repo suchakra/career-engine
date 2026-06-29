@@ -1,5 +1,13 @@
 # CareerEngine — Session Handoff / Resume Point
 
+## 👉 YOU ARE HERE (updated 2026-06-29)
+**`master` @ origin, clean — no work in flight.** Phase 0 + Phase 1 are built & merged (228 tests, tag
+`phase-1-mvp`). **Phase 1.5 is fully GROOMED** — 5 launchable Sonnet prompts in [GROOMING.md](GROOMING.md).
+- **To BUILD:** say "build Phase 1.5" → CORE (`1.5-CONTRACT`+`1.5-GRILL` in ONE worktree) → Opus-review → merge → `1.5-INGEST` ∥ `1.5-DISCOVERY`.
+- **To IDEATE:** read this file, then [ARCHITECTURE.md](ARCHITECTURE.md) + [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md); capture new ideas back into the docs (don't mutate a spec that's mid-build — version-gate instead).
+
+---
+
 > Purpose: pick up cleanly after a session reset. Written 2026-06-29.
 > Companion to [PROGRESS.md](PROGRESS.md) (live status), [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md)
 > (roadmap), [AGENT_EXECUTION_PROMPT.md](AGENT_EXECUTION_PROMPT.md) (builder/reviewer prompts).
