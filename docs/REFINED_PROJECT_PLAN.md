@@ -91,6 +91,13 @@ resumes grilling backward from the frontier.
 - Security review (key handling, IAM least-privilege, injection in scraper/PDF)
 - CoT prompt tuning to push Flash-Lite coverage; measure Pro-escalation rate
 
+### Phase N — opportunistic value-adds (wanted; NOT v1-blocking; build when feasible)
+- **Outcome learning (positive-reinforcement)** ([ARCHITECTURE.md §8.1](ARCHITECTURE.md)): async-learn,
+  per user + per job type, which résumé format/wording correlated with **reaching interview** — positive
+  signal only (never penalize rejections). Transparent to the user; private unless they opt in to
+  contribute anonymized patterns to a global "what works per job type" DB. Reuses §8 async infra → cheap
+  once Phase 2 ships; nothing depends on it.
+
 ### Future / Backlog — post-v1 (NOT in scope)
 - **Interview preparedness** ([ARCHITECTURE.md §13](ARCHITECTURE.md)): on "interview scheduled," research
   the company+role's typical interview shape (coding / system design / behavioral) and run agent-driven

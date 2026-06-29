@@ -67,6 +67,9 @@ Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.
 - ⬜ `skills/cloud_ops/SKILL.md`
 - ⬜ Exit: `make deploy` to dev; web+CLI share state; sweep flags stale apps
 
+## Phase N — opportunistic value-adds (wanted; not v1-blocking)
+- ⬜ Outcome learning, positive-reinforcement only — per user + per job type, learn what résumé format/wording correlated with reaching interview; transparent; opt-in anonymized global "what works" DB; reuses §8 async infra — [ARCHITECTURE.md §8.1](ARCHITECTURE.md)
+
 ## Backlog — post-v1 (NOT scheduled)
 - ⬜ Interview preparedness (mock interviews from researched company+role question shapes) — [ARCHITECTURE.md §13](ARCHITECTURE.md)
 

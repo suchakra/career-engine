@@ -250,6 +250,46 @@ demonstrably can't validate the extraction. Prompts live in versioned files, tre
 Surfaced on the Streamlit dashboard as a "Pending Action" item. Enabled cleanly *because* identity is
 server-resolvable (see §5).
 
+### 8.1 Outcome learning — positive-reinforcement only (Phase N — deferred value-add, NOT a v1 blocker)
+> Wanted but not on the critical path. Reuses §8's async-job + application-tracking infra, so it's cheap
+> to add *once Phase 2 exists*; nothing else depends on it. Build when feasible.
+When a tailored application **reaches the interview stage**, that's a (weak) positive signal about the
+résumé's format + wording for that **job type**. An async job learns from these wins — **per user, per job
+type** — and shows the user what it found.
+
+**Signal & ethics — POSITIVE ONLY (core constraint):**
+- Learn **only** from positive outcomes (reached interview). **Never penalize** a format/wording that
+  didn't get an interview — rejection is confounded (comp, timing, volume, internal candidates, bias) and
+  is *not* a negative label. We accumulate evidence *for* patterns, never *against*.
+- Outcome is **user-reported** ("I got an interview") — reliable and honest; don't auto-detect.
+- Learnings are **observations/suggestions, not rules** ("résumés that got you interviews for backend
+  roles tended to lead with scale metrics") — correlation ≠ causation, and samples are small.
+
+**Mechanics:**
+- Application record gains an outcome transition `applied → interview` (positive). Reuses §8's tracking +
+  async-job infra (Cloud Scheduler → Cloud Run).
+- `jobs/outcome_learner.py`: for each interview-reaching application, extract features of the tailored
+  résumé used (format choices, phrasing/keyword patterns, which achievements were emphasized) and
+  reinforce them in the user's per-job-type learning profile (evidence counts FOR).
+- Per-user store: Firestore under `user_id`, `learnings/{job_type}` — **private by default** (privacy-first §5).
+- Feed-forward: the tailor node may use these learnings to inform future tailoring for that job type
+  (closes the loop).
+
+**Transparency & sharing:**
+- Show each user, per job type, exactly what was learned **from their own data**.
+- **Private unless opted in.** A user may contribute to a **global DB** of what works per job type.
+  Contributions are **anonymized + aggregated — patterns/features only, never raw résumés or PII** (strip
+  names, companies, identifying text); a sanitization step gates every contribution.
+- Opt-in global learnings can inform tailoring suggestions for everyone, per job type.
+
+**Honest caveats (the design must reflect these):**
+- **Positive-only → selection/survivorship bias:** surfaces "what was present when it worked," not proven
+  cause. Frame as suggestions, never guarantees.
+- **Cold-start / low volume:** global per-job-type learnings need enough contributors — gate display on a
+  minimum sample size and label confidence.
+- **Bias-amplification risk:** if ATS/HR preferences encode bias, reinforcing them could entrench it;
+  transparency + "suggestion not rule" mitigates — revisit if patterns look discriminatory.
+
 ---
 
 ## 9. Infrastructure (Terraform, IaC-first)
