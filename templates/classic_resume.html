@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<!--
+    classic_resume.html — CareerEngine ATS-friendly resume template.
+
+    Design principles:
+    - Single-column, semantic HTML for maximum ATS parse-ability.
+    - Jinja2 autoescaping is ALWAYS ON; all variables are auto-escaped by the
+      engine.  Never pipe values through |safe.
+    - No JavaScript; no external resources; self-contained for PDF rendering.
+    - Semantic elements: <header>, <main>, <section>, <article>, <h1>-<h3>.
+    - Print-optimized CSS: no floats, no flexbox tricks that break paginators,
+      no background images.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ candidate_name }} — Resume</title>
+  <style>
+    /* ── Reset & base ────────────────────────────────────────────────────── */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: "Georgia", "Times New Roman", serif;
+      font-size: 11pt;
+      line-height: 1.45;
+      color: #111;
+      background: #fff;
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 36pt 36pt 48pt 36pt;
+    }
+
+    /* ── Header / name block ─────────────────────────────────────────────── */
+    header {
+      text-align: center;
+      border-bottom: 2px solid #111;
+      padding-bottom: 10pt;
+      margin-bottom: 14pt;
+    }
+
+    header h1 {
+      font-size: 20pt;
+      font-weight: bold;
+      letter-spacing: 0.5pt;
+      text-transform: uppercase;
+    }
+
+    .contact-line {
+      font-size: 9.5pt;
+      color: #333;
+      margin-top: 4pt;
+    }
+
+    .contact-line span + span::before {
+      content: " · ";
+    }
+
+    /* ── Section headings ────────────────────────────────────────────────── */
+    section {
+      margin-bottom: 14pt;
+    }
+
+    section > h2 {
+      font-size: 11pt;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.8pt;
+      border-bottom: 1px solid #555;
+      padding-bottom: 2pt;
+      margin-bottom: 8pt;
+    }
+
+    /* ── Summary ─────────────────────────────────────────────────────────── */
+    .summary p {
+      font-size: 10.5pt;
+      color: #222;
+    }
+
+    /* ── Pillar / STAR stories ───────────────────────────────────────────── */
+    article.story {
+      margin-bottom: 10pt;
+      page-break-inside: avoid;
+    }
+
+    article.story h3 {
+      font-size: 10.5pt;
+      font-weight: bold;
+      margin-bottom: 2pt;
+    }
+
+    .story-meta {
+      font-size: 9pt;
+      color: #555;
+      margin-bottom: 3pt;
+    }
+
+    .story-body {
+      font-size: 10pt;
+    }
+
+    .story-body .label {
+      font-weight: bold;
+    }
+
+    .story-result {
+      font-weight: bold;
+      color: #000;
+    }
+
+    /* ── Competency list ─────────────────────────────────────────────────── */
+    ul.competencies {
+      list-style: none;
+      padding: 0;
+      column-count: 2;
+      column-gap: 20pt;
+    }
+
+    ul.competencies li {
+      font-size: 10pt;
+      padding: 1pt 0;
+    }
+
+    ul.competencies li::before {
+      content: "▪ ";
+      font-size: 8pt;
+    }
+
+    /* ── Print overrides ─────────────────────────────────────────────────── */
+    @media print {
+      body {
+        padding: 0;
+        margin: 0;
+      }
+
+      header {
+        margin-top: 0;
+      }
+
+      section {
+        page-break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Candidate header ──────────────────────────────────────────────────── -->
+  <header>
+    <h1>{{ candidate_name }}</h1>
+    <div class="contact-line">
+      {% if candidate_email %}<span>{{ candidate_email }}</span>{% endif %}
+      {% if candidate_location %}<span>{{ candidate_location }}</span>{% endif %}
+      {% if candidate_linkedin %}<span>{{ candidate_linkedin }}</span>{% endif %}
+    </div>
+  </header>
+
+  <main>
+
+    <!-- ── Professional summary ────────────────────────────────────────────── -->
+    {% if summary %}
+    <section class="summary">
+      <h2>Professional Summary</h2>
+      <p>{{ summary }}</p>
+    </section>
+    {% endif %}
+
+    <!-- ── Core competencies ───────────────────────────────────────────────── -->
+    {% if target_competencies %}
+    <section>
+      <h2>Core Competencies</h2>
+      <ul class="competencies">
+        {% for competency in target_competencies %}
+        <li>{{ competency }}</li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    <!-- ── Career achievements (validated STAR stories by pillar) ──────────── -->
+    {% if stories_by_pillar %}
+    <section>
+      <h2>Career Achievements</h2>
+
+      {% for pillar, stories in stories_by_pillar.items() %}
+      <h3 style="font-size:10.5pt; font-weight:bold; margin: 8pt 0 4pt 0;
+                 text-transform: capitalize;">{{ pillar | replace("_", " ") }}</h3>
+
+      {% for story in stories %}
+      <article class="story">
+        {% if story.situation %}
+        <div class="story-body">
+          <span class="label">Context: </span>{{ story.situation }}
+        </div>
+        {% endif %}
+        {% if story.task %}
+        <div class="story-body">
+          <span class="label">Task: </span>{{ story.task }}
+        </div>
+        {% endif %}
+        {% if story.action %}
+        <div class="story-body">
+          <span class="label">Action: </span>{{ story.action }}
+        </div>
+        {% endif %}
+        {% if story.result %}
+        <div class="story-body">
+          <span class="label">Result: </span>
+          <span class="story-result">{{ story.result }}</span>
+        </div>
+        {% endif %}
+      </article>
+      {% endfor %}
+
+      {% endfor %}
+    </section>
+    {% endif %}
+
+    <!-- ── Phase / session metadata (visible only when no stories present) ─── -->
+    {% if not stories_by_pillar %}
+    <section>
+      <h2>Career Achievements</h2>
+      <p style="color:#888; font-size:10pt;">
+        No validated achievements yet. Complete the discovery session to populate
+        this section with quantified, STAR-formatted accomplishments.
+      </p>
+    </section>
+    {% endif %}
+
+  </main>
+
+</body>
+</html>
