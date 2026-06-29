@@ -81,9 +81,10 @@ def _build_template_context(state: CareerEngineState) -> dict[str, Any]:
         "candidate_email": "",
         "candidate_location": "",
         "candidate_linkedin": "",
-        # Summary / competency (v1.1.0: dedicated professional_summary field)
+        # Summary (v2.0.0: target_competencies removed from state; pass empty list
+        # so the template's {% if target_competencies %} guard keeps it hidden)
         "summary": state.professional_summary or "",
-        "target_competencies": list(state.target_competencies),
+        "target_competencies": [],
         # STAR stories keyed by pillar; only validated ones
         "stories_by_pillar": dict(by_pillar),
         # Phase metadata (non-sensitive)

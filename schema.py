@@ -1,4 +1,4 @@
-"""CareerEngine Pydantic v2 schema — the frozen Phase-0 contract.
+"""CareerEngine Pydantic v2 schema — contract v2.0.0 (Phase 1.5 BREAKING change).
 
 Every value that crosses a boundary (agent→agent, agent→database, agent→UI)
 must be an instance of one of these models.  Free-text hand-offs are forbidden.
@@ -9,13 +9,26 @@ Design rules (enforced by the Definition of Done):
 - Every model is round-trip serializable via model_dump_json() / model_validate_json().
 - CONTRACT_VERSION is stamped on every envelope so consumers can detect major
   schema breaks and refuse rather than mis-parse.
+- reference_date (ISO date string) is the INJECTED clock — nodes NEVER call
+  datetime.now(); the CLI/entry layer stamps it for determinism and testability.
+- Pillar fields (target_competencies, active_gaps, current_pillar) are REMOVED
+  in v2.0.0; replaced by work_timeline + grill_frontier.
+
+v2.0.0 change summary:
+  - Added Entry model (ExperienceType enum, EntryStatus enum).
+  - Added work_timeline, coverage_through, reference_date, grill_frontier to
+    CareerEngineState.
+  - Removed target_competencies, active_gaps, current_pillar from
+    CareerEngineState.
+  - Added entry_id to StarStory (links a story to its Entry).
+  - Added discovery_completeness() and recent_window_complete() pure helpers.
 """
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -53,7 +66,86 @@ class PhaseStatus(StrEnum):
     COMPLETE = "complete"
 
 
+class ExperienceType(StrEnum):
+    """Type of career experience entry being tracked."""
+
+    FULL_TIME = "full_time"
+    INTERNSHIP = "internship"
+    PROJECT = "project"
+    RESEARCH = "research"
+    OPEN_SOURCE = "open_source"
+    LEADERSHIP = "leadership"
+    PART_TIME = "part_time"
+    EDUCATION = "education"
+    OTHER = "other"
+
+
+class EntryStatus(StrEnum):
+    """Processing status of an experience entry in the discovery pipeline."""
+
+    DOCUMENTED = "documented"
+    """Entry has bullets but metrics have not yet been quantified/validated."""
+
+    NEEDS_QUANTIFYING = "needs_quantifying"
+    """Entry is present but lacks quantified bullets; scheduled for grilling."""
+
+    GRILLED = "grilled"
+    """Entry has been conversationally grilled and has a validated StarStory."""
+
+    SUMMARIZED = "summarized"
+    """Entry is old enough (soft horizon) to be summarized, not deep-grilled."""
+
+    SKIPPED = "skipped"
+    """Entry was explicitly skipped by the user."""
+
+
 # ── Core domain models ────────────────────────────────────────────────────────
+
+
+class Entry(BaseModel):
+    """A single career experience entry in the work timeline.
+
+    The grillable unit of discovery: a job, internship, project, research
+    engagement, open-source contribution, leadership role, or education item.
+    """
+
+    model_config = ConfigDict(frozen=False)
+
+    entry_id: UUID = Field(
+        default_factory=uuid4,
+        description="Stable identifier for this entry (UUID)",
+    )
+    type: ExperienceType = Field(
+        default=ExperienceType.OTHER,
+        description="Category of experience (full_time, project, education, etc.)",
+    )
+    title: str = Field(
+        description="Role/project title (e.g. 'Senior Engineer', 'Capstone Project')"
+    )
+    org: str = Field(
+        default="",
+        description="Organisation, school, or team name",
+    )
+    start_date: str = Field(
+        default="",
+        description="Start date in YYYY-MM or YYYY format; empty means unknown",
+    )
+    end_date: str = Field(
+        default="",
+        description="End date in YYYY-MM or YYYY format; empty string means 'present'",
+    )
+    source: Literal["resume", "discovered", "manual"] = Field(
+        default="manual",
+        description="How this entry entered the timeline",
+    )
+    bullets: list[str] = Field(
+        default_factory=list,
+        description="Existing resume bullets or notes for this entry",
+    )
+    status: EntryStatus = Field(
+        default=EntryStatus.NEEDS_QUANTIFYING,
+        description="Processing status of this entry in the discovery pipeline",
+    )
 
 
 class StarStory(BaseModel):
@@ -67,7 +159,11 @@ class StarStory(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     story_id: UUID = Field(default_factory=uuid4, description="Stable identifier for this story")
-    pillar: str = Field(description="Career pillar / competency this story belongs to (e.g. 'leadership')")
+    entry_id: str = Field(
+        default="",
+        description="UUID string of the Entry this story is linked to (v2.0.0+)",
+    )
+    pillar: str = Field(description="Career pillar / competency tag (e.g. 'leadership')")
     situation: str = Field(default="", description="Context / situation (S in STAR)")
     task: str = Field(default="", description="Task or responsibility (T in STAR)")
     action: str = Field(default="", description="Actions taken (A in STAR)")
@@ -92,6 +188,10 @@ class CareerEngineState(BaseModel):
 
     This object IS the contract between all workflow nodes.  Its shape may only
     change with a CONTRACT_VERSION bump.
+
+    v2.0.0: pillar fields (target_competencies, active_gaps, current_pillar)
+    replaced by entry-based timeline (work_timeline, grill_frontier).
+    reference_date is the injected clock; nodes must NEVER call datetime.now().
     """
 
     model_config = ConfigDict(frozen=False)  # mutable during a session
@@ -101,17 +201,30 @@ class CareerEngineState(BaseModel):
         default=PhaseStatus.INGESTING,
         description="Current lifecycle phase of the session",
     )
-    current_pillar: str = Field(
+
+    # ── Work timeline (v2.0.0) ────────────────────────────────────────────────
+    work_timeline: list[Entry] = Field(
+        default_factory=list,
+        description="Ordered list of career experience entries (newest first by convention)",
+    )
+    coverage_through: str = Field(
         default="",
-        description="Career pillar currently being explored (e.g. 'technical leadership')",
+        description="Latest end_date confirmed by the user; freshness boundary for discovery",
     )
-    target_competencies: list[str] = Field(
-        default_factory=list,
-        description="Ordered list of competency pillars to work through",
+    reference_date: str = Field(
+        default="",
+        description=(
+            "ISO date (YYYY-MM-DD) injected by the CLI/entry layer as the 'now' clock. "
+            "Nodes must NEVER call datetime.now(); use this field instead."
+        ),
     )
-    active_gaps: list[str] = Field(
-        default_factory=list,
-        description="Pillars where no validated StarStory has been extracted yet",
+    grill_frontier: str = Field(
+        default="",
+        description=(
+            "entry_id (UUID string) of the entry currently being grilled, or the last "
+            "grilled entry.  Advances backward-chronologically as entries are completed.  "
+            "Jumpable: setting it explicitly targets that entry next."
+        ),
     )
 
     # ── Extracted content ─────────────────────────────────────────────────────
@@ -141,7 +254,7 @@ class CareerEngineState(BaseModel):
         description="True once the user has confirmed the checkpoint delta",
     )
 
-    # ── Conversational turn buffer (added in v1.1.0) ──────────────────────────
+    # ── Conversational turn buffer (added in v1.1.0, carried forward) ─────────
     pending_user_answer: str = Field(
         default="",
         description="The user's most recent answer awaiting metric extraction; cleared once processed",
@@ -151,7 +264,7 @@ class CareerEngineState(BaseModel):
         description="The question the agent wants to surface to the user this turn",
     )
 
-    # ── Final outputs (added in v1.1.0) ───────────────────────────────────────
+    # ── Final outputs (added in v1.1.0, carried forward) ─────────────────────
     professional_summary: str = Field(
         default="",
         description="Prose professional summary for the rendered resume (set by finalize)",
@@ -174,6 +287,85 @@ class CareerEngineState(BaseModel):
         default=CONTRACT_VERSION,
         description="Schema version; consumers refuse on major-version mismatch",
     )
+
+
+# ── Derived pure helpers (NOT stored) ────────────────────────────────────────
+
+
+def _parse_year(date_str: str) -> int | None:
+    """Extract the year from a YYYY-MM or YYYY date string; return None on failure."""
+    if not date_str:
+        return None
+    try:
+        return int(date_str.split("-")[0])
+    except (ValueError, IndexError):
+        return None
+
+
+def discovery_completeness(state: CareerEngineState) -> float:
+    """Return the fraction of trailing-5-year-window entries that are grilled/summarized.
+
+    Uses state.reference_date as 'now' — NEVER calls datetime.now().
+    Returns 0.0 if reference_date is not set or there are no entries in the window.
+    The 5-year window is a lookback nudge metric, NOT a gate.
+    """
+    ref_year = _parse_year(state.reference_date)
+    if ref_year is None:
+        return 0.0
+
+    cutoff_year = ref_year - 5
+    window_entries = []
+    for entry in state.work_timeline:
+        # An entry with empty end_date is "present" — always in the window
+        if not entry.end_date:
+            window_entries.append(entry)
+            continue
+        end_year = _parse_year(entry.end_date)
+        if end_year is not None and end_year >= cutoff_year:
+            window_entries.append(entry)
+
+    if not window_entries:
+        return 0.0
+
+    done = sum(
+        1
+        for e in window_entries
+        if e.status in (EntryStatus.GRILLED, EntryStatus.SUMMARIZED, EntryStatus.SKIPPED)
+    )
+    return done / len(window_entries)
+
+
+def recent_window_complete(state: CareerEngineState) -> bool:
+    """Return True if the trailing-5-year window has >= 1 validated entry and no needs_quantifying.
+
+    A window is 'complete' for nudge/meter purposes when all window entries
+    have been processed (no NEEDS_QUANTIFYING left) AND at least one entry
+    is grilled (has a validated story).  Uses state.reference_date — NEVER
+    calls datetime.now().  Does NOT gate anything.
+    """
+    ref_year = _parse_year(state.reference_date)
+    if ref_year is None:
+        return False
+
+    cutoff_year = ref_year - 5
+    window_entries = []
+    for entry in state.work_timeline:
+        if not entry.end_date:
+            window_entries.append(entry)
+            continue
+        end_year = _parse_year(entry.end_date)
+        if end_year is not None and end_year >= cutoff_year:
+            window_entries.append(entry)
+
+    if not window_entries:
+        return False
+
+    has_validated = any(e.status == EntryStatus.GRILLED for e in window_entries)
+    has_unprocessed = any(
+        e.status in (EntryStatus.NEEDS_QUANTIFYING, EntryStatus.DOCUMENTED)
+        for e in window_entries
+    )
+    return has_validated and not has_unprocessed
 
 
 # ── Inter-agent message envelope ──────────────────────────────────────────────

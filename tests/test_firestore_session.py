@@ -111,7 +111,6 @@ class TestStateSerialization:
         original = CareerEngineState(
             current_phase=PhaseStatus.GRILLING,
             question_count=3,
-            target_competencies=["delivery", "leadership"],
         )
         doc = _state_to_dict(original)
         restored = _dict_to_state(doc)
@@ -144,8 +143,6 @@ class TestRoundTrip:
         original_ces = CareerEngineState(
             current_phase=PhaseStatus.GRILLING,
             question_count=5,
-            target_competencies=["leadership", "delivery"],
-            active_gaps=["delivery"],
         )
         initial_state = {"career_engine_state": original_ces.model_dump(mode="json")}
 
@@ -694,7 +691,6 @@ class TestConcurrentWriteContract:
         ces = CareerEngineState(
             current_phase=PhaseStatus.GRILLING,
             question_count=4,
-            target_competencies=["leadership"],
         )
         await service.create_session(
             app_name="career-engine",

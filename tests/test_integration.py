@@ -92,13 +92,26 @@ class ScriptedNodeClient:
         return self._default
 
 
-def _ingest_response(pillars: list[str]) -> str:
-    """Build a scripted ingest JSON response seeding the given pillars."""
+def _ingest_response(titles: list[str]) -> str:
+    """Build a scripted ingest JSON response seeding Entry timeline rows (v2.0.0).
+
+    Args:
+        titles: List of role titles to seed as full_time entries.
+    """
     return json.dumps(
         {
-            "competency_pillars": pillars,
-            "initial_gaps": pillars,
-            "suggested_first_pillar": pillars[0] if pillars else "",
+            "timeline": [
+                {
+                    "type": "full_time",
+                    "title": t,
+                    "org": "Acme Corp",
+                    "start_date": "2020",
+                    "end_date": "",
+                    "bullets": [],
+                }
+                for t in titles
+            ],
+            "summary": "Experienced engineer.",
         }
     )
 
@@ -254,7 +267,7 @@ class TestTurnBasedDiscoveryLoop:
         """
         client = ScriptedNodeClient(
             responses={
-                "key competency areas": _ingest_response(["performance_engineering"]),
+                "analyzing a career history": _ingest_response(["performance_engineering"]),
                 "senior engineering colleague": "What was the latency before vs after?",
                 "data extraction assistant": _vague_extraction(),
             }
@@ -269,11 +282,11 @@ class TestTurnBasedDiscoveryLoop:
             state=CareerEngineState(raw_history_text="10 years perf engineering."),
         )
 
-        # Turn 1: ingest seeds pillars, grill asks the opening question.
+        # Turn 1: ingest seeds work_timeline, grill asks the opening question.
         await _run_turn(runner, session_id=sid)
         state = await _get_state(svc, session_id=sid)
         assert state.current_phase == PhaseStatus.GRILLING
-        assert state.active_gaps, "ingest must seed active_gaps"
+        assert state.work_timeline, "ingest must seed work_timeline"
         assert state.current_question, "grill must surface an opening question"
 
         # Turn 2: a vague answer is rejected — no story, a follow-up is asked.
@@ -295,7 +308,7 @@ class TestTurnBasedDiscoveryLoop:
         """AC-1b: A SPECIFIC answer commits a StarStory(metrics_validated=True)."""
         client = ScriptedNodeClient(
             responses={
-                "key competency areas": _ingest_response(["performance_engineering"]),
+                "analyzing a career history": _ingest_response(["performance_engineering"]),
                 "senior engineering colleague": "Tell me about a perf win.",
                 "data extraction assistant": _specific_extraction(),
             }
@@ -347,7 +360,7 @@ class TestTurnBasedDiscoveryLoop:
 
         class _Client:
             def generate(self, model_id: str, system: str, user: str) -> str:
-                if "key competency areas" in system:
+                if "analyzing a career history" in system:
                     return _ingest_response(["performance_engineering"])
                 if "data extraction assistant" in system:
                     extraction_calls["n"] += 1
@@ -387,15 +400,17 @@ class TestTurnBasedDiscoveryLoop:
         await _run_turn(runner, session_id=sid)
         state = await _get_state(svc, session_id=sid)
         assert state.extracted_star_stories == [], "vague answer must not commit a story"
-        assert state.active_gaps, "the gap must remain open after a vague answer"
+        assert any(
+            e.status in ("needs_quantifying", "documented")
+            for e in state.work_timeline
+        ), "at least one entry must still need work after a vague answer"
 
-        # Turn 3: specific answer -> validated story closes the last gap
+        # Turn 3: specific answer -> validated story, entry moves to grilled
         await _patch_state(svc, session_id=sid, pending_user_answer=result_text)
         await _run_turn(runner, session_id=sid)
         state = await _get_state(svc, session_id=sid)
         validated = [s for s in state.extracted_star_stories if s.metrics_validated]
         assert len(validated) == 1, "specific answer must commit a validated story"
-        assert state.active_gaps == [], "the last gap must now be closed"
         assert state.current_phase == PhaseStatus.GRILLING, (
             "grill is terminal-per-turn; finalize happens on the next turn"
         )
@@ -427,12 +442,15 @@ class TestTurnBasedDiscoveryLoop:
         the next turn's router routes to the checkpoint, which emits the delta
         summary and pauses for confirmation (checkpoint_verified stays False).
         """
-        # Pure-router invariant: 5 questions with an open gap -> checkpoint.
+        # Pure-router invariant: 5 questions with a pending entry -> checkpoint (v2.0.0).
+        from schema import Entry, EntryStatus
+
+        pending_entry = Entry(title="Perf Lead", start_date="2022", status=EntryStatus.NEEDS_QUANTIFYING)
         assert (
             discovery_router(
                 CareerEngineState(
                     current_phase=PhaseStatus.GRILLING,
-                    active_gaps=["perf"],
+                    work_timeline=[pending_entry],
                     question_count=5,
                 )
             )
@@ -446,6 +464,7 @@ class TestTurnBasedDiscoveryLoop:
         )
         set_model_client_factory(lambda: client)
 
+        pending_entry2 = Entry(title="Leadership Role", start_date="2021", status=EntryStatus.NEEDS_QUANTIFYING)
         sid = _new_session_id()
         runner = _runner(svc)
         await _create_session(
@@ -454,9 +473,8 @@ class TestTurnBasedDiscoveryLoop:
             state=CareerEngineState(
                 raw_history_text="10 years perf.",
                 current_phase=PhaseStatus.GRILLING,  # ingest is skipped (idempotent)
-                active_gaps=["leadership"],
-                target_competencies=["perf", "leadership"],
-                current_pillar="leadership",
+                work_timeline=[pending_entry2],
+                grill_frontier=str(pending_entry2.entry_id),
                 question_count=5,
                 extracted_star_stories=[
                     StarStory(
@@ -492,13 +510,16 @@ class TestTurnBasedDiscoveryLoop:
 
         sid = _new_session_id()
         runner = _runner(svc)
+        from schema import Entry, EntryStatus
+
+        pending = Entry(title="Leadership Role", start_date="2021", status=EntryStatus.NEEDS_QUANTIFYING)
         await _create_session(
             svc,
             session_id=sid,
             state=CareerEngineState(
                 current_phase=PhaseStatus.CHECKPOINT,
-                active_gaps=["leadership"],
-                current_pillar="leadership",
+                work_timeline=[pending],
+                grill_frontier=str(pending.entry_id),
                 checkpoint_delta_summary="Captured your wins. Accurate?",
                 checkpoint_verified=True,  # user confirmed
                 question_count=5,
@@ -533,7 +554,7 @@ class TestTurnBasedDiscoveryLoop:
             session_id=sid,
             state=CareerEngineState(
                 current_phase=PhaseStatus.GRILLING,
-                active_gaps=[],  # all gaps closed -> router goes to finalize
+                work_timeline=[],  # all done (empty) -> router goes to finalize (v2.0.0)
                 extracted_star_stories=[
                     StarStory(
                         pillar="performance_engineering",
@@ -606,8 +627,11 @@ class TestUpgradeRequiredReachesCli:
             app_name=APP_NAME,
             session_id=sid,
         )
-        # Seed the session straight into GRILLING with an open gap so the very
-        # next turn routes to grill (ingest is skipped while not INGESTING).
+        # Seed the session straight into GRILLING with a pending entry so the very
+        # next turn routes to grill (ingest is skipped while not INGESTING). v2.0.0.
+        from schema import Entry, EntryStatus
+
+        pending_entry = Entry(title="Scale Platform", start_date="2023", status=EntryStatus.NEEDS_QUANTIFYING)
         await session_helpers.create_session(
             session_service=svc,
             app_name=APP_NAME,
@@ -615,8 +639,8 @@ class TestUpgradeRequiredReachesCli:
             session_id=sid,
             initial_state=CareerEngineState(
                 current_phase=PhaseStatus.GRILLING,
-                active_gaps=["scale"],
-                current_pillar="scale",
+                work_timeline=[pending_entry],
+                grill_frontier=str(pending_entry.entry_id),
             ),
         )
 
@@ -648,6 +672,9 @@ class TestUpgradeRequiredReachesCli:
         )
         adapter = cast(GeminiModelClient, client)
 
+        from schema import Entry, EntryStatus
+
+        pending_entry2 = Entry(title="Scale Platform", start_date="2023", status=EntryStatus.NEEDS_QUANTIFYING)
         sid = _new_session_id()
         session = DiscoverySession(
             user_id=USER_ID,
@@ -664,8 +691,8 @@ class TestUpgradeRequiredReachesCli:
             session_id=sid,
             initial_state=CareerEngineState(
                 current_phase=PhaseStatus.GRILLING,
-                active_gaps=["scale"],
-                current_pillar="scale",
+                work_timeline=[pending_entry2],
+                grill_frontier=str(pending_entry2.entry_id),
             ),
         )
 
@@ -923,16 +950,19 @@ class TestDiscoveryGraphGlue:
         which advances the phase back to GRILLING before the router runs, so the
         router never has to re-enter the checkpoint node.
         """
+        from schema import Entry, EntryStatus
+
+        pending = Entry(title="Perf Role", start_date="2022", status=EntryStatus.NEEDS_QUANTIFYING)
         state = CareerEngineState(
             current_phase=PhaseStatus.CHECKPOINT,
-            active_gaps=["perf"],
+            work_timeline=[pending],
             question_count=5,
         )
         assert discovery_router(state) == "execute_grill_turn_node"
 
-    def test_router_finalizes_when_no_gaps(self) -> None:
-        """An empty active_gaps list routes to finalize."""
-        state = CareerEngineState(current_phase=PhaseStatus.GRILLING, active_gaps=[])
+    def test_router_finalizes_when_no_pending_work(self) -> None:
+        """An empty work_timeline (or all done) routes to finalize (v2.0.0)."""
+        state = CareerEngineState(current_phase=PhaseStatus.GRILLING, work_timeline=[])
         assert discovery_router(state) == "finalize_master_resume_node"
 
 

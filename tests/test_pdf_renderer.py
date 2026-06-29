@@ -34,11 +34,10 @@ from tools.pdf_renderer import render_html, render_pdf
 
 
 def _minimal_state() -> CareerEngineState:
-    """Return a CareerEngineState with minimal renderable content."""
+    """Return a CareerEngineState with minimal renderable content (v2.0.0)."""
     return CareerEngineState(
         current_phase=PhaseStatus.FINALIZING,
         raw_history_text="Name: Jane Smith\nSenior software engineer with 10 years experience.",
-        target_competencies=["distributed systems", "performance engineering"],
     )
 
 
@@ -244,7 +243,6 @@ class TestValidationErrors:
         """AC3c: State with no raw_history_text and no stories raises ValueError."""
         state = CareerEngineState(
             current_phase=PhaseStatus.GRILLING,
-            target_competencies=["leadership"],
             # No raw_history_text, no extracted_star_stories
         )
         with pytest.raises(ValueError):
@@ -289,7 +287,6 @@ class TestPdfOutput:
         state = CareerEngineState(
             current_phase=PhaseStatus.FINALIZING,
             raw_history_text="Name: Jane Smith\nSenior Engineer, 10 years experience.",
-            target_competencies=["performance engineering", "distributed systems"],
             extracted_star_stories=[story],
         )
 
@@ -345,15 +342,17 @@ class TestTemplateRendering:
         assert "<body>" in html
         assert "</html>" in html
 
-    def test_render_html_includes_competencies(self) -> None:
-        """Target competencies from state appear in the rendered HTML."""
+    def test_render_html_includes_professional_summary(self) -> None:
+        """professional_summary from state appears in the rendered HTML (v2.0.0).
+
+        target_competencies was removed in v2.0.0; professional_summary is used instead.
+        """
         state = CareerEngineState(
             raw_history_text="Name: Bob Dev\nBackend engineer.",
-            target_competencies=["distributed systems", "performance engineering"],
+            professional_summary="Senior backend engineer specialising in distributed systems.",
         )
         html = render_html(state)
-        assert "distributed systems" in html
-        assert "performance engineering" in html
+        assert "Senior backend engineer" in html
 
     def test_render_html_autoescape_is_on(self) -> None:
         """Verify autoescape is active by confirming < is escaped in user-provided text."""

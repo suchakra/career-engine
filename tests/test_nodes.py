@@ -1,14 +1,22 @@
-"""Unit tests for the pure workflow node functions (WS-A).
+"""Unit tests for the pure workflow node functions — Phase 1.5 (entry-based).
 
 All model calls are mocked via set_model_client_factory — no live API calls.
 Every test is deterministic.
 
-Acceptance criteria covered (see docs/AGENT_EXECUTION_PROMPT.md WS-A block):
+Acceptance criteria covered:
 - vague answer is REJECTED (asks for a metric; no validated StarStory committed)
 - specific answer yields a StarStory with result populated + metrics_validated=True
+  AND entry_id == frontier entry's UUID
+- entry status is set to 'grilled' after a validated answer
+- grill_frontier advances backward-chronologically as each entry is grilled
+- grill_frontier is jumpable (setting it to an older entry makes that the target)
+- already-quantified (documented + metric bullet) entries are skipped automatically
+- soft horizon: entries >15y before reference_date are marked summarized
+- discovery_turn_node appends a discovered entry from user reply
 - checkpoint node does NOT commit/advance until checkpoint_verified is True
 - REASONING_HIGH shortfall in FREE mode -> UpgradeRequired (typed), never raises
 - each node is pure: same input -> same output, deps mocked, no external mutation
+- _contains_real_metric: extended patterns for early-career / non-eng metrics
 """
 
 from __future__ import annotations
@@ -27,6 +35,9 @@ from models.registry import (
 from schema import (
     Capability,
     CareerEngineState,
+    Entry,
+    EntryStatus,
+    ExperienceType,
     PhaseStatus,
     StarStory,
     UpgradeRequired,
@@ -34,6 +45,7 @@ from schema import (
 from workflows import nodes
 from workflows.nodes import (
     _contains_real_metric,
+    discovery_turn_node,
     execute_grill_turn_node,
     finalize_master_resume_node,
     ingest_node,
@@ -92,7 +104,30 @@ def _force_free_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(nodes, "get_settings", _free_settings)
 
 
-# ── _contains_real_metric ─────────────────────────────────────────────────────
+# ── Helpers for building test state ──────────────────────────────────────────
+
+REF_DATE = "2026-06-29"
+
+
+def _entry(
+    title: str = "Senior Engineer",
+    start_date: str = "2023",
+    end_date: str = "2024",
+    status: EntryStatus = EntryStatus.NEEDS_QUANTIFYING,
+    org: str = "Acme",
+) -> Entry:
+    """Build a test Entry with given parameters."""
+    return Entry(
+        type=ExperienceType.FULL_TIME,
+        title=title,
+        org=org,
+        start_date=start_date,
+        end_date=end_date,
+        status=status,
+    )
+
+
+# ── _contains_real_metric — engineering patterns ──────────────────────────────
 
 
 class TestContainsRealMetric:
@@ -120,6 +155,46 @@ class TestContainsRealMetric:
         """A dollar figure counts as a metric."""
         assert _contains_real_metric("saved $50k per month") is True
 
+    # ── Early-career / non-eng patterns ──────────────────────────────────────
+
+    def test_users_metric_detected(self) -> None:
+        """A user count counts as a metric."""
+        assert _contains_real_metric("gained 1500 users in the first month") is True
+
+    def test_downloads_metric_detected(self) -> None:
+        """A download count counts as a metric."""
+        assert _contains_real_metric("reached 10k downloads on PyPI") is True
+
+    def test_github_stars_metric_detected(self) -> None:
+        """GitHub stars count as a metric."""
+        assert _contains_real_metric("project reached 500 stars on GitHub") is True
+
+    def test_team_size_metric_detected(self) -> None:
+        """Team size counts as a metric."""
+        assert _contains_real_metric("led a team of 8 engineers") is True
+
+    def test_team_size_alt_form_detected(self) -> None:
+        """Alternative team size phrasing counts as a metric."""
+        assert _contains_real_metric("managed a 6-person team across 3 time zones") is True
+
+    def test_competition_rank_detected(self) -> None:
+        """Competition placement counts as a metric."""
+        assert _contains_real_metric("ranked in top 5 out of 200 teams") is True
+        assert _contains_real_metric("finished 2nd place in the hackathon") is True
+
+    def test_dataset_scale_detected(self) -> None:
+        """Dataset scale counts as a metric."""
+        assert _contains_real_metric("trained on 50k samples from the dataset") is True
+
+    def test_citations_metric_detected(self) -> None:
+        """Academic citations count as a metric."""
+        assert _contains_real_metric("paper cited 12 times in first year") is True
+
+    def test_gpa_metric_detected(self) -> None:
+        """GPA counts as a metric."""
+        assert _contains_real_metric("graduated with GPA of 3.9/4.0") is True
+        assert _contains_real_metric("maintained 3.85 GPA throughout program") is True
+
 
 # ── execute_grill_turn_node — vague answer rejected ───────────────────────────
 
@@ -129,6 +204,7 @@ class TestGrillVagueAnswerRejected:
 
     def test_vague_answer_does_not_commit_story(self) -> None:
         """'I improved performance a lot' -> no validated StarStory; metric demanded."""
+        entry = _entry()
         client = ScriptedClient(
             responses={
                 # Extraction prompt: model reports no metric found
@@ -152,8 +228,9 @@ class TestGrillVagueAnswerRejected:
 
         state = CareerEngineState(
             current_phase=PhaseStatus.GRILLING,
-            current_pillar="performance_engineering",
-            active_gaps=["performance_engineering"],
+            work_timeline=[entry],
+            grill_frontier=str(entry.entry_id),
+            reference_date=REF_DATE,
             pending_user_answer="I improved performance a lot",
         )
         result = execute_grill_turn_node(state)
@@ -161,8 +238,9 @@ class TestGrillVagueAnswerRejected:
         assert isinstance(result, CareerEngineState)
         # No story committed
         assert result.extracted_star_stories == []
-        # Pillar still in gaps (not resolved)
-        assert "performance_engineering" in result.active_gaps
+        # Entry NOT marked as grilled
+        timeline_entry = result.work_timeline[0]
+        assert timeline_entry.status == EntryStatus.NEEDS_QUANTIFYING
         # A follow-up question is surfaced via the dedicated current_question field
         assert result.current_question != ""
         assert "latency" in result.current_question.lower()
@@ -175,6 +253,7 @@ class TestGrillVagueAnswerRejected:
 
     def test_extraction_claims_metric_but_text_is_vague_still_rejected(self) -> None:
         """Defense-in-depth: model says metrics_found=True but result has no number."""
+        entry = _entry()
         client = ScriptedClient(
             responses={
                 "data extraction assistant": json.dumps(
@@ -194,8 +273,8 @@ class TestGrillVagueAnswerRejected:
 
         state = CareerEngineState(
             current_phase=PhaseStatus.GRILLING,
-            current_pillar="delivery",
-            active_gaps=["delivery"],
+            work_timeline=[entry],
+            grill_frontier=str(entry.entry_id),
             pending_user_answer="made it much faster overall",
         )
         result = execute_grill_turn_node(state)
@@ -203,7 +282,8 @@ class TestGrillVagueAnswerRejected:
         assert isinstance(result, CareerEngineState)
         # The regex gate overrides the model's false claim -> no story
         assert result.extracted_star_stories == []
-        assert "delivery" in result.active_gaps
+        # Entry NOT grilled
+        assert result.work_timeline[0].status == EntryStatus.NEEDS_QUANTIFYING
         # Answer consumed; a follow-up question surfaced
         assert result.pending_user_answer == ""
         assert result.current_question != ""
@@ -217,6 +297,7 @@ class TestGrillSpecificAnswerAccepted:
 
     def test_specific_answer_yields_validated_story(self) -> None:
         """'cut p99 from 800ms to 120ms across 40 services' -> validated StarStory."""
+        entry = _entry()
         answer = "cut p99 from 800ms to 120ms across 40 services"
         client = ScriptedClient(
             responses={
@@ -228,6 +309,7 @@ class TestGrillSpecificAnswerAccepted:
                         "result": answer,
                         "metrics_found": True,
                         "metric_summary": "p99 800->120ms across 40 services",
+                        "pillar": "performance_engineering",
                     }
                 ),
             }
@@ -236,8 +318,8 @@ class TestGrillSpecificAnswerAccepted:
 
         state = CareerEngineState(
             current_phase=PhaseStatus.GRILLING,
-            current_pillar="performance_engineering",
-            active_gaps=["performance_engineering"],
+            work_timeline=[entry],
+            grill_frontier=str(entry.entry_id),
             pending_user_answer=answer,
         )
         result = execute_grill_turn_node(state)
@@ -248,18 +330,16 @@ class TestGrillSpecificAnswerAccepted:
         assert isinstance(story, StarStory)
         assert story.result == answer
         assert story.metrics_validated is True
-        assert story.pillar == "performance_engineering"
-        # Pillar removed from active_gaps once a validated story exists
-        assert "performance_engineering" not in result.active_gaps
+        assert story.entry_id == str(entry.entry_id)
+        # Entry marked as grilled
+        assert result.work_timeline[0].status == EntryStatus.GRILLED
         # The committed answer is cleared from the pending buffer
         assert result.pending_user_answer == ""
-        # No overloading: raw_history_text (raw career history) is untouched and
-        # checkpoint_delta_summary is not used by the grill node
-        assert result.raw_history_text == ""
         assert result.checkpoint_delta_summary == ""
 
     def test_opening_question_when_no_pending_answer(self) -> None:
         """With no pending answer, the node generates an opening question."""
+        entry = _entry()
         client = ScriptedClient(
             responses={
                 "senior engineering colleague": (
@@ -269,12 +349,10 @@ class TestGrillSpecificAnswerAccepted:
         )
         _install_client(client)
 
-        # Empty pending_user_answer means there is no answer to extract;
-        # the node generates an opening question instead.
         state = CareerEngineState(
             current_phase=PhaseStatus.GRILLING,
-            current_pillar="leadership",
-            active_gaps=["leadership"],
+            work_timeline=[entry],
+            grill_frontier=str(entry.entry_id),
             pending_user_answer="",
         )
         result = execute_grill_turn_node(state)
@@ -285,6 +363,128 @@ class TestGrillSpecificAnswerAccepted:
         assert result.current_question != ""
         assert result.checkpoint_delta_summary == ""
         assert result.question_count == 1
+
+    def test_frontier_advances_after_grilling(self) -> None:
+        """After grilling entry A, the frontier advances to entry B (next ungrilled)."""
+        entry_a = Entry(
+            type=ExperienceType.FULL_TIME,
+            title="Role A",
+            org="Acme",
+            start_date="2024",
+            status=EntryStatus.NEEDS_QUANTIFYING,
+        )
+        entry_b = Entry(
+            type=ExperienceType.FULL_TIME,
+            title="Role B",
+            org="Acme",
+            start_date="2022",
+            status=EntryStatus.NEEDS_QUANTIFYING,
+        )
+        answer = "cut p99 from 800ms to 120ms"
+        client = ScriptedClient(
+            responses={
+                "data extraction assistant": json.dumps(
+                    {
+                        "result": answer,
+                        "metrics_found": True,
+                        "pillar": "perf",
+                    }
+                ),
+            }
+        )
+        _install_client(client)
+
+        state = CareerEngineState(
+            current_phase=PhaseStatus.GRILLING,
+            work_timeline=[entry_a, entry_b],
+            grill_frontier=str(entry_a.entry_id),
+            pending_user_answer=answer,
+        )
+        result = execute_grill_turn_node(state)
+
+        assert isinstance(result, CareerEngineState)
+        # entry_a is now grilled
+        grilled = next(e for e in result.work_timeline if str(e.entry_id) == str(entry_a.entry_id))
+        assert grilled.status == EntryStatus.GRILLED
+        # Frontier should now point to entry_b
+        assert result.grill_frontier == str(entry_b.entry_id)
+
+
+# ── Backward-chronological frontier and jumpable frontier ─────────────────────
+
+
+class TestFrontierBehavior:
+    """The grill frontier advances newest-first and is jumpable."""
+
+    def test_backward_frontier_advances_newest_first(self) -> None:
+        """With 3 entries (2024/2021/2018), frontier advances newest-first."""
+        e2024 = Entry(title="2024 Role", start_date="2024", status=EntryStatus.NEEDS_QUANTIFYING)
+        e2021 = Entry(title="2021 Role", start_date="2021", status=EntryStatus.NEEDS_QUANTIFYING)
+        e2018 = Entry(title="2018 Role", start_date="2018", status=EntryStatus.NEEDS_QUANTIFYING)
+
+        answer = "cut p99 from 800ms to 120ms"
+        client = ScriptedClient(
+            responses={
+                "data extraction assistant": json.dumps(
+                    {"result": answer, "metrics_found": True, "pillar": "perf"}
+                )
+            }
+        )
+        _install_client(client)
+
+        # Start: grill 2024
+        state = CareerEngineState(
+            current_phase=PhaseStatus.GRILLING,
+            work_timeline=[e2024, e2021, e2018],
+            grill_frontier=str(e2024.entry_id),
+            pending_user_answer=answer,
+            reference_date=REF_DATE,
+        )
+        result = execute_grill_turn_node(state)
+        assert isinstance(result, CareerEngineState)
+        # Frontier now points to 2021 (next newest)
+        assert result.grill_frontier == str(e2021.entry_id)
+
+        # Grill 2021
+        state2 = result.model_copy(
+            update={"pending_user_answer": answer, "grill_frontier": str(e2021.entry_id)}
+        )
+        result2 = execute_grill_turn_node(state2)
+        assert isinstance(result2, CareerEngineState)
+        # Frontier now points to 2018
+        assert result2.grill_frontier == str(e2018.entry_id)
+
+    def test_jumpable_frontier(self) -> None:
+        """Setting grill_frontier to an older entry makes that entry the next grill target."""
+        e2024 = Entry(title="2024 Role", start_date="2024", status=EntryStatus.GRILLED)
+        e2021 = Entry(title="2021 Role", start_date="2021", status=EntryStatus.GRILLED)
+        e2018 = Entry(title="2018 Role", start_date="2018", status=EntryStatus.NEEDS_QUANTIFYING)
+
+        answer = "cut p99 from 800ms to 120ms"
+        client = ScriptedClient(
+            responses={
+                "data extraction assistant": json.dumps(
+                    {"result": answer, "metrics_found": True, "pillar": "perf"}
+                )
+            }
+        )
+        _install_client(client)
+
+        # Jump directly to 2018
+        state = CareerEngineState(
+            current_phase=PhaseStatus.GRILLING,
+            work_timeline=[e2024, e2021, e2018],
+            grill_frontier=str(e2018.entry_id),  # explicit jump
+            pending_user_answer=answer,
+            reference_date=REF_DATE,
+        )
+        result = execute_grill_turn_node(state)
+        assert isinstance(result, CareerEngineState)
+        # 2018 entry should now be grilled
+        e2018_after = next(e for e in result.work_timeline if str(e.entry_id) == str(e2018.entry_id))
+        assert e2018_after.status == EntryStatus.GRILLED
+        # frontier empty (no more needs-work entries)
+        assert result.grill_frontier == ""
 
 
 # ── execute_grill_turn_node — never says "STAR" ───────────────────────────────
@@ -335,10 +535,11 @@ class TestGrillUpgradeRequired:
         set_registry(_NoReasoningRegistry())
         _install_client(ScriptedClient(default="{}"))
 
+        entry = _entry()
         state = CareerEngineState(
             current_phase=PhaseStatus.GRILLING,
-            current_pillar="scale",
-            active_gaps=["scale"],
+            work_timeline=[entry],
+            grill_frontier=str(entry.entry_id),
             pending_user_answer="some answer",
         )
         result = execute_grill_turn_node(state)
@@ -351,15 +552,189 @@ class TestGrillUpgradeRequired:
         set_registry(_NoReasoningRegistry())
         _install_client(ScriptedClient(default="{}"))
 
+        entry = _entry()
         state = CareerEngineState(
             current_phase=PhaseStatus.GRILLING,
-            current_pillar="scale",
-            active_gaps=["scale"],
+            work_timeline=[entry],
+            grill_frontier=str(entry.entry_id),
             pending_user_answer="x",
         )
         # Should simply return, never raise
         result = execute_grill_turn_node(state)
         assert isinstance(result, UpgradeRequired)
+
+
+# ── Already-quantified entry is skipped ──────────────────────────────────────
+
+
+class TestAlreadyQuantifiedSkipped:
+    """An entry with metric bullets should be skipped (not re-asked)."""
+
+    def test_already_quantified_entry_marked_grilled_at_ingest(self) -> None:
+        """An entry with metric bullet is marked grilled during ingest, not re-asked."""
+        client = ScriptedClient(
+            responses={
+                "structured timeline": json.dumps(
+                    {
+                        "timeline": [
+                            {
+                                "type": "full_time",
+                                "title": "Engineer",
+                                "org": "Acme",
+                                "start_date": "2022",
+                                "end_date": "2024",
+                                "bullets": ["Cut p99 from 800ms to 120ms across 40 services"],
+                            }
+                        ],
+                        "summary": "Experienced engineer.",
+                    }
+                )
+            }
+        )
+        _install_client(client)
+
+        state = CareerEngineState(raw_history_text="10 years at Acme.")
+        result = ingest_node(state)
+
+        # The entry with a metric bullet should be auto-grilled
+        assert result.work_timeline[0].status == EntryStatus.GRILLED
+        # And NOT in the frontier (no more work to do)
+        assert result.grill_frontier == ""
+
+
+# ── Soft horizon ──────────────────────────────────────────────────────────────
+
+
+class TestSoftHorizon:
+    """Entries older than ~15 years before reference_date default to summarized."""
+
+    def test_old_entry_marked_summarized_at_ingest(self) -> None:
+        """An entry ending >15y before reference_date is marked summarized, not queued."""
+        client = ScriptedClient(
+            responses={
+                "structured timeline": json.dumps(
+                    {
+                        "timeline": [
+                            {
+                                "type": "full_time",
+                                "title": "Old Role",
+                                "org": "OldCo",
+                                "start_date": "2005",
+                                "end_date": "2008",  # 18 years before 2026
+                                "bullets": [],
+                            }
+                        ],
+                        "summary": "Veteran engineer.",
+                    }
+                )
+            }
+        )
+        _install_client(client)
+
+        state = CareerEngineState(
+            raw_history_text="Work history.",
+            reference_date=REF_DATE,  # 2026-06-29
+        )
+        result = ingest_node(state)
+
+        # 2008 is 18 years before 2026 -> soft horizon -> summarized
+        assert result.work_timeline[0].status == EntryStatus.SUMMARIZED
+        # Not in the grill queue
+        assert result.grill_frontier == ""
+
+    def test_recent_entry_not_soft_horizon(self) -> None:
+        """An entry within 15 years of reference_date is NOT summarized."""
+        client = ScriptedClient(
+            responses={
+                "structured timeline": json.dumps(
+                    {
+                        "timeline": [
+                            {
+                                "type": "full_time",
+                                "title": "Recent Role",
+                                "org": "Acme",
+                                "start_date": "2018",
+                                "end_date": "2022",  # 4 years before 2026
+                                "bullets": [],
+                            }
+                        ],
+                        "summary": "Engineer.",
+                    }
+                )
+            }
+        )
+        _install_client(client)
+
+        state = CareerEngineState(
+            raw_history_text="Work history.",
+            reference_date=REF_DATE,
+        )
+        result = ingest_node(state)
+
+        # 2022 is 4 years before 2026 -> NOT soft horizon
+        assert result.work_timeline[0].status == EntryStatus.NEEDS_QUANTIFYING
+
+
+# ── discovery_turn_node ───────────────────────────────────────────────────────
+
+
+class TestDiscoveryTurnNode:
+    """discovery_turn_node confirms coverage and discovers new entries."""
+
+    def test_discovery_appends_discovered_entry(self) -> None:
+        """A user reply naming a new role appends an Entry(source='discovered')."""
+        client = ScriptedClient(
+            responses={
+                "career coach": json.dumps(
+                    {
+                        "entries": [
+                            {
+                                "title": "ML Engineer",
+                                "org": "StartupX",
+                                "type": "full_time",
+                                "start_date": "2024",
+                                "end_date": "",
+                            }
+                        ]
+                    }
+                )
+            }
+        )
+        _install_client(client)
+
+        state = CareerEngineState(
+            current_phase=PhaseStatus.GRILLING,
+            reference_date=REF_DATE,
+            pending_user_answer="I've been working at StartupX as ML Engineer since 2024",
+        )
+        result = discovery_turn_node(state)
+
+        assert isinstance(result, CareerEngineState)
+        assert len(result.work_timeline) == 1
+        new_entry = result.work_timeline[0]
+        assert new_entry.source == "discovered"
+        assert new_entry.status == EntryStatus.NEEDS_QUANTIFYING
+        assert new_entry.title == "ML Engineer"
+        assert result.pending_user_answer == ""
+
+    def test_discovery_generates_question_when_no_answer(self) -> None:
+        """Without a pending answer, the node generates a coverage question."""
+        client = ScriptedClient(
+            responses={
+                "career coach": "What have you been working on since 2022?"
+            }
+        )
+        _install_client(client)
+
+        state = CareerEngineState(
+            current_phase=PhaseStatus.GRILLING,
+            reference_date=REF_DATE,
+            pending_user_answer="",
+        )
+        result = discovery_turn_node(state)
+
+        assert result.current_question != ""
+        assert result.work_timeline == []  # nothing added without an answer
 
 
 # ── user_checkpoint_node — does not commit until verified ─────────────────────
@@ -370,6 +745,7 @@ class TestCheckpointNode:
 
     def test_checkpoint_summarizes_and_waits(self) -> None:
         """Unverified entry -> summary produced, phase=CHECKPOINT, NOT advanced."""
+        entry = _entry(status=EntryStatus.GRILLED)
         client = ScriptedClient(
             responses={
                 "summarizing progress": (
@@ -380,14 +756,15 @@ class TestCheckpointNode:
         _install_client(client)
 
         story = StarStory(
+            entry_id=str(entry.entry_id),
             pillar="performance_engineering",
             result="cut p99 from 800ms to 120ms",
             metrics_validated=True,
         )
         state = CareerEngineState(
             current_phase=PhaseStatus.GRILLING,
+            work_timeline=[entry],
             extracted_star_stories=[story],
-            active_gaps=["leadership"],
             checkpoint_verified=False,
         )
         result = user_checkpoint_node(state)
@@ -407,7 +784,6 @@ class TestCheckpointNode:
             current_phase=PhaseStatus.CHECKPOINT,
             checkpoint_verified=True,
             checkpoint_delta_summary="some prior summary",
-            active_gaps=["leadership"],
         )
         result = user_checkpoint_node(state)
 
@@ -420,17 +796,24 @@ class TestCheckpointNode:
 
 
 class TestIngestNode:
-    """Ingest seeds pillars/gaps and moves the session into the grill phase."""
+    """Ingest seeds work_timeline and moves the session into the grill phase."""
 
-    def test_ingest_seeds_pillars_and_gaps(self) -> None:
-        """Ingest parses history into competency pillars and active gaps."""
+    def test_ingest_seeds_timeline(self) -> None:
+        """Ingest parses history into work_timeline entries and sets phase=GRILLING."""
         client = ScriptedClient(
             responses={
-                "key competency areas": json.dumps(
+                "structured timeline": json.dumps(
                     {
-                        "competency_pillars": ["leadership", "delivery", "scale"],
-                        "initial_gaps": ["leadership", "delivery", "scale"],
-                        "suggested_first_pillar": "delivery",
+                        "timeline": [
+                            {
+                                "type": "full_time",
+                                "title": "Senior Engineer",
+                                "org": "Acme",
+                                "start_date": "2020",
+                                "end_date": "2024",
+                                "bullets": [],
+                            }
+                        ],
                         "summary": "Senior engineer.",
                     }
                 )
@@ -442,20 +825,40 @@ class TestIngestNode:
         result = ingest_node(state)
 
         assert result.current_phase == PhaseStatus.GRILLING
-        assert result.target_competencies == ["leadership", "delivery", "scale"]
-        assert result.active_gaps == ["leadership", "delivery", "scale"]
-        assert result.current_pillar == "delivery"
+        assert len(result.work_timeline) == 1
+        assert result.work_timeline[0].title == "Senior Engineer"
+        assert result.work_timeline[0].status == EntryStatus.NEEDS_QUANTIFYING
+        assert result.grill_frontier == str(result.work_timeline[0].entry_id)
 
     def test_ingest_fallback_when_model_returns_nothing(self) -> None:
-        """If the model returns no pillars, a 'general' fallback is seeded."""
+        """If the model returns no timeline, a generic fallback entry is seeded."""
         _install_client(ScriptedClient(default="not json at all"))
 
         state = CareerEngineState(raw_history_text="some history")
         result = ingest_node(state)
 
         assert result.current_phase == PhaseStatus.GRILLING
-        assert result.active_gaps == ["general"]
-        assert result.current_pillar == "general"
+        assert len(result.work_timeline) == 1
+        assert result.work_timeline[0].status == EntryStatus.NEEDS_QUANTIFYING
+
+    def test_ingest_is_idempotent_when_timeline_exists(self) -> None:
+        """If a timeline already exists, ingest does not re-seed it."""
+        entry = _entry()
+        client = ScriptedClient(default="should not be called")
+        _install_client(client)
+
+        state = CareerEngineState(
+            current_phase=PhaseStatus.INGESTING,
+            work_timeline=[entry],
+        )
+        result = ingest_node(state)
+
+        # Should not have called the model
+        assert client.calls == []
+        # Timeline unchanged
+        assert len(result.work_timeline) == 1
+        assert result.work_timeline[0].entry_id == entry.entry_id
+        assert result.current_phase == PhaseStatus.GRILLING
 
 
 # ── finalize_master_resume_node ───────────────────────────────────────────────
@@ -475,13 +878,16 @@ class TestFinalizeNode:
         )
         _install_client(client)
 
+        entry = _entry(status=EntryStatus.GRILLED)
         story = StarStory(
+            entry_id=str(entry.entry_id),
             pillar="delivery",
             result="cut deploy time from 45min to 3min",
             metrics_validated=True,
         )
         state = CareerEngineState(
             current_phase=PhaseStatus.FINALIZING,
+            work_timeline=[entry],
             extracted_star_stories=[story],
         )
         result = finalize_master_resume_node(state)
@@ -490,7 +896,7 @@ class TestFinalizeNode:
         # Structured resume written to its dedicated field
         assert result.master_resume_json != ""
         assert "achievements_by_pillar" in result.master_resume_json
-        # Prose summary extracted for the PDF renderer (WS-B reads THIS)
+        # Prose summary extracted for the PDF renderer
         assert result.professional_summary == "Impactful engineer."
         # checkpoint_delta_summary is NOT overloaded by finalize
         assert result.checkpoint_delta_summary == ""
@@ -521,8 +927,7 @@ class TestTailorNode:
 
         # Result written to its dedicated field
         assert result.tailored_resume_json == tailored
-        # raw_history_text and checkpoint_delta_summary are untouched
-        assert result.raw_history_text == ""
+        # checkpoint_delta_summary is untouched
         assert result.checkpoint_delta_summary == ""
 
     def test_tailor_uses_jd_and_master_in_model_call(self) -> None:
@@ -551,7 +956,7 @@ class TestTailorNode:
 class TestNodePurity:
     """Each node is a pure function: deterministic and non-mutating of its input."""
 
-    def _client_for_grill(self) -> ScriptedClient:
+    def _grill_client(self) -> ScriptedClient:
         return ScriptedClient(
             responses={
                 "data extraction assistant": json.dumps(
@@ -562,40 +967,42 @@ class TestNodePurity:
                         "result": "cut p99 from 800ms to 120ms",
                         "metrics_found": True,
                         "metric_summary": "p99",
+                        "pillar": "perf",
                     }
                 )
             }
         )
 
     def test_grill_is_deterministic(self) -> None:
-        """Same input through grill twice -> equal output."""
-        _install_client(self._client_for_grill())
+        """Same input through grill twice -> equal output (modulo UUIDs)."""
+        entry = _entry()
+        _install_client(self._grill_client())
         base = CareerEngineState(
             current_phase=PhaseStatus.GRILLING,
-            current_pillar="perf",
-            active_gaps=["perf"],
+            work_timeline=[entry],
+            grill_frontier=str(entry.entry_id),
             pending_user_answer="cut p99 from 800ms to 120ms",
         )
-        # Two independent input copies
         r1 = execute_grill_turn_node(base.model_copy(deep=True))
         r2 = execute_grill_turn_node(base.model_copy(deep=True))
         assert isinstance(r1, CareerEngineState)
         assert isinstance(r2, CareerEngineState)
-        # Compare ignoring the auto-generated story_id/extracted_at timestamps
+        # Compare ignoring auto-generated story_id/extracted_at timestamps
         s1 = r1.extracted_star_stories[0]
         s2 = r2.extracted_star_stories[0]
         assert s1.result == s2.result
         assert s1.metrics_validated == s2.metrics_validated
-        assert r1.active_gaps == r2.active_gaps
+        assert s1.entry_id == s2.entry_id
         assert r1.question_count == r2.question_count
 
     def test_grill_does_not_mutate_input(self) -> None:
         """The input state object is not mutated by the node."""
-        _install_client(self._client_for_grill())
+        entry = _entry()
+        _install_client(self._grill_client())
         original = CareerEngineState(
             current_phase=PhaseStatus.GRILLING,
-            current_pillar="perf",
-            active_gaps=["perf"],
+            work_timeline=[entry],
+            grill_frontier=str(entry.entry_id),
             pending_user_answer="cut p99 from 800ms to 120ms",
             question_count=0,
         )
@@ -612,7 +1019,6 @@ class TestNodePurity:
         original = CareerEngineState(
             current_phase=PhaseStatus.GRILLING,
             extracted_star_stories=[],
-            active_gaps=["x"],
             checkpoint_verified=False,
         )
         snapshot = original.model_dump_json()
@@ -624,11 +1030,12 @@ class TestNodePurity:
         _install_client(
             ScriptedClient(
                 responses={
-                    "key competency areas": json.dumps(
+                    "structured timeline": json.dumps(
                         {
-                            "competency_pillars": ["a"],
-                            "initial_gaps": ["a"],
-                            "suggested_first_pillar": "a",
+                            "timeline": [
+                                {"type": "full_time", "title": "Engineer", "org": "A",
+                                 "start_date": "2020", "end_date": "2024", "bullets": []}
+                            ],
                             "summary": "x",
                         }
                     )
@@ -640,6 +1047,17 @@ class TestNodePurity:
         _ = ingest_node(original)
         assert original.model_dump_json() == snapshot
 
+    def test_no_datetime_now_in_nodes(self) -> None:
+        """Nodes must not call datetime.now() — reference_date is injected externally."""
+        import inspect
+
+        import workflows.nodes as _nodes
+
+        src = inspect.getsource(_nodes)
+        assert "datetime.now()" not in src, (
+            "Nodes must not call datetime.now() — use state.reference_date"
+        )
+
 
 # ── No-hardcoded-model assertion (capabilities requested via registry) ────────
 
@@ -649,10 +1067,12 @@ class TestNoHardcodedModels:
 
     def test_grill_requests_reasoning_high_model(self) -> None:
         """The grill node calls the model with the REASONING_HIGH-resolved model id."""
+        entry = _entry()
+        answer = "cut p99 from 800ms to 120ms"
         client = ScriptedClient(
             responses={
                 "data extraction assistant": json.dumps(
-                    {"result": "cut p99 from 800ms to 120ms", "metrics_found": True}
+                    {"result": answer, "metrics_found": True, "pillar": "perf"}
                 )
             }
         )
@@ -665,9 +1085,9 @@ class TestNoHardcodedModels:
 
         state = CareerEngineState(
             current_phase=PhaseStatus.GRILLING,
-            current_pillar="perf",
-            active_gaps=["perf"],
-            pending_user_answer="cut p99 from 800ms to 120ms",
+            work_timeline=[entry],
+            grill_frontier=str(entry.entry_id),
+            pending_user_answer=answer,
         )
         execute_grill_turn_node(state)
 

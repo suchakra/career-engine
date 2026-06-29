@@ -516,8 +516,13 @@ def run_interactive_session(
             if result.is_complete:
                 break
             question = result.next_question
-            if not question and not asyncio.run(session.current_state()).active_gaps:
-                # Gaps closed but not yet complete — keep advancing to finalize.
+            _cur = asyncio.run(session.current_state())
+            _pending = any(
+                e.status in ("needs_quantifying", "documented")
+                for e in _cur.work_timeline
+            )
+            if not question and not _pending:
+                # No pending entries and no question → keep advancing to finalize.
                 continue
             if not question:
                 # Still nothing — session may be stuck; exit gracefully

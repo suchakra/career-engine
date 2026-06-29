@@ -1,11 +1,18 @@
-"""Golden round-trip type tests for all Phase-0 Pydantic models.
+"""Golden round-trip type tests for all Pydantic models — contract v2.0.0.
 
 Every model is serialised with model_dump_json() and deserialised with
 model_validate_json(), then asserted equal to the original.  This proves
 that the schema contract survives the JSON boundary without data loss or
 silent coercion.
 
-These tests are the Phase-0 CI gate.  `make test` must keep them green.
+v2.0.0 additions:
+- Entry model round-trip (ExperienceType, EntryStatus).
+- New CareerEngineState fields: work_timeline, coverage_through, reference_date,
+  grill_frontier.
+- REMOVED pillar fields (target_competencies, active_gaps, current_pillar) —
+  tests assert those are GONE from the model.
+- StarStory.entry_id field.
+- discovery_completeness() / recent_window_complete() deterministic helpers.
 """
 
 from __future__ import annotations
@@ -21,9 +28,14 @@ from schema import (
     AgentMessage,
     Capability,
     CareerEngineState,
+    Entry,
+    EntryStatus,
+    ExperienceType,
     PhaseStatus,
     StarStory,
     UpgradeRequired,
+    discovery_completeness,
+    recent_window_complete,
 )
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -36,11 +48,90 @@ def _roundtrip[M: BaseModel](model_instance: M) -> M:
     return cls.model_validate_json(json_str)
 
 
-# ── StarStory ─────────────────────────────────────────────────────────────────
+# ── Entry (v2.0.0) ────────────────────────────────────────────────────────────
+
+
+class TestEntryRoundTrip:
+    """Round-trip tests for the new Entry model."""
+
+    def test_minimal_entry(self) -> None:
+        """A minimal Entry (only required title field) survives round-trip."""
+        original = Entry(title="Senior Engineer")
+        reconstructed = _roundtrip(original)
+        assert original == reconstructed
+
+    def test_full_entry(self) -> None:
+        """A fully-populated Entry survives round-trip."""
+        original = Entry(
+            entry_id=uuid4(),
+            type=ExperienceType.FULL_TIME,
+            title="Staff Software Engineer",
+            org="Acme Corp",
+            start_date="2020-03",
+            end_date="2024-01",
+            source="resume",
+            bullets=["Led a team of 8 engineers.", "Reduced p99 latency by 70%."],
+            status=EntryStatus.GRILLED,
+        )
+        reconstructed = _roundtrip(original)
+        assert original == reconstructed
+
+    def test_entry_with_empty_end_date_means_present(self) -> None:
+        """Empty end_date is the 'present' sentinel and round-trips correctly."""
+        entry = Entry(title="Current Role", end_date="")
+        reconstructed = _roundtrip(entry)
+        assert reconstructed.end_date == ""
+
+    def test_entry_defaults(self) -> None:
+        """Entry defaults are correct for a freshly created entry."""
+        entry = Entry(title="Intern Project")
+        assert entry.type == ExperienceType.OTHER
+        assert entry.status == EntryStatus.NEEDS_QUANTIFYING
+        assert entry.source == "manual"
+        assert entry.bullets == []
+        assert entry.org == ""
+
+    def test_all_experience_types_roundtrip(self) -> None:
+        """All ExperienceType values survive round-trip."""
+        for exp_type in ExperienceType:
+            entry = Entry(title="test", type=exp_type)
+            reconstructed = _roundtrip(entry)
+            assert reconstructed.type == exp_type
+
+    def test_all_entry_statuses_roundtrip(self) -> None:
+        """All EntryStatus values survive round-trip."""
+        for status in EntryStatus:
+            entry = Entry(title="test", status=status)
+            reconstructed = _roundtrip(entry)
+            assert reconstructed.status == status
+
+    def test_all_source_literals_roundtrip(self) -> None:
+        """All source literal values survive round-trip."""
+        for source in ("resume", "discovered", "manual"):
+            entry = Entry(title="test", source=source)
+            reconstructed = _roundtrip(entry)
+            assert reconstructed.source == source
+
+    def test_entry_education_type(self) -> None:
+        """Education-type entries round-trip and carry the right type."""
+        entry = Entry(
+            type=ExperienceType.EDUCATION,
+            title="BS Computer Science",
+            org="State University",
+            start_date="2018",
+            end_date="2022",
+            status=EntryStatus.DOCUMENTED,
+        )
+        reconstructed = _roundtrip(entry)
+        assert reconstructed.type == ExperienceType.EDUCATION
+        assert reconstructed.org == "State University"
+
+
+# ── StarStory (v2.0.0 — added entry_id) ──────────────────────────────────────
 
 
 class TestStarStoryRoundTrip:
-    """Round-trip tests for StarStory."""
+    """Round-trip tests for StarStory, including the new entry_id field."""
 
     def test_minimal_star_story(self) -> None:
         """A minimal StarStory (only required fields) survives round-trip."""
@@ -52,6 +143,7 @@ class TestStarStoryRoundTrip:
         """A fully-populated StarStory survives round-trip."""
         original = StarStory(
             story_id=uuid4(),
+            entry_id=str(uuid4()),
             pillar="performance_engineering",
             situation="System was hitting 2000ms p99 latency under peak load.",
             task="Reduce p99 to under 200ms for the checkout service.",
@@ -62,6 +154,18 @@ class TestStarStoryRoundTrip:
         )
         reconstructed = _roundtrip(original)
         assert original == reconstructed
+
+    def test_entry_id_defaults_to_empty(self) -> None:
+        """entry_id defaults to empty string when not provided."""
+        story = StarStory(pillar="leadership")
+        assert story.entry_id == ""
+
+    def test_entry_id_set_and_roundtrip(self) -> None:
+        """entry_id set to a UUID string survives round-trip."""
+        eid = str(uuid4())
+        story = StarStory(pillar="delivery", entry_id=eid)
+        reconstructed = _roundtrip(story)
+        assert reconstructed.entry_id == eid
 
     def test_metrics_validated_false_by_default(self) -> None:
         """metrics_validated defaults to False (no story is pre-validated)."""
@@ -78,11 +182,11 @@ class TestStarStoryRoundTrip:
         )
 
 
-# ── CareerEngineState ─────────────────────────────────────────────────────────
+# ── CareerEngineState (v2.0.0) ────────────────────────────────────────────────
 
 
 class TestCareerEngineStateRoundTrip:
-    """Round-trip tests for CareerEngineState."""
+    """Round-trip tests for CareerEngineState v2.0.0."""
 
     def test_default_state(self) -> None:
         """Default CareerEngineState (empty session) survives round-trip."""
@@ -90,28 +194,73 @@ class TestCareerEngineStateRoundTrip:
         reconstructed = _roundtrip(original)
         assert original == reconstructed
 
-    def test_state_with_stories(self) -> None:
-        """State carrying StarStory objects survives round-trip."""
+    def test_state_with_work_timeline(self) -> None:
+        """State with work_timeline entries survives round-trip."""
+        entry = Entry(
+            type=ExperienceType.FULL_TIME,
+            title="Senior Engineer",
+            org="Acme",
+            start_date="2021",
+            end_date="2024",
+            status=EntryStatus.GRILLED,
+        )
         story = StarStory(
+            entry_id=str(entry.entry_id),
             pillar="delivery",
             result="Reduced deploy time from 45 min to 3 min.",
             metrics_validated=True,
         )
         original = CareerEngineState(
             current_phase=PhaseStatus.GRILLING,
-            current_pillar="delivery",
-            target_competencies=["delivery", "leadership", "scale"],
-            active_gaps=["leadership", "scale"],
+            work_timeline=[entry],
+            grill_frontier=str(entry.entry_id),
+            reference_date="2026-06-29",
+            coverage_through="2024",
             extracted_star_stories=[story],
             question_count=3,
         )
         reconstructed = _roundtrip(original)
         assert original == reconstructed
 
-    def test_state_carries_contract_version(self) -> None:
-        """CareerEngineState must be stamped with CONTRACT_VERSION."""
+    def test_state_carries_contract_version_200(self) -> None:
+        """CareerEngineState must be stamped with CONTRACT_VERSION == '2.0.0'."""
         state = CareerEngineState()
         assert state.contract_version == CONTRACT_VERSION
+        assert CONTRACT_VERSION == "2.0.0"
+
+    def test_pillar_fields_are_gone(self) -> None:
+        """v2.0.0 must NOT have target_competencies, active_gaps, current_pillar."""
+        state = CareerEngineState()
+        data = json.loads(state.model_dump_json())
+        for removed_field in ("target_competencies", "active_gaps", "current_pillar"):
+            assert removed_field not in data, (
+                f"REMOVED field '{removed_field}' must not appear in CareerEngineState JSON"
+            )
+        # Also assert the model fields don't exist
+        assert not hasattr(state, "target_competencies"), "target_competencies must be gone"
+        assert not hasattr(state, "active_gaps"), "active_gaps must be gone"
+        assert not hasattr(state, "current_pillar"), "current_pillar must be gone"
+
+    def test_v200_new_fields_present_and_default(self) -> None:
+        """New v2.0.0 fields are present with correct defaults."""
+        state = CareerEngineState()
+        assert state.work_timeline == []
+        assert state.coverage_through == ""
+        assert state.reference_date == ""
+        assert state.grill_frontier == ""
+
+    def test_reference_date_and_grill_frontier_roundtrip(self) -> None:
+        """reference_date and grill_frontier survive round-trip."""
+        eid = str(uuid4())
+        state = CareerEngineState(
+            reference_date="2026-06-29",
+            grill_frontier=eid,
+            coverage_through="2024-01",
+        )
+        reconstructed = _roundtrip(state)
+        assert reconstructed.reference_date == "2026-06-29"
+        assert reconstructed.grill_frontier == eid
+        assert reconstructed.coverage_through == "2024-01"
 
     def test_state_has_no_user_id_field(self) -> None:
         """CareerEngineState must NOT carry user_id (travels via session/context)."""
@@ -145,8 +294,8 @@ class TestCareerEngineStateRoundTrip:
         assert reconstructed.checkpoint_delta_summary == state.checkpoint_delta_summary
         assert reconstructed.checkpoint_verified is False
 
-    def test_v110_fields_default_and_roundtrip(self) -> None:
-        """v1.1.0 fields default to empty and survive round-trip when populated."""
+    def test_v110_fields_carried_forward(self) -> None:
+        """v1.1.0 conversational/output fields are still present in v2.0.0."""
         default = CareerEngineState()
         assert default.pending_user_answer == ""
         assert default.current_question == ""
@@ -165,6 +314,210 @@ class TestCareerEngineStateRoundTrip:
         )
         reconstructed = _roundtrip(state)
         assert reconstructed == state
+
+    def test_state_with_nested_entry_and_star_story(self) -> None:
+        """State with nested Entry + StarStory round-trips losslessly."""
+        eid = uuid4()
+        entry = Entry(
+            entry_id=eid,
+            type=ExperienceType.PROJECT,
+            title="Open Source CLI",
+            org="GitHub",
+            start_date="2023-01",
+            end_date="",
+            source="discovered",
+            bullets=["Built CLI with 500+ stars."],
+            status=EntryStatus.GRILLED,
+        )
+        story = StarStory(
+            entry_id=str(eid),
+            pillar="open_source",
+            result="500+ GitHub stars in 3 months.",
+            metrics_validated=True,
+        )
+        state = CareerEngineState(
+            current_phase=PhaseStatus.GRILLING,
+            work_timeline=[entry],
+            extracted_star_stories=[story],
+            grill_frontier=str(eid),
+            reference_date="2026-06-29",
+        )
+        reconstructed = _roundtrip(state)
+        assert reconstructed.work_timeline[0] == entry
+        assert reconstructed.extracted_star_stories[0].entry_id == str(eid)
+
+
+# ── discovery_completeness and recent_window_complete helpers ─────────────────
+
+
+class TestDiscoveryCompletenessHelper:
+    """Tests for the discovery_completeness() pure helper.
+
+    All tests use a fixed reference_date for determinism — no datetime.now().
+    """
+
+    _REF_DATE = "2026-06-29"  # "now" for all tests in this class
+
+    def _entry(
+        self,
+        end_date: str,
+        status: EntryStatus = EntryStatus.NEEDS_QUANTIFYING,
+    ) -> Entry:
+        """Helper to build a test entry with given end_date and status."""
+        return Entry(title="Test", end_date=end_date, status=status)
+
+    def test_no_reference_date_returns_zero(self) -> None:
+        """Without a reference_date the helper returns 0.0 (deterministic)."""
+        state = CareerEngineState()
+        assert discovery_completeness(state) == 0.0
+
+    def test_empty_timeline_returns_zero(self) -> None:
+        """An empty work_timeline returns 0.0."""
+        state = CareerEngineState(reference_date=self._REF_DATE)
+        assert discovery_completeness(state) == 0.0
+
+    def test_all_entries_outside_window_returns_zero(self) -> None:
+        """Entries older than 5 years before reference_date are not in the window."""
+        # ref=2026, cutoff=2021, entry ended 2015 → not in window
+        state = CareerEngineState(
+            reference_date=self._REF_DATE,
+            work_timeline=[self._entry("2015")],
+        )
+        assert discovery_completeness(state) == 0.0
+
+    def test_present_entry_always_in_window(self) -> None:
+        """An entry with empty end_date (present) is always in the window."""
+        state = CareerEngineState(
+            reference_date=self._REF_DATE,
+            work_timeline=[self._entry("", status=EntryStatus.GRILLED)],
+        )
+        assert discovery_completeness(state) == 1.0
+
+    def test_partial_completeness(self) -> None:
+        """2 out of 4 grilled/summarized = 0.5."""
+        entries = [
+            self._entry("2024", EntryStatus.GRILLED),
+            self._entry("2023", EntryStatus.SUMMARIZED),
+            self._entry("2022", EntryStatus.NEEDS_QUANTIFYING),
+            self._entry("2022", EntryStatus.DOCUMENTED),
+        ]
+        state = CareerEngineState(
+            reference_date=self._REF_DATE,
+            work_timeline=entries,
+        )
+        result = discovery_completeness(state)
+        assert abs(result - 0.5) < 1e-9
+
+    def test_all_grilled_returns_one(self) -> None:
+        """All window entries grilled/summarized returns 1.0."""
+        entries = [
+            self._entry("2024", EntryStatus.GRILLED),
+            self._entry("2023", EntryStatus.SUMMARIZED),
+            self._entry("2022", EntryStatus.SKIPPED),
+        ]
+        state = CareerEngineState(
+            reference_date=self._REF_DATE,
+            work_timeline=entries,
+        )
+        assert discovery_completeness(state) == 1.0
+
+    def test_skipped_counts_as_done(self) -> None:
+        """SKIPPED status counts toward completeness (user chose to skip)."""
+        state = CareerEngineState(
+            reference_date=self._REF_DATE,
+            work_timeline=[self._entry("2025", EntryStatus.SKIPPED)],
+        )
+        assert discovery_completeness(state) == 1.0
+
+    def test_only_window_entries_counted(self) -> None:
+        """Old entries (>5y) are excluded; only window entries are counted."""
+        entries = [
+            self._entry("2024", EntryStatus.GRILLED),   # in window
+            self._entry("2020", EntryStatus.NEEDS_QUANTIFYING),  # just in window (2026-5=2021, 2020 is OUT)
+            self._entry("2010", EntryStatus.NEEDS_QUANTIFYING),  # out of window
+        ]
+        state = CareerEngineState(
+            reference_date=self._REF_DATE,
+            work_timeline=entries,
+        )
+        # Only 2024 is in window (cutoff is 2021, 2020 is before that)
+        result = discovery_completeness(state)
+        assert result == 1.0  # 1/1 in-window entry is grilled
+
+
+class TestRecentWindowCompleteHelper:
+    """Tests for the recent_window_complete() pure helper.
+
+    All tests use a fixed reference_date for determinism — no datetime.now().
+    """
+
+    _REF_DATE = "2026-06-29"
+
+    def _entry(self, end_date: str, status: EntryStatus) -> Entry:
+        """Helper to build a test entry with given end_date and status."""
+        return Entry(title="Test", end_date=end_date, status=status)
+
+    def test_no_reference_date_returns_false(self) -> None:
+        """Without a reference_date the helper returns False."""
+        state = CareerEngineState()
+        assert recent_window_complete(state) is False
+
+    def test_empty_timeline_returns_false(self) -> None:
+        """An empty work_timeline is not complete."""
+        state = CareerEngineState(reference_date=self._REF_DATE)
+        assert recent_window_complete(state) is False
+
+    def test_all_grilled_no_unprocessed_returns_true(self) -> None:
+        """All window entries grilled and none needs_quantifying → complete."""
+        state = CareerEngineState(
+            reference_date=self._REF_DATE,
+            work_timeline=[
+                self._entry("2024", EntryStatus.GRILLED),
+                self._entry("2023", EntryStatus.SUMMARIZED),
+            ],
+        )
+        assert recent_window_complete(state) is True
+
+    def test_has_unprocessed_returns_false(self) -> None:
+        """A NEEDS_QUANTIFYING entry in the window means incomplete."""
+        state = CareerEngineState(
+            reference_date=self._REF_DATE,
+            work_timeline=[
+                self._entry("2024", EntryStatus.GRILLED),
+                self._entry("2023", EntryStatus.NEEDS_QUANTIFYING),
+            ],
+        )
+        assert recent_window_complete(state) is False
+
+    def test_no_validated_entry_returns_false(self) -> None:
+        """A window where no entry is GRILLED returns False (needs >= 1 validated)."""
+        state = CareerEngineState(
+            reference_date=self._REF_DATE,
+            work_timeline=[
+                self._entry("2024", EntryStatus.SUMMARIZED),
+                self._entry("2023", EntryStatus.SKIPPED),
+            ],
+        )
+        assert recent_window_complete(state) is False
+
+    def test_present_entry_always_in_window(self) -> None:
+        """A 'present' entry (empty end_date) counts in the window."""
+        state = CareerEngineState(
+            reference_date=self._REF_DATE,
+            work_timeline=[self._entry("", EntryStatus.GRILLED)],
+        )
+        assert recent_window_complete(state) is True
+
+    def test_documented_counts_as_unprocessed(self) -> None:
+        """DOCUMENTED status is still unprocessed (needs quantifying)."""
+        state = CareerEngineState(
+            reference_date=self._REF_DATE,
+            work_timeline=[
+                self._entry("2024", EntryStatus.GRILLED),
+                self._entry("2023", EntryStatus.DOCUMENTED),
+            ],
+        )
+        assert recent_window_complete(state) is False
 
 
 # ── AgentMessage ──────────────────────────────────────────────────────────────
@@ -283,6 +636,10 @@ class TestCapabilityEnum:
 class TestContractVersion:
     """Tests to ensure CONTRACT_VERSION is semver-formatted and consistent."""
 
+    def test_contract_version_is_200(self) -> None:
+        """CONTRACT_VERSION must be exactly '2.0.0' for Phase 1.5."""
+        assert CONTRACT_VERSION == "2.0.0"
+
     def test_contract_version_is_semver(self) -> None:
         """CONTRACT_VERSION must be a valid semver string (MAJOR.MINOR.PATCH)."""
         parts = CONTRACT_VERSION.split(".")
@@ -317,3 +674,39 @@ class TestAccessMode:
         """AccessMode must be a str enum."""
         assert isinstance(AccessMode.FREE, str)
         assert str(AccessMode.FREE) == "FREE"
+
+
+# ── ExperienceType and EntryStatus enums ──────────────────────────────────────
+
+
+class TestExperienceTypeEnum:
+    """Tests for ExperienceType enum."""
+
+    def test_all_members_present(self) -> None:
+        """All required ExperienceType values must be present."""
+        values = {t.value for t in ExperienceType}
+        expected = {
+            "full_time", "internship", "project", "research",
+            "open_source", "leadership", "part_time", "education", "other",
+        }
+        assert values == expected
+
+    def test_is_str_enum(self) -> None:
+        """ExperienceType must be a str enum."""
+        assert isinstance(ExperienceType.FULL_TIME, str)
+
+
+class TestEntryStatusEnum:
+    """Tests for EntryStatus enum."""
+
+    def test_all_members_present(self) -> None:
+        """All required EntryStatus values must be present."""
+        values = {s.value for s in EntryStatus}
+        expected = {
+            "documented", "needs_quantifying", "grilled", "summarized", "skipped"
+        }
+        assert values == expected
+
+    def test_is_str_enum(self) -> None:
+        """EntryStatus must be a str enum."""
+        assert isinstance(EntryStatus.GRILLED, str)
