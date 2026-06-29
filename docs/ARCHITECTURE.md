@@ -1,7 +1,10 @@
 # CareerEngine — System Architecture
 
-> Status: **Design baseline (pre-implementation)**. Nothing is built yet.
-> Last reviewed: 2026-06-28. Decisions captured in [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md).
+> Status: **active** (design truth for shipped + upcoming work).
+> Last reviewed: 2026-06-29.
+> Build status is **not** canonical here — see [PROGRESS.md](PROGRESS.md). For orientation, Phase 0 +
+> Phase 1 are built & merged (contract v1.1.0); Phase 1.5 (contract v2.0.0) is spec'd in §12.
+> Decisions captured in [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md).
 
 CareerEngine converts raw, multi-decade career histories into quantified, STAR-formatted
 portfolios and ATS-compliant tailored resumes, using a conversational "Grill Me" agent that

@@ -113,9 +113,12 @@ DoD: `make check` green; report READY FOR REVIEW; don't commit. If you need a PD
 > **Coupling decision (resolved):** CONTRACT removes the pillar fields, which breaks `workflows/nodes.py`
 > & `discovery_graph.py` at import/type-check. To keep master green, **1.5-CONTRACT + 1.5-GRILL +
 > 1.5-METRICS are built in ONE worktree by one Sonnet agent and merged together** (CONTRACT first, then
-> this). Phase 1.5 does **not** fan out in parallel — INGEST and DISCOVERY also touch `nodes.py`, so they
-> run **serially after** this unit merges. Run the CONTRACT prompt above first in the same session, then
-> this, then one Opus review of the combined diff.
+> this). Run the CONTRACT prompt above first in the same session, then this, then one Opus review of the
+> combined diff.
+> **After this CORE unit merges, INGEST and DISCOVERY fan out in PARALLEL** — they touch disjoint files
+> (INGEST = `workflows/nodes.py` + `tools/`; DISCOVERY = `cli/` only, must NOT touch `nodes.py`). Only the
+> CORE unit is serial; the two follow-ups are not. (Sequencing canonical here in §"Sequencing" above and
+> in [HANDOFF.md](HANDOFF.md).)
 
 Read first: [ARCHITECTURE.md §12.3–12.4](ARCHITECTURE.md) + Shared preamble + DoD.
 

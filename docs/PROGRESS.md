@@ -3,7 +3,7 @@
 > Single source of truth for **what's done vs. pending**. Update this at the end of every work
 > session / sub-agent run. Keep entries terse. Legend: ✅ done · 🟡 in progress · ⬜ not started · 🚫 blocked.
 
-Last updated: **2026-06-28** — *Phase 0 contract FROZEN (Opus PASS). Ready for Phase 1 fan-out.*
+Last updated: **2026-06-29** — *Phase 0 + Phase 1 built & merged (contract v1.1.0, 228 tests). Review triaged into Phase 1.3 (hardening) → Phase 1.5. See [REVIEW.md §7](REVIEW.md).*
 
 ---
 
@@ -13,7 +13,8 @@ Last updated: **2026-06-28** — *Phase 0 contract FROZEN (Opus PASS). Ready for
 | Planning & architecture | ✅ | ARCHITECTURE.md, REFINED_PROJECT_PLAN.md, this file, AGENT_EXECUTION_PROMPT.md |
 | Phase 0 — Contract Freeze | ✅ | Sonnet-built, Opus-reviewed (1 round: dead model IDs + Free-mode grilling fixed). Frozen, tag `contract-v1.0.0`. |
 | Phase 1 — Core loop (CLI) | ✅ | WS-A/B/C/D + integration all merged & Opus-PASS. Turn-based CLI discovery loop runs end-to-end → PDF. 228 tests. Contract v1.1.0. |
-| Phase 1.5 — Resume-aware + progressive discovery | ⬜ | Spec'd ([ARCHITECTURE.md §12](ARCHITECTURE.md)). Vision ingest, role-based `work_timeline` (replaces pillars), gap-as-roles, apply-readiness gate, backward continuation. Contract v2.0.0. |
+| Phase 1.3 — Review hardening (no contract change) | ⬜ | Stabilize foundation before 1.5; stays v1.1.x. Items from [REVIEW.md §7](REVIEW.md): docs truth (#7,#8), upgrade-signal band-aid + E2E test (#1,#11), model_client errors (#4), Firestore loud-fallback (#3), optional FakeFirestore move (#6). |
+| Phase 1.5 — Resume-aware + progressive discovery | ⬜ | Spec'd ([ARCHITECTURE.md §12](ARCHITECTURE.md)). Vision ingest, role-based `work_timeline` (replaces pillars), gap-as-roles, apply-readiness gate, backward continuation. Contract v2.0.0. Absorbs SSRF guard (#2, INGEST), upgrade-required typed event (#1b, CONTRACT), stale-docstring (#9, DISCOVERY). |
 | Phase 2 — Web / Infra / Async | ⬜ | |
 | Phase 3 — Hardening / Eval | ⬜ | |
 
@@ -47,6 +48,16 @@ Last updated: **2026-06-28** — *Phase 0 contract FROZEN (Opus PASS). Ready for
 - WS-C `FakeFirestoreClient` lives in the prod module — candidate to move to `tests/`.
 - WS-A grill uses `pending_user_answer`/`current_question`; CLI loop must set `pending_user_answer` and `checkpoint_verified`, and read `current_question`/`checkpoint_delta_summary`.
 - No live `runner.run_async` end-to-end smoke yet — owned by integration / WS-F.
+
+## Phase 1.3 — Review hardening  *(no contract change; stays v1.1.x)*
+Stabilize the foundation before launching 1.5 builders. Triage + rationale: [REVIEW.md §7](REVIEW.md).
+- ✅ **#7** docs truth: ARCHITECTURE.md freshness header corrected (was "pre-implementation"); PROGRESS banner refreshed
+- ✅ **#8** grooming sequencing contradiction resolved (CORE serial → INGEST ∥ DISCOVERY parallel)
+- ⬜ **#1 band-aid** upgrade signal: have `TurnResult` read the real `ctx.state["_upgrade_required"]` instead of string-matching `current_question` ([cli/app.py:397](../cli/app.py#L397))
+- ⬜ **#11** add CLI→workflow upgrade-required E2E assertion in `tests/test_integration.py`
+- ⬜ **#4** `integration/model_client.py` — stop swallowing errors into `""`; raise/propagate
+- ⬜ **#3** Firestore: make fallback loud (announce in-memory downgrade); env-aware hard-stop policy deferred to Phase 2 (decision: [REVIEW.md §5](REVIEW.md))
+- ⬜ **#6** *(optional)* move `FakeFirestoreClient` out of `database/firestore_session.py` into `tests/`
 
 ## Phase 1.5 — Resume-aware ingestion & progressive discovery  *(contract v2.0.0)*
 Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) · **groomed prompts + status: [GROOMING.md](GROOMING.md)**. Not started — but **grooming COMPLETE: all 5 pieces are launchable sonnet prompts** ([GROOMING.md](GROOMING.md)).

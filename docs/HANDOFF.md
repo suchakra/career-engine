@@ -2,8 +2,13 @@
 
 ## 👉 YOU ARE HERE (updated 2026-06-29)
 **`master` @ origin, clean — no work in flight.** Phase 0 + Phase 1 are built & merged (228 tests, tag
-`phase-1-mvp`). **Phase 1.5 is fully GROOMED** — 5 launchable Sonnet prompts in [GROOMING.md](GROOMING.md).
-- **To BUILD:** say "build Phase 1.5" → CORE (`1.5-CONTRACT`+`1.5-GRILL` in ONE worktree) → Opus-review → merge → `1.5-INGEST` ∥ `1.5-DISCOVERY`.
+`phase-1-mvp`). A code review landed (**[REVIEW.md](REVIEW.md)**) and was triaged (§7) into a new
+**Phase 1.3** hardening pass (no contract change) → then **Phase 1.5** (fully GROOMED, 5 launchable
+Sonnet prompts in [GROOMING.md](GROOMING.md)).
+- **NEXT (recommended):** do **Phase 1.3** first — small, non-contract-breaking review fixes that
+  stabilize the foundation. Checklist in [PROGRESS.md](PROGRESS.md) "Phase 1.3"; rationale in
+  [REVIEW.md §7](REVIEW.md). The 3 review open-questions are RESOLVED ([REVIEW.md §5](REVIEW.md)).
+- **To BUILD 1.5 (after 1.3):** say "build Phase 1.5" → CORE (`1.5-CONTRACT`+`1.5-GRILL` in ONE worktree) → Opus-review → merge → `1.5-INGEST` ∥ `1.5-DISCOVERY`.
 - **To IDEATE:** read this file, then [ARCHITECTURE.md](ARCHITECTURE.md) + [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md); capture new ideas back into the docs (don't mutate a spec that's mid-build — version-gate instead).
 
 ---
