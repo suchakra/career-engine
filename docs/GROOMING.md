@@ -12,14 +12,16 @@
 ## Phase 1.5 — grooming status (contract v2.0.0)
 | WS | Scope | Depends on | Grooming |
 |----|-------|-----------|----------|
-| **1.5-CONTRACT** | schema v2.0.0: Entry timeline, replace pillar fields, version bump, golden test | — (blocking, solo, freeze first) | ✅ Ready |
-| **1.5-INGEST** | vision resume parser + multimodal client + `ingest_node` → timeline | CONTRACT frozen | ✅ Ready |
-| **1.5-GRILL** | entry-based grill loop, discovery turn, `grill_frontier`, skip-quantified | CONTRACT frozen | ◐ Draft |
-| **1.5-DISCOVERY** | `discovery_completeness` signal, nudge, progress meter, never-block tailoring | CONTRACT, GRILL | ⬜ To groom |
-| **1.5-METRICS** | extend `_contains_real_metric` for early-career/non-eng metrics | CONTRACT | ◐ Draft (small) |
+| **1.5-CONTRACT** | schema v2.0.0: Entry timeline, replace pillar fields, version bump, golden test | — (blocking) | ✅ Ready |
+| **1.5-GRILL** | entry-based grill loop, discovery turn, `grill_frontier`, skip-quantified | built WITH CONTRACT (1 merge unit) | ✅ Ready |
+| **1.5-METRICS** | extend `_contains_real_metric` for early-career/non-eng metrics | folded into GRILL | ✅ Ready (in GRILL) |
+| **1.5-INGEST** | vision resume parser + multimodal client + `ingest_node` upgrade | after CORE merged | ✅ Ready |
+| **1.5-DISCOVERY** | `discovery_completeness` nudge, progress meter, never-block tailoring | after CORE + INGEST | ⬜ To groom |
 
-**Sequencing:** CONTRACT (solo → freeze) → INGEST ∥ GRILL(+METRICS) → DISCOVERY.
-**Groomed so far:** CONTRACT, INGEST. **Next to groom:** GRILL (then DISCOVERY, METRICS).
+**Sequencing (serial — everything touches `nodes.py`, NO parallel fan-out in 1.5):**
+`[CONTRACT + GRILL + METRICS] one worktree, one Opus review, merge (master green)` → `INGEST` → `DISCOVERY`.
+**Groomed so far:** CONTRACT, GRILL, METRICS, INGEST (all ✅ launchable). **Next to groom:** DISCOVERY (the only ⬜).
+**To build now:** launch the CORE unit — run the 1.5-CONTRACT prompt then the 1.5-GRILL prompt in one Sonnet worktree, Opus-review the combined diff, merge.
 
 ---
 
@@ -104,29 +106,70 @@ DoD: `make check` green; report READY FOR REVIEW; don't commit. If you need a PD
 
 ---
 
-## ◐ 1.5-GRILL — entry-based grill loop (DRAFT — groom next)
-Outline (needs full acceptance criteria before launch):
-- Rework workflows/nodes.py + discovery_graph.py from pillar-based to **entry-based**: grill the entry
-  at `grill_frontier`; on a validated answer, attach StarStory with `entry_id`, mark entry `grilled`,
-  advance frontier to the next entry needing work (backward-chronological by default; jumpable).
-- **Discovery turn**: confirm coverage_through conversationally, append discovered Entries
-  (source="discovered") to work_timeline.
-- Skip entries already `documented` with metrics (don't re-grill); soft horizon ~10–15 yrs → mark older
-  `summarized`.
-- Keep the 5-turn checkpoint brake; keep nodes pure; reference_date injected.
-- Likely co-built or co-frozen with 1.5-CONTRACT (since CONTRACT removes the fields this uses).
-- TODO when grooming: exact named tests (backward frontier advance, discovery append, skip-quantified,
-  entry↔story linkage, purity).
+## ✅ 1.5-GRILL — entry-based grill loop (built WITH CONTRACT + METRICS as one merge unit)
+> **Coupling decision (resolved):** CONTRACT removes the pillar fields, which breaks `workflows/nodes.py`
+> & `discovery_graph.py` at import/type-check. To keep master green, **1.5-CONTRACT + 1.5-GRILL +
+> 1.5-METRICS are built in ONE worktree by one Sonnet agent and merged together** (CONTRACT first, then
+> this). Phase 1.5 does **not** fan out in parallel — INGEST and DISCOVERY also touch `nodes.py`, so they
+> run **serially after** this unit merges. Run the CONTRACT prompt above first in the same session, then
+> this, then one Opus review of the combined diff.
+
+Read first: [ARCHITECTURE.md §12.3–12.4](ARCHITECTURE.md) + Shared preamble + DoD.
+
+```
+You are 1.5-GRILL for CareerEngine, continuing in the SAME worktree right after 1.5-CONTRACT (schema is
+now v2.0.0: Entry timeline, grill_frontier, reference_date; pillar fields removed). Rework the grill
+loop from pillar-based to ENTRY-based so the whole suite is green again. Also fold in 1.5-METRICS.
+Stay in: workflows/nodes.py, workflows/discovery_graph.py, workflows/prompts.py, and the existing tests
+(tests/test_nodes.py, tests/test_workflow.py, tests/test_integration.py) — update them to the new contract.
+
+Scope:
+- ENTRY-based grilling: grill the Entry at state.grill_frontier. On a validated answer, attach a
+  StarStory with entry_id == that entry; set the entry status=grilled; advance grill_frontier to the
+  next entry needing work, BACKWARD-chronological (most-recent ungrilled first). Frontier is JUMPABLE:
+  if grill_frontier already points at a specific entry_id, grill that one.
+- DISCOVERY turn: a node/step that confirms coverage_through conversationally and, given the user's
+  reply naming new roles/projects, appends Entry(source="discovered", status=needs_quantifying) to
+  work_timeline (then they grill like any other).
+- SKIP already-quantified: an entry that is status=documented AND already has a metric-bearing bullet
+  is marked grilled (or summarized) and NOT re-asked.
+- SOFT HORIZON: entries whose end_date is older than ~15 years before state.reference_date default to
+  status=summarized (light touch), not deep-grilled. Use reference_date — NEVER datetime.now().
+- Minimal entry-based ingest_node: make it seed/keep work_timeline from text input and set
+  current_phase=GRILLING (1.5-INGEST later upgrades it with the vision parser — keep the seam clean).
+- Keep the 5-turn checkpoint brake (port the existing behavior), HITL semantics, and pure
+  (CareerEngineState)->CareerEngineState nodes. Models via registry capability; no hardcoded names.
+- METRICS (folded in): extend workflows/nodes._contains_real_metric with early-career / non-eng
+  patterns — users/downloads/stars, team size, competition rank, dataset scale, citations, GPA — while
+  keeping the existing latency/%/$ patterns.
+- discovery_graph.py: keep the turn-based topology (one node per run_async) and the ctx.route shim;
+  adapt the router/shims to entry-based state. Router brake semantics unchanged.
+
+Acceptance criteria (named tests; mock the model client; deterministic with a fixed reference_date):
+- Vague answer for the frontier entry → REJECTED: current_question set, NO StarStory, entry not grilled.
+- Specific answer → StarStory(metrics_validated=True, entry_id==frontier); entry status=grilled.
+- Backward frontier: with 3 entries (2024/2021/2018), frontier advances newest-first as each is grilled;
+  setting grill_frontier to the 2018 entry_id makes the next grill target 2018 (jumpable).
+- Discovery turn appends a discovered Entry from a user reply naming a new role.
+- Already-quantified entry is skipped (not re-asked).
+- Soft horizon: an entry ending >15y before reference_date is marked summarized, not deep-grilled.
+- 5-turn checkpoint brake still fires; checkpoint waits for checkpoint_verified.
+- Node purity (deterministic, non-mutating, deps mocked, no datetime.now()).
+- _contains_real_metric: a test per new pattern (users/stars/team/rank/citations/GPA) + eng patterns still pass.
+- The existing integration e2e is updated to the entry-based flow and still drives the real Runner → PDF.
+
+DoD: `make check` fully green (ALL suites updated to v2.0.0), no hardcoded "gemini-", report READY FOR
+REVIEW (combined CONTRACT+GRILL+METRICS diff), do NOT commit.
+```
 
 ## ⬜ 1.5-DISCOVERY — completeness nudge + progress meter (TO GROOM)
 - Surface `discovery_completeness`/`recent_window_complete` as a **nudge** on each apply/tailor (CLI now,
   Streamlit Phase 2), snooze-able; tailoring NEVER blocked. Progress meter from the derived helpers.
 - Depends on CONTRACT (helpers) + GRILL (frontier). Groom after GRILL.
 
-## ◐ 1.5-METRICS — metric validator extension (DRAFT — small)
-- Extend `workflows/nodes._contains_real_metric` patterns for early-career/non-eng wins: users/downloads/
-  stars, team size, competition rank, dataset scale, citations, GPA-where-relevant. Add tests per pattern.
-- Tiny; can fold into 1.5-GRILL or run standalone after CONTRACT.
+## ✅ 1.5-METRICS — metric validator extension (FOLDED INTO 1.5-GRILL)
+Groomed inside the 1.5-GRILL prompt (same file, `workflows/nodes._contains_real_metric` + per-pattern
+tests). Not a separate workstream.
 
 ---
 
