@@ -1,15 +1,22 @@
-"""ADK 2.0 Workflow graph for the CareerEngine discovery loop — Phase 1 (WS-A).
+"""ADK 2.0 Workflow graph for the CareerEngine discovery loop — Phase 1.5.
 
 Graph topology:
     START → ingest → [discovery_router] → execute_grill_turn
                                         → user_checkpoint
                                         → finalize_master_resume → tailor
 
-Router rules (the 5-turn brake — FROZEN in Phase 0):
-    - If phase == 'complete' OR active_gaps is empty → finalize_master_resume_node
+Router rules (the 5-turn brake — unchanged behavior):
+    - If phase == 'complete' OR no entries need work → finalize_master_resume_node
     - If question_count > 0 AND question_count % 5 == 0
       AND phase != 'checkpoint' → user_checkpoint_node
     - Otherwise → execute_grill_turn_node
+
+v2.0.0 changes:
+    - Router uses work_timeline (instead of active_gaps) to determine if grilling
+      is needed.  "No active work" = no NEEDS_QUANTIFYING or DOCUMENTED entries.
+    - Shims updated to work with Entry-based state.
+    - discovery_turn_node added as an optional node (not yet in the main graph;
+      the 1.5-DISCOVERY workstream wires it into the CLI flow).
 
 ADK 2.0 wiring notes (verified against google-adk==2.0.0):
     - Workflow(edges=[...]) builds the graph from Edge objects.
@@ -45,7 +52,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import BaseSessionService, InMemorySessionService
 from google.adk.workflow import DEFAULT_ROUTE, START, Edge, FunctionNode, Workflow
 
-from schema import CareerEngineState, PhaseStatus
+from schema import CareerEngineState, EntryStatus, PhaseStatus
 from workflows.nodes import (
     execute_grill_turn_node,
     finalize_master_resume_node,
@@ -54,7 +61,15 @@ from workflows.nodes import (
     user_checkpoint_node,
 )
 
-# ── Router (FROZEN Phase-0 contract) ─────────────────────────────────────────
+# ── Router (adapted for v2.0.0 entry-based state) ─────────────────────────────
+
+
+def _has_pending_work(state: CareerEngineState) -> bool:
+    """Return True if any entries in the work_timeline still need grilling."""
+    return any(
+        e.status in (EntryStatus.NEEDS_QUANTIFYING, EntryStatus.DOCUMENTED)
+        for e in state.work_timeline
+    )
 
 
 def discovery_router(state: CareerEngineState) -> str:
@@ -62,6 +77,9 @@ def discovery_router(state: CareerEngineState) -> str:
 
     Implements the 5-turn checkpoint brake: every 5 questions, force a
     user checkpoint before continuing.
+
+    v2.0.0: uses work_timeline to determine if grilling is needed.
+    "No pending work" = all entries are grilled/summarized/skipped.
 
     Turn-based / human-in-the-loop note:
         Each ``runner.run_async`` invocation advances the workflow by exactly
@@ -78,8 +96,8 @@ def discovery_router(state: CareerEngineState) -> str:
         while phase==CHECKPOINT" — keeps holding without re-triggering the
         checkpoint node.
 
-    Routing rules (FROZEN Phase-0 contract — unchanged):
-        - phase == COMPLETE or no active_gaps → finalize_master_resume_node.
+    Routing rules (v2.0.0 — entry-based):
+        - phase == COMPLETE or no pending work → finalize_master_resume_node.
         - 5-turn brake: question_count > 0, a multiple of 5, and phase is NOT
           already CHECKPOINT → user_checkpoint_node.
         - otherwise → execute_grill_turn_node.
@@ -91,7 +109,7 @@ def discovery_router(state: CareerEngineState) -> str:
         Node name string: one of 'execute_grill_turn_node',
         'user_checkpoint_node', or 'finalize_master_resume_node'.
     """
-    if state.current_phase == PhaseStatus.COMPLETE or not state.active_gaps:
+    if state.current_phase == PhaseStatus.COMPLETE or not _has_pending_work(state):
         return "finalize_master_resume_node"
 
     # 5-turn checkpoint brake
@@ -131,21 +149,21 @@ def _write_state(ctx: object, new_state: CareerEngineState) -> None:
 
 
 def _ingest_shim(ctx: object) -> None:
-    """ADK graph-entry shim: seed pillars once and resolve a verified checkpoint.
+    """ADK graph-entry shim: seed the timeline once and resolve a verified checkpoint.
 
     TURN-BASED NOTE: every ``runner.run_async`` call restarts the graph from
     START, so this is the entry node on every turn.  It does two boundary jobs:
 
     1. Idempotent ingest.  ``ingest_node`` resets ``question_count`` to 0 and
-       re-seeds pillars — if it re-ran every turn the 5-turn brake could never
-       accumulate and prior progress (closed gaps, question_count) would be
-       clobbered.  So ingest runs ONLY while the phase is still INGESTING (the
-       first turn); later turns pass the seeded state straight through.
+       re-seeds the timeline — if it re-ran every turn the 5-turn brake could
+       never accumulate and prior progress would be clobbered.  So ingest runs
+       ONLY while the phase is still INGESTING (the first turn); later turns
+       pass the seeded state straight through.
 
     2. Checkpoint resolution.  When the CLI has set ``checkpoint_verified=True``
        on a paused checkpoint, this entry step calls ``user_checkpoint_node`` to
        advance the phase back to GRILLING (and reset the flag/summary) BEFORE the
-       router runs.  This keeps the FROZEN router contract intact — the router
+       router runs.  This keeps the router contract intact — the router
        still suppresses the brake while phase==CHECKPOINT and never has to
        re-enter the checkpoint node — while giving the HITL gate a single,
        deterministic resolution point.  An un-verified checkpoint is left as-is

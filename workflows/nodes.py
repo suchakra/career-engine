@@ -1,7 +1,8 @@
-"""Atomic workflow node implementations — Phase 1 (WS-A).
+"""Atomic workflow node implementations — Phase 1.5 (entry-based grill loop).
 
 Every node is a PURE function: (CareerEngineState) -> CareerEngineState.
 No UI imports.  No direct Firestore calls.  No hardcoded model names.
+No datetime.now calls — use state.reference_date for determinism.
 Model access goes through models.registry.get_registry().get_model_id().
 
 On capability shortfall, nodes return UpgradeRequired (typed); they never raise.
@@ -14,6 +15,13 @@ Dependency injection:
 StarStory immutability:
     StarStory is frozen=True (config).  Nodes create NEW instances rather than
     mutating existing ones, using model_copy() or direct construction.
+
+Entry-based grilling (v2.0.0):
+    The grill loop now targets the Entry at state.grill_frontier (a UUID string).
+    On a validated answer, a StarStory(entry_id=frontier) is attached, the entry
+    status is set to 'grilled', and grill_frontier advances backward-chronologically
+    to the next entry needing work.  The frontier is jumpable: setting grill_frontier
+    explicitly makes that entry the next grill target.
 
 ADK 2.0 wiring note:
     discovery_graph.py wraps each pure function in a FunctionNode with a thin
@@ -34,12 +42,16 @@ from models.registry import get_registry
 from schema import (
     Capability,
     CareerEngineState,
+    Entry,
+    EntryStatus,
+    ExperienceType,
     PhaseStatus,
     StarStory,
     UpgradeRequired,
 )
 from workflows.prompts import (
     CHECKPOINT_SUMMARY_PROMPT,
+    DISCOVERY_SYSTEM_PROMPT,
     FINALIZE_SYSTEM_PROMPT,
     GRILL_SYSTEM_PROMPT,
     INGEST_SYSTEM_PROMPT,
@@ -140,21 +152,38 @@ def _contains_real_metric(result_text: str) -> bool:
     - A numeric value with a unit (digits followed by ms, %, $, k, M, etc.)
     - A before/after comparison containing numbers
     - A count or scale figure (e.g. "across 40 services", "2M requests")
+    - Early-career / non-eng: users/downloads/stars, team size, competition rank,
+      dataset scale, citations, GPA
     """
     if not result_text:
         return False
     # Look for numeric patterns indicating a metric
     patterns = [
+        # Engineering / performance metrics
         r"\d+\s*ms\b",  # latency (milliseconds)
         r"\d+\s*s\b",  # seconds
         r"\d+\s*%",  # percentages
         r"\$\s*\d+",  # dollar amounts
         r"\d+\s*[kKmMbB]\b",  # k/M/B scale suffixes
-        r"\d+\s+(?:services?|servers?|nodes?|instances?|engineers?|customers?|users?|requests?)",
+        r"\d+\s+(?:services?|servers?|nodes?|instances?|engineers?|customers?|requests?)",
         r"\bfrom\s+\d",  # before/after pattern ("from 800ms...")
         r"\d+\s*(?:minutes?|hours?|days?)",  # time durations
         r"\d+x\b",  # multiplier (2x, 10x)
         r"\d+\.\d+",  # decimal numbers
+        # Early-career / non-eng patterns
+        r"\d+\s+(?:users?|downloads?|installs?)",  # users/downloads/installs
+        r"\d+\s+(?:stars?)",  # GitHub stars
+        r"\d+\s+(?:forks?)",  # forks
+        r"team\s+(?:of\s+)?\d+",  # team size ("team of 5")
+        r"\d+[-\s]+(?:person|member|people)\s+team",  # team size alt form (6-person or 6 person)
+        r"\d+\s+(?:participants?|students?|attendees?|members?)",  # group size
+        r"(?:rank(?:ed)?|place[d]?|finish(?:ed)?)\s+(?:in\s+)?(?:top\s+)?\d+",  # competition rank
+        r"(?:1st|2nd|3rd|\d+th)\s+(?:place|prize|rank)",  # ordinal rank
+        r"\d+[kK]\s*(?:rows?|samples?|records?|examples?|entries|tokens?)",  # dataset scale
+        r"\d+\s+(?:citations?|references?|papers?)",  # academic citations
+        r"cited\s+\d+\s+times?",  # citation count
+        r"\b(?:gpa|grade)\s*(?:of\s+)?\d+\.\d+",  # GPA
+        r"\d+\.\d+\s*(?:gpa|\/4\.0|\/5\.0)",  # GPA format alt
     ]
     for pattern in patterns:
         if re.search(pattern, result_text, re.IGNORECASE):
@@ -162,28 +191,153 @@ def _contains_real_metric(result_text: str) -> bool:
     return False
 
 
+# ── Entry timeline helpers ────────────────────────────────────────────────────
+
+
+def _parse_year_from_date(date_str: str) -> int | None:
+    """Extract the year from a YYYY-MM or YYYY date string; return None on failure."""
+    if not date_str:
+        return None
+    try:
+        return int(date_str.split("-")[0])
+    except (ValueError, IndexError):
+        return None
+
+
+def _is_soft_horizon(entry: Entry, reference_date: str) -> bool:
+    """Return True if an entry's end_date is older than ~15 years before reference_date.
+
+    Uses reference_date — NEVER calls datetime.now directly.
+    An entry with empty end_date (present) is never in the soft horizon.
+    """
+    if not entry.end_date:
+        return False  # present → never soft-horizon
+    if not reference_date:
+        return False  # no clock → cannot judge
+
+    ref_year = _parse_year_from_date(reference_date)
+    end_year = _parse_year_from_date(entry.end_date)
+    if ref_year is None or end_year is None:
+        return False
+    return (ref_year - end_year) >= 15
+
+
+def _has_metric_bullet(entry: Entry) -> bool:
+    """Return True if the entry already has at least one metric-bearing bullet."""
+    return any(_contains_real_metric(b) for b in entry.bullets)
+
+
+def _find_entry_by_id(timeline: list[Entry], entry_id: str) -> Entry | None:
+    """Find an entry in the timeline by its entry_id string; return None if not found."""
+    for entry in timeline:
+        if str(entry.entry_id) == entry_id:
+            return entry
+    return None
+
+
+def _next_frontier(timeline: list[Entry], current_frontier_id: str) -> str:
+    """Return the next entry_id to grill (backward-chronological, newest first).
+
+    Strategy: find the most-recent entry in work_timeline that still needs work
+    (NEEDS_QUANTIFYING or DOCUMENTED without a metric bullet), skipping the
+    currently-being-grilled entry.
+
+    Entries are sorted newest-to-oldest (by start_date year, falling back to
+    insertion order as tiebreaker).
+
+    Returns "" if no more entries need grilling.
+    """
+    # Collect entries that still need work
+    needs_work = [
+        e for e in timeline
+        if e.status in (EntryStatus.NEEDS_QUANTIFYING, EntryStatus.DOCUMENTED)
+        and str(e.entry_id) != current_frontier_id
+    ]
+    if not needs_work:
+        return ""
+
+    # Sort newest-to-oldest (we drill backward chronologically)
+    def _sort_key(e: Entry) -> int:
+        # Larger year = newer = higher sort priority
+        y = _parse_year_from_date(e.start_date) or 0
+        return y
+
+    needs_work.sort(key=_sort_key, reverse=True)
+    return str(needs_work[0].entry_id)
+
+
+def _get_frontier_entry(state: CareerEngineState) -> Entry | None:
+    """Return the Entry currently pointed to by grill_frontier.
+
+    If grill_frontier is empty, picks the most-recent ungrilled entry.
+    If no ungrilled entry exists, returns None.
+    """
+    if state.grill_frontier:
+        entry = _find_entry_by_id(state.work_timeline, state.grill_frontier)
+        if entry is not None:
+            # Only return it if it actually needs work (jumpable target may have
+            # been completed already)
+            if entry.status in (EntryStatus.NEEDS_QUANTIFYING, EntryStatus.DOCUMENTED):
+                return entry
+
+    # Auto-pick: most-recent entry that needs work
+    needs_work = [
+        e for e in state.work_timeline
+        if e.status in (EntryStatus.NEEDS_QUANTIFYING, EntryStatus.DOCUMENTED)
+    ]
+    if not needs_work:
+        return None
+
+    def _sort_key(e: Entry) -> int:
+        return _parse_year_from_date(e.start_date) or 0
+
+    needs_work.sort(key=_sort_key, reverse=True)
+    return needs_work[0]
+
+
+def _update_entry_in_timeline(
+    timeline: list[Entry], updated_entry: Entry
+) -> list[Entry]:
+    """Return a new timeline list with the updated entry replacing the old one."""
+    return [
+        updated_entry if str(e.entry_id) == str(updated_entry.entry_id) else e
+        for e in timeline
+    ]
+
+
 # ── Node implementations ──────────────────────────────────────────────────────
 
 
 def ingest_node(state: CareerEngineState) -> CareerEngineState:
-    """Parse raw career history and seed competency pillars and active gaps.
+    """Seed the work_timeline from raw_history_text and set phase=GRILLING.
 
-    Uses SPEED_FAST capability (Flash baseline).  Sends the raw history text
-    to the model with INGEST_SYSTEM_PROMPT to extract competency pillars and
-    the first pillar to explore.  Sets current_phase to GRILLING.
+    Minimal entry-based ingest: uses INGEST_SYSTEM_PROMPT to parse
+    raw_history_text into a list of role/experience entries.  Applies soft-
+    horizon logic and already-quantified skip logic immediately.
+
+    1.5-INGEST will replace this with the full vision parser; keep the seam
+    clean by writing only to work_timeline and setting current_phase=GRILLING.
 
     Args:
         state: Input state with raw_history_text populated.
 
     Returns:
-        Updated state with target_competencies, active_gaps, current_pillar,
+        Updated state with work_timeline seeded, grill_frontier set,
         and current_phase=GRILLING.
     """
     model_id = _resolve_model(Capability.SPEED_FAST)
     if isinstance(model_id, UpgradeRequired):
         # SPEED_FAST is always resolvable in both modes; guard defensively.
-        # Return state unchanged so the graph can route appropriately.
         return state
+
+    # If a work_timeline already exists, skip re-seeding (idempotent)
+    if state.work_timeline:
+        return state.model_copy(
+            update={
+                "current_phase": PhaseStatus.GRILLING,
+                "question_count": 0,
+            }
+        )
 
     client = _get_model_client()
     raw = state.raw_history_text.strip() or "(no career history provided)"
@@ -194,25 +348,166 @@ def ingest_node(state: CareerEngineState) -> CareerEngineState:
     )
     parsed = _parse_json_response(response_text)
 
-    pillars: list[str] = parsed.get("competency_pillars", [])
-    gaps: list[str] = parsed.get("initial_gaps", pillars[:])
-    first_pillar: str = parsed.get("suggested_first_pillar", pillars[0] if pillars else "")
+    # Build a list of Entry objects from parsed timeline
+    entries_raw: list[dict[str, Any]] = parsed.get("timeline", [])
+    new_timeline: list[Entry] = []
 
-    # Fallback if model returned nothing useful
-    if not pillars:
-        pillars = ["general"]
-        gaps = ["general"]
-        first_pillar = "general"
+    for item in entries_raw:
+        try:
+            exp_type = ExperienceType(item.get("type", "other"))
+        except ValueError:
+            exp_type = ExperienceType.OTHER
+
+        entry = Entry(
+            type=exp_type,
+            title=str(item.get("title", "Untitled")),
+            org=str(item.get("org", "")),
+            start_date=str(item.get("start_date", "")),
+            end_date=str(item.get("end_date", "")),
+            source="resume",
+            bullets=list(item.get("bullets", [])),
+            status=EntryStatus.DOCUMENTED,
+        )
+        new_timeline.append(entry)
+
+    # Fallback: if model returned nothing useful, create a generic entry
+    if not new_timeline:
+        new_timeline = [
+            Entry(
+                type=ExperienceType.OTHER,
+                title="Career History",
+                source="manual",
+                status=EntryStatus.NEEDS_QUANTIFYING,
+            )
+        ]
+
+    # Apply soft-horizon and already-quantified skip logic
+    ref_date = state.reference_date
+    for entry in new_timeline:
+        if _is_soft_horizon(entry, ref_date):
+            entry.status = EntryStatus.SUMMARIZED
+        elif entry.status == EntryStatus.DOCUMENTED and _has_metric_bullet(entry):
+            entry.status = EntryStatus.GRILLED
+        else:
+            entry.status = EntryStatus.NEEDS_QUANTIFYING
+
+    # Pick the initial grill frontier (most-recent entry needing work)
+    initial_frontier = _next_frontier(new_timeline, "")
 
     return state.model_copy(
         update={
             "current_phase": PhaseStatus.GRILLING,
-            "target_competencies": pillars,
-            "active_gaps": gaps,
-            "current_pillar": first_pillar,
+            "work_timeline": new_timeline,
+            "grill_frontier": initial_frontier,
             "question_count": 0,
         }
     )
+
+
+def discovery_turn_node(state: CareerEngineState) -> CareerEngineState:
+    """Confirm coverage_through and discover new roles not on the resume.
+
+    Asks the user to confirm when they last refreshed their resume, and
+    to name any work done since then.  Newly named roles are appended
+    to work_timeline as Entry(source='discovered', status='needs_quantifying').
+
+    Uses SPEED_FAST capability (conversation-level, not deep extraction).
+
+    Args:
+        state: Current session state with pending_user_answer.
+
+    Returns:
+        Updated state with new discovered entries in work_timeline, or
+        a question asking about coverage (if no pending answer).
+    """
+    model_id = _resolve_model(Capability.SPEED_FAST)
+    if isinstance(model_id, UpgradeRequired):
+        return state
+
+    client = _get_model_client()
+    user_answer = state.pending_user_answer.strip()
+
+    if user_answer:
+        # Parse the answer to extract newly named roles/projects
+        parse_context = (
+            f"The user was asked about their recent work not yet on their resume.\n"
+            f"Their answer: {user_answer}\n\n"
+            f"Extract any newly mentioned roles, projects, or engagements.\n"
+            f"Return JSON: {{\"entries\": [{{\"title\": \"...\", \"org\": \"...\", "
+            f"\"type\": \"full_time|project|other\", \"start_date\": \"...\", "
+            f"\"end_date\": \"...\"}}]}}"
+        )
+        response_text = client.generate(
+            model_id=model_id,
+            system=DISCOVERY_SYSTEM_PROMPT,
+            user=parse_context,
+        )
+        parsed = _parse_json_response(response_text)
+        entries_raw: list[dict[str, Any]] = parsed.get("entries", [])
+
+        new_entries: list[Entry] = []
+        for item in entries_raw:
+            try:
+                exp_type = ExperienceType(item.get("type", "other"))
+            except ValueError:
+                exp_type = ExperienceType.OTHER
+
+            entry = Entry(
+                type=exp_type,
+                title=str(item.get("title", "Untitled Role")),
+                org=str(item.get("org", "")),
+                start_date=str(item.get("start_date", "")),
+                end_date=str(item.get("end_date", "")),
+                source="discovered",
+                status=EntryStatus.NEEDS_QUANTIFYING,
+            )
+            new_entries.append(entry)
+
+        # Determine coverage_through from existing timeline
+        coverage = state.coverage_through
+        if not coverage and state.work_timeline:
+            # Default to the latest end_date in the timeline
+            for e in state.work_timeline:
+                if e.end_date:
+                    coverage = e.end_date
+                    break
+
+        new_timeline = list(state.work_timeline) + new_entries
+        new_frontier = state.grill_frontier or _next_frontier(new_timeline, "")
+
+        return state.model_copy(
+            update={
+                "work_timeline": new_timeline,
+                "coverage_through": coverage,
+                "grill_frontier": new_frontier,
+                "pending_user_answer": "",
+            }
+        )
+    else:
+        # Ask about coverage
+        coverage = state.coverage_through
+        last_entries = state.work_timeline[:2]
+        context_hint = (
+            f"Last known roles: {', '.join(e.title for e in last_entries)}"
+            if last_entries
+            else "no roles known yet"
+        )
+        question_context = (
+            f"Help the user confirm when they last updated their resume and discover "
+            f"any recent roles not yet captured.  {context_hint}.  "
+            f"Coverage through: '{coverage or 'unknown'}'.  "
+            f"Ask a warm, conversational question about what they've been working on recently."
+        )
+        question_text = client.generate(
+            model_id=model_id,
+            system=DISCOVERY_SYSTEM_PROMPT,
+            user=question_context,
+        )
+        return state.model_copy(
+            update={
+                "current_question": question_text.strip(),
+            }
+        )
 
 
 def execute_grill_turn_node(
@@ -220,18 +515,19 @@ def execute_grill_turn_node(
 ) -> CareerEngineState | UpgradeRequired:
     """Ask one probing question and validate the user's answer for concrete metrics.
 
+    Entry-based grilling (v2.0.0): targets the Entry at state.grill_frontier.
+
     Uses REASONING_HIGH capability with a Chain-of-Thought system prompt:
     decompose claim → demand a metric → plausibility-check → restate as STAR.
     Tone: senior peer over coffee; NEVER says "STAR" to the user.
 
-    Two-step process per call (contract v1.1.0 — dedicated fields):
+    Two-step process per call:
     1. If `pending_user_answer` is non-empty, run METRIC_EXTRACTION_PROMPT to
-       parse it.  If metrics_found=True, create a StarStory
-       (metrics_validated=True), remove the pillar from active_gaps, and clear
-       `pending_user_answer`.  If metrics_found=False, set `current_question`
-       to a follow-up metric question and clear `pending_user_answer`.
-    2. If there is no pending answer (first question for a pillar), generate an
-       opening question with GRILL_SYSTEM_PROMPT and set `current_question`.
+       parse it.  If metrics_found=True, create a StarStory(entry_id=frontier),
+       mark the entry status=grilled, advance the frontier.  If metrics_found=False,
+       set `current_question` to a follow-up metric question.
+    2. If there is no pending answer, generate an opening question for the
+       frontier entry and set `current_question`.
 
     The user-facing question is ALWAYS surfaced via `current_question`; the
     user's answer is ALWAYS read from `pending_user_answer`.  No field is
@@ -254,17 +550,30 @@ def execute_grill_turn_node(
     model_id: str = model_id_result
     client = _get_model_client()
 
-    # The dedicated `pending_user_answer` field (contract v1.1.0) carries the
-    # user's most recent answer awaiting extraction.  When it is non-empty we
-    # run metric extraction; otherwise we generate an opening question.
-    user_answer = state.pending_user_answer.strip()
+    # Find the entry to grill
+    frontier_entry = _get_frontier_entry(state)
+    if frontier_entry is None:
+        # No more entries to grill — signal finalize path
+        return state.model_copy(
+            update={
+                "current_phase": PhaseStatus.GRILLING,
+                "grill_frontier": "",
+                "current_question": "",
+            }
+        )
 
+    frontier_id = str(frontier_entry.entry_id)
+    user_answer = state.pending_user_answer.strip()
     new_question_count = state.question_count + 1
 
     if user_answer:
         # ── Step 1: try to extract a validated metric ─────────────────────
+        entry_context = (
+            f"Entry: {frontier_entry.title} at {frontier_entry.org}\n"
+            f"Type: {frontier_entry.type.value}\n"
+        )
         extraction_context = (
-            f"Competency pillar: {state.current_pillar}\n\n"
+            f"{entry_context}\n"
             f"User's answer:\n{user_answer}"
         )
         extraction_text = client.generate(
@@ -283,7 +592,8 @@ def execute_grill_turn_node(
         if metrics_found:
             # ── Commit a validated StarStory ──────────────────────────────
             story = StarStory(
-                pillar=state.current_pillar,
+                entry_id=frontier_id,
+                pillar=extracted.get("pillar", frontier_entry.type.value),
                 situation=extracted.get("situation", ""),
                 task=extracted.get("task", ""),
                 action=extracted.get("action", ""),
@@ -291,20 +601,30 @@ def execute_grill_turn_node(
                 metrics_validated=True,
             )
             new_stories = [*state.extracted_star_stories, story]
-            # Remove this pillar from active_gaps
-            new_gaps = [g for g in state.active_gaps if g != state.current_pillar]
-            # Advance to next pillar if there are more gaps
-            next_pillar = new_gaps[0] if new_gaps else state.current_pillar
+
+            # Mark the entry as grilled in the timeline
+            grilled_entry = Entry(
+                entry_id=frontier_entry.entry_id,
+                type=frontier_entry.type,
+                title=frontier_entry.title,
+                org=frontier_entry.org,
+                start_date=frontier_entry.start_date,
+                end_date=frontier_entry.end_date,
+                source=frontier_entry.source,
+                bullets=frontier_entry.bullets,
+                status=EntryStatus.GRILLED,
+            )
+            new_timeline = _update_entry_in_timeline(state.work_timeline, grilled_entry)
+
+            # Advance frontier to next entry needing work (backward-chronological)
+            next_fid = _next_frontier(new_timeline, frontier_id)
 
             return state.model_copy(
                 update={
                     "extracted_star_stories": new_stories,
-                    "active_gaps": new_gaps,
-                    "current_pillar": next_pillar,
+                    "work_timeline": new_timeline,
+                    "grill_frontier": next_fid,
                     "question_count": new_question_count,
-                    # Answer processed: clear the pending buffer.  No new
-                    # question this turn (the next grill turn opens the next
-                    # pillar); current_question is cleared to avoid stale text.
                     "pending_user_answer": "",
                     "current_question": "",
                 }
@@ -312,7 +632,7 @@ def execute_grill_turn_node(
         else:
             # ── Metrics not found: ask a probing follow-up question ────────
             probe_context = (
-                f"Competency pillar: {state.current_pillar}\n\n"
+                f"Entry: {frontier_entry.title} at {frontier_entry.org}\n\n"
                 f"What the person said:\n{user_answer}\n\n"
                 f"The answer lacked a concrete metric.  "
                 f"Generate one sharp follow-up question to elicit a specific number."
@@ -322,21 +642,21 @@ def execute_grill_turn_node(
                 system=GRILL_SYSTEM_PROMPT,
                 user=probe_context,
             )
-            # Answer lacked a metric: surface the follow-up question via the
-            # dedicated current_question field and clear the consumed answer.
             return state.model_copy(
                 update={
                     "question_count": new_question_count,
                     "current_question": question_text.strip(),
                     "pending_user_answer": "",
+                    "grill_frontier": frontier_id,
                 }
             )
     else:
-        # ── Step 2: generate opening question for the current pillar ──────
+        # ── Step 2: generate opening question for the frontier entry ──────
         opening_context = (
-            f"You are starting to explore the '{state.current_pillar}' pillar "
-            f"with this person.  Ask them to describe a specific project or "
-            f"situation where they demonstrated impact in this area.  "
+            f"You are starting to explore the '{frontier_entry.title}' role/project "
+            f"at '{frontier_entry.org}'.  "
+            f"Ask them to describe a specific project or achievement that shows "
+            f"their impact in this role.  "
             f"Keep it open and conversational — one question only."
         )
         question_text = client.generate(
@@ -344,11 +664,12 @@ def execute_grill_turn_node(
             system=GRILL_SYSTEM_PROMPT,
             user=opening_context,
         )
-        # Surface the opening question via the dedicated current_question field.
+        # Set the frontier explicitly so it persists
         return state.model_copy(
             update={
                 "question_count": new_question_count,
                 "current_question": question_text.strip(),
+                "grill_frontier": frontier_id,
             }
         )
 
@@ -387,8 +708,11 @@ def user_checkpoint_node(state: CareerEngineState) -> CareerEngineState:
     if isinstance(model_id, UpgradeRequired):
         # Fallback: produce a minimal summary without a model call
         n = len(state.extracted_star_stories)
+        grilled_count = sum(
+            1 for e in state.work_timeline if e.status == EntryStatus.GRILLED
+        )
         summary = (
-            f"So far we've captured {n} achievement(s).  "
+            f"So far we've captured {n} achievement(s) across {grilled_count} role(s).  "
             "Does everything sound accurate before we continue?"
         )
         return state.model_copy(
@@ -410,10 +734,14 @@ def user_checkpoint_node(state: CareerEngineState) -> CareerEngineState:
     if not stories_text:
         stories_text = "(no achievements captured yet in this batch)"
 
+    pending_count = sum(
+        1 for e in state.work_timeline
+        if e.status in (EntryStatus.NEEDS_QUANTIFYING, EntryStatus.DOCUMENTED)
+    )
     summary_input = (
         f"Recent achievements (last batch):\n{stories_text}\n\n"
         f"Total achievements captured so far: {len(state.extracted_star_stories)}\n"
-        f"Remaining areas to explore: {', '.join(state.active_gaps) or 'none'}"
+        f"Remaining entries to explore: {pending_count}"
     )
 
     summary_text = client.generate(
@@ -435,12 +763,10 @@ def finalize_master_resume_node(state: CareerEngineState) -> CareerEngineState:
     """Assemble all validated StarStories into the master resume structure.
 
     Uses SPEED_FAST capability (Flash baseline).  Sends the validated stories
-    to FINALIZE_SYSTEM_PROMPT to produce a structured resume JSON.  Writes
-    (contract v1.1.0 — dedicated fields):
+    to FINALIZE_SYSTEM_PROMPT to produce a structured resume JSON.  Writes:
       - `master_resume_json`: the structured resume JSON.
-      - `professional_summary`: the prose summary (WS-B's pdf_renderer reads
-        THIS to render the resume's summary section).
-    Sets current_phase to COMPLETE.  Does NOT write checkpoint_delta_summary.
+      - `professional_summary`: the prose summary (pdf_renderer reads THIS).
+    Sets current_phase to COMPLETE.
 
     Args:
         state: State with validated extracted_star_stories.
@@ -458,6 +784,7 @@ def finalize_master_resume_node(state: CareerEngineState) -> CareerEngineState:
     stories_payload = [
         {
             "pillar": s.pillar,
+            "entry_id": s.entry_id,
             "situation": s.situation,
             "task": s.task,
             "action": s.action,
@@ -492,13 +819,10 @@ def finalize_master_resume_node(state: CareerEngineState) -> CareerEngineState:
 def tailor_node(state: CareerEngineState) -> CareerEngineState:
     """Produce a targeted resume variant from a cleaned job description.
 
-    Uses SPEED_FAST capability (Flash baseline).  Reads (contract v1.1.0 —
-    dedicated fields):
+    Uses SPEED_FAST capability (Flash baseline).  Reads:
       - the cleaned JD from `jd_text`,
       - the master resume from `master_resume_json`.
-    Writes the result to `tailored_resume_json`.  Leaves raw_history_text
-    untouched (it now means raw career history only) and does NOT write
-    checkpoint_delta_summary.
+    Writes the result to `tailored_resume_json`.
 
     Args:
         state: State with current_phase=COMPLETE, master_resume_json populated,
