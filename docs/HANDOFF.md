@@ -1,18 +1,23 @@
 # CareerEngine — Session Handoff / Resume Point
 
 ## 👉 YOU ARE HERE (updated 2026-06-29)
-**`master`, Phase 1.5 CORE just landed (contract v2.0.0) — verify clean & push; then fan out INGEST ∥ DISCOVERY.**
-Phase 0 + Phase 1 + Phase 1.3 + **Phase 1.5 CORE** are built (285 tests; `make check` green: ruff +
-mypy --strict + pytest). CORE = `1.5-CONTRACT` + `1.5-GRILL` + `1.5-METRICS`, built in one Sonnet
-worktree, Opus-reviewed PASS, merged `--no-ff`, tagged **`contract-v2.0.0`**. The contract is now
-**BREAKING v2.0.0**: `Entry` timeline replaces pillar fields; entry-based grill loop (backward-chronological,
-jumpable frontier); `discovery_completeness`/`recent_window_complete` helpers; extended metric patterns.
-- **NEXT (recommended):** **fan out the two remaining 1.5 workstreams in PARALLEL** — `1.5-INGEST`
-  (vision parser; `nodes.py`/`tools/`) ∥ `1.5-DISCOVERY` (CLI nudge/meter/return-loop; `cli/` only).
-  Disjoint files → safe to run concurrently. Each: Sonnet builder in worktree → Opus-review → merge.
-- **To BUILD:** say "build 1.5-INGEST" and/or "build 1.5-DISCOVERY" → launch the GROOMING.md prompts
-  (Sonnet, worktree) → Opus-review the diff → merge (master stays green). The 3 review open-questions
-  are RESOLVED ([REVIEW.md §5](REVIEW.md)); #2 SSRF folds into INGEST, #9 stale-docstring into DISCOVERY.
+**`master`, Phase 1.5 COMPLETE (contract v2.0.0). Two unpushed commits — review (Copilot) & push; next is Phase 2.**
+Phase 0 + Phase 1 + Phase 1.3 + **all of Phase 1.5** are built (**317 tests**; `make check` green: ruff +
+mypy --strict + pytest). CORE (`1.5-CONTRACT`+`1.5-GRILL`+`1.5-METRICS`) was Sonnet-built/Opus-reviewed/merged
+(tag **`contract-v2.0.0`**). **INGEST + DISCOVERY** were built directly by Opus this session (token-efficient
+path, user-approved) and **Sonnet-reviewed PASS** (0 must-fix; 4 nits applied). A Copilot review is planned.
+- **Two local commits not yet pushed:** `feat(1.5): INGEST …`, `feat(1.5): DISCOVERY …`. Tree is clean.
+- **NEXT (recommended):** **Phase 2** (web/infra/async) per [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md).
+  Before/alongside Phase 2, optionally close the Phase-1.5 **deferred integration items** below.
+- **Phase 1.5 deferred integration items** (engine + helpers are built and tested; CLI surfacing is partial):
+  1. Wire resume-file upload into the `grill` command (`main.py`/`cli/app.py`): call
+     `tools.resume_parser.parse_resume(bytes, mime)` and seed `start(work_timeline=…)`. The seam exists
+     (`ingest_node` consumes a pre-seeded `work_timeline`); only the CLI option + file read are missing.
+  2. Full session-resume for the return loop: `run_return_loop` + `has_resumable_work` are built/tested and
+     the launch offer is gated on `--session-id`, but WS-C `create_session` is last-write-wins, so a real
+     reload of prior state isn't wired yet (depends on the Phase-2 persistence pass).
+  3. `discovery_turn_node` exists + is tested but is **not yet an edge in the main graph** — wire it into the
+     CLI/graph flow when surfacing the "what have you done since?" discovery turn.
 - **To IDEATE:** read this file, then [ARCHITECTURE.md](ARCHITECTURE.md) + [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md); capture new ideas back into the docs (don't mutate a spec that's mid-build — version-gate instead).
 
 ---
@@ -22,27 +27,20 @@ jumpable frontier); `discovery_completeness`/`recent_window_complete` helpers; e
 > (roadmap), [AGENT_EXECUTION_PROMPT.md](AGENT_EXECUTION_PROMPT.md) (builder/reviewer prompts).
 
 ## Where we are
-- **Branch `master`, pushed to origin** at the commit that adds this file (run `git log --oneline -1`).
+- **Branch `master`** — origin is behind by 2 commits (INGEST, DISCOVERY) awaiting Copilot review + push.
 - **Contract: v2.0.0** (tags `contract-v1.0.0`, `contract-v1.1.0`, `contract-v2.0.0`). Changing
   `schema.py`/`config.py`/public interfaces requires a `CONTRACT_VERSION` bump.
-- **Phase 0:** ✅ frozen. **Phase 1 (WS-A/B/C/D + integration):** ✅ COMPLETE, all Opus-PASS & merged.
-  **Phase 1.3 (review hardening):** ✅ done (stays v1.1.x). `make check` = ruff clean, mypy --strict
-  clean, **230 tests pass (~8s)**. The CLI discovery loop runs end-to-end (turn-based HITL) and renders
-  a PDF; the upgrade-required path now reads the real `_upgrade_required` signal.
-- All Phase-0/Phase-1 worktrees pruned after merge. Phase 1.3 was done in-place on `master`.
+- **Phase 0:** ✅ frozen. **Phase 1 (WS-A/B/C/D + integration):** ✅ COMPLETE. **Phase 1.3:** ✅ done.
+  **Phase 1.5:** ✅ COMPLETE (all 5 pieces). `make check` = ruff clean, mypy --strict clean,
+  **317 tests pass (~6s)**. CLI discovery loop runs end-to-end (turn-based HITL) → PDF; entry-based grill
+  loop; vision resume parser + multimodal adapter; progressive-discovery nudge/meter/return-loop.
+- All Phase-0/Phase-1/Phase-1.5-CORE worktrees pruned. Phase 1.3 and Phase 1.5 INGEST+DISCOVERY were done
+  in-place on `master`.
 
-## NEXT: Phase 1.5 fan-out (CORE done) — then Phase 2
-**Phase 1.5** (resume-aware vision ingest + role/entry timeline + progressive discovery, contract
-**v2.0.0**) is spec'd ([ARCHITECTURE.md §12](ARCHITECTURE.md)) and groomed into sonnet-ready
-prompts — see **[GROOMING.md](GROOMING.md)** for the status table and launchable prompts.
-- **CORE = DONE** — `1.5-CONTRACT` + `1.5-GRILL` + `1.5-METRICS` merged (contract v2.0.0, 285 tests, tag
-  `contract-v2.0.0`). Remaining: `1.5-INGEST` ∥ `1.5-DISCOVERY` (both ✅ launchable in [GROOMING.md](GROOMING.md)).
-- **Build order:** CORE ✅ merged (master green). Now fan out `1.5-INGEST` (nodes.py/tools) ∥ `1.5-DISCOVERY` (cli/)
-  — disjoint files → Opus-review + merge each.
-- To launch each follow-up: run its GROOMING.md prompt in a Sonnet worktree → Opus-review → merge. They
-  touch disjoint files (INGEST=`nodes.py`/`tools`, DISCOVERY=`cli/`) so they can run concurrently.
-
-Phase 2 (after 1.5) proceeds per [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md):
+## NEXT: Phase 2 (web / infra / async)
+Phase 1.5 is done. See the deferred Phase-1.5 integration items in the "YOU ARE HERE" banner above —
+optionally close them before/alongside Phase 2. Phase 2 proceeds per
+[REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md):
 - **Phase 2:** Streamlit web workspace (reuse the `cli/` runtime seam), `infrastructure/` Terraform
   (Cloud Run, Firestore, Artifact Registry, Secret Manager + SA `secretAccessor`, Cloud Scheduler;
   envs dev/prod), `jobs/pending_action_sweep.py` (14-day), `skills/cloud_ops/SKILL.md`.
