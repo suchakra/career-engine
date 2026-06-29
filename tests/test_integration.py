@@ -51,8 +51,8 @@ from google.adk.sessions import BaseSessionService, InMemorySessionService
 
 from config import AccessMode
 from integration.model_client import GeminiModelClient, build_model_client
-from models.registry import get_registry, set_registry
-from schema import CareerEngineState, PhaseStatus, StarStory
+from models.registry import BaseModelRegistry, get_registry, set_registry
+from schema import Capability, CareerEngineState, PhaseStatus, StarStory, UpgradeRequired
 from workflows import nodes
 from workflows.discovery_graph import build_runner, discovery_router
 from workflows.nodes import set_model_client_factory
@@ -549,6 +549,130 @@ class TestTurnBasedDiscoveryLoop:
         assert state.current_phase == PhaseStatus.COMPLETE
         assert "Top perf engineer." in state.professional_summary
         assert "achievements_by_pillar" in state.master_resume_json
+
+
+# ── AC-1f: Upgrade-required signal reaches the CLI TurnResult (REVIEW.md #1/#11) ─
+
+
+class _NoReasoningRegistry(BaseModelRegistry):
+    """Registry double that refuses REASONING_HIGH (forces an UpgradeRequired)."""
+
+    def get_model_id(
+        self, capability: Capability, *, access_mode: AccessMode | None = None
+    ) -> str | UpgradeRequired:
+        """Refuse REASONING_HIGH; resolve everything else to a stub model id."""
+        if capability == Capability.REASONING_HIGH:
+            return UpgradeRequired(
+                required_capability=Capability.REASONING_HIGH,
+                node_name="DefaultModelRegistry",
+                reason="REASONING_HIGH unavailable in this test scenario.",
+            )
+        return "test-model"
+
+    def supports(self, capability: Capability, *, access_mode: AccessMode) -> bool:
+        """REASONING_HIGH unsupported; others supported."""
+        return capability != Capability.REASONING_HIGH
+
+
+class TestUpgradeRequiredReachesCli:
+    """AC-1f: A REASONING_HIGH shortfall surfaces on the CLI ``TurnResult``.
+
+    Regression guard for REVIEW.md #1: the grill shim writes the typed signal to
+    ``ctx.state["_upgrade_required"]``, and the CLI must read THAT real signal —
+    not string-match ``current_question`` (the old, effectively-dead path).
+    """
+
+    async def test_grill_shortfall_sets_upgrade_required_on_turn_result(
+        self, svc: BaseSessionService
+    ) -> None:
+        """answer() returns upgrade_required=True with the signal's user_message."""
+        from typing import cast
+
+        import cli.session as session_helpers
+        from cli.app import DiscoverySession
+
+        set_registry(_NoReasoningRegistry())
+        client = ScriptedNodeClient(default="{}")
+        # grill resolves REASONING_HIGH BEFORE any generate() call, so the
+        # scripted client is never actually exercised on the upgrade path.
+        adapter = cast(GeminiModelClient, client)
+
+        sid = _new_session_id()
+        session = DiscoverySession(
+            user_id=USER_ID,
+            access_mode=AccessMode.FREE,
+            model_client=adapter,
+            session_service=svc,
+            app_name=APP_NAME,
+            session_id=sid,
+        )
+        # Seed the session straight into GRILLING with an open gap so the very
+        # next turn routes to grill (ingest is skipped while not INGESTING).
+        await session_helpers.create_session(
+            session_service=svc,
+            app_name=APP_NAME,
+            user_id=USER_ID,
+            session_id=sid,
+            initial_state=CareerEngineState(
+                current_phase=PhaseStatus.GRILLING,
+                active_gaps=["scale"],
+                current_pillar="scale",
+            ),
+        )
+
+        result = await session.answer("We scaled the platform a lot.")
+
+        assert result.upgrade_required is True, (
+            "the real ctx.state['_upgrade_required'] signal must drive the "
+            "TurnResult flag (not a string-match on current_question)"
+        )
+        assert result.upgrade_message, (
+            "the UpgradeRequired user_message must be surfaced to the CLI"
+        )
+
+    async def test_no_upgrade_signal_means_upgrade_required_false(
+        self, svc: BaseSessionService
+    ) -> None:
+        """A normal grill turn leaves upgrade_required False (no false positives)."""
+        from typing import cast
+
+        import cli.session as session_helpers
+        from cli.app import DiscoverySession
+
+        # Default registry resolves REASONING_HIGH normally; vague answer path.
+        client = ScriptedNodeClient(
+            responses={
+                "senior engineering colleague": "What was the metric before vs after?",
+                "data extraction assistant": _vague_extraction(),
+            }
+        )
+        adapter = cast(GeminiModelClient, client)
+
+        sid = _new_session_id()
+        session = DiscoverySession(
+            user_id=USER_ID,
+            access_mode=AccessMode.FREE,
+            model_client=adapter,
+            session_service=svc,
+            app_name=APP_NAME,
+            session_id=sid,
+        )
+        await session_helpers.create_session(
+            session_service=svc,
+            app_name=APP_NAME,
+            user_id=USER_ID,
+            session_id=sid,
+            initial_state=CareerEngineState(
+                current_phase=PhaseStatus.GRILLING,
+                active_gaps=["scale"],
+                current_pillar="scale",
+            ),
+        )
+
+        result = await session.answer("We scaled the platform a lot.")
+
+        assert result.upgrade_required is False
+        assert result.upgrade_message == ""
 
 
 # ── AC-2: Model-client adapter satisfies both call shapes ─────────────────────

@@ -3,7 +3,7 @@
 > Single source of truth for **what's done vs. pending**. Update this at the end of every work
 > session / sub-agent run. Keep entries terse. Legend: ✅ done · 🟡 in progress · ⬜ not started · 🚫 blocked.
 
-Last updated: **2026-06-29** — *Phase 0 + Phase 1 built & merged (contract v1.1.0, 228 tests). Review triaged into Phase 1.3 (hardening) → Phase 1.5. See [REVIEW.md §7](REVIEW.md).*
+Last updated: **2026-06-29** — *Phase 0 + Phase 1 + Phase 1.3 built & merged (contract v1.1.x, 230 tests). Review hardening complete (optional #6 deferred to Phase 2). Next: Phase 1.5 (contract v2.0.0). See [REVIEW.md §7](REVIEW.md).*
 
 ---
 
@@ -13,7 +13,7 @@ Last updated: **2026-06-29** — *Phase 0 + Phase 1 built & merged (contract v1.
 | Planning & architecture | ✅ | ARCHITECTURE.md, REFINED_PROJECT_PLAN.md, this file, AGENT_EXECUTION_PROMPT.md |
 | Phase 0 — Contract Freeze | ✅ | Sonnet-built, Opus-reviewed (1 round: dead model IDs + Free-mode grilling fixed). Frozen, tag `contract-v1.0.0`. |
 | Phase 1 — Core loop (CLI) | ✅ | WS-A/B/C/D + integration all merged & Opus-PASS. Turn-based CLI discovery loop runs end-to-end → PDF. 228 tests. Contract v1.1.0. |
-| Phase 1.3 — Review hardening (no contract change) | ⬜ | Stabilize foundation before 1.5; stays v1.1.x. Items from [REVIEW.md §7](REVIEW.md): docs truth (#7,#8), upgrade-signal band-aid + E2E test (#1,#11), model_client errors (#4), Firestore loud-fallback (#3), optional FakeFirestore move (#6). |
+| Phase 1.3 — Review hardening (no contract change) | ✅ | Done; stays v1.1.x, 230 tests. Required items from [REVIEW.md §7](REVIEW.md) all merged: docs truth (#7,#8), upgrade-signal band-aid + E2E test (#1,#11), model_client errors (#4), Firestore loud-fallback (#3). Optional #6 (FakeFirestore move) DEFERRED to Phase 2. |
 | Phase 1.5 — Resume-aware + progressive discovery | ⬜ | Spec'd ([ARCHITECTURE.md §12](ARCHITECTURE.md)). Vision ingest, role-based `work_timeline` (replaces pillars), gap-as-roles, apply-readiness gate, backward continuation. Contract v2.0.0. Absorbs SSRF guard (#2, INGEST), upgrade-required typed event (#1b, CONTRACT), stale-docstring (#9, DISCOVERY). |
 | Phase 2 — Web / Infra / Async | ⬜ | |
 | Phase 3 — Hardening / Eval | ⬜ | |
@@ -53,11 +53,11 @@ Last updated: **2026-06-29** — *Phase 0 + Phase 1 built & merged (contract v1.
 Stabilize the foundation before launching 1.5 builders. Triage + rationale: [REVIEW.md §7](REVIEW.md).
 - ✅ **#7** docs truth: ARCHITECTURE.md freshness header corrected (was "pre-implementation"); PROGRESS banner refreshed
 - ✅ **#8** grooming sequencing contradiction resolved (CORE serial → INGEST ∥ DISCOVERY parallel)
-- ⬜ **#1 band-aid** upgrade signal: have `TurnResult` read the real `ctx.state["_upgrade_required"]` instead of string-matching `current_question` ([cli/app.py:397](../cli/app.py#L397))
-- ⬜ **#11** add CLI→workflow upgrade-required E2E assertion in `tests/test_integration.py`
-- ⬜ **#4** `integration/model_client.py` — stop swallowing errors into `""`; raise/propagate
-- ⬜ **#3** Firestore: make fallback loud (announce in-memory downgrade); env-aware hard-stop policy deferred to Phase 2 (decision: [REVIEW.md §5](REVIEW.md))
-- ⬜ **#6** *(optional)* move `FakeFirestoreClient` out of `database/firestore_session.py` into `tests/`
+- ✅ **#1 band-aid** upgrade signal: `TurnResult.from_state` now reads the real `_upgrade_required` side-channel via new `cli.session.read_raw_state` (drops the dead `current_question` string-match) and surfaces the signal's `user_message`
+- ✅ **#11** added CLI→workflow upgrade-required E2E assertions in `tests/test_integration.py` (`TestUpgradeRequiredReachesCli`: shortfall → `upgrade_required=True`; normal turn → `False`)
+- ✅ **#4** `integration/model_client.py` `generate()` no longer swallows transport errors into `""` — exceptions propagate (matches the default factory)
+- ✅ **#3** Firestore: in-memory fallback is now LOUD (stderr warning naming the failure + "nothing will be persisted"); env-aware hard-stop policy still deferred to Phase 2 (decision: [REVIEW.md §5](REVIEW.md))
+- ⬜ **#6** *(optional — DEFERRED to Phase 2 / next Firestore touch)* move `FakeFirestoreClient` + its `_Fake*` helper hierarchy out of `database/firestore_session.py` into `tests/`; low value now, per [REVIEW.md §7.3](REVIEW.md)
 
 ## Phase 1.5 — Resume-aware ingestion & progressive discovery  *(contract v2.0.0)*
 Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) · **groomed prompts + status: [GROOMING.md](GROOMING.md)**. Not started — but **grooming COMPLETE: all 5 pieces are launchable sonnet prompts** ([GROOMING.md](GROOMING.md)).
@@ -101,6 +101,7 @@ Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.
 - 2026-06-28 — **Phase 0 contract FROZEN** after Opus PASS (tag `contract-v1.0.0`). Any change to schema.py / config.py / public interfaces now requires a `CONTRACT_VERSION` bump.
 - 2026-06-29 — **Contract amended 1.0.0 → 1.1.0** (backward-compatible MINOR; user-approved). Added optional `CareerEngineState` fields: `pending_user_answer`, `current_question`, `professional_summary`, `master_resume_json`, `tailored_resume_json`, `jd_text`. Reason: WS-A had overloaded `raw_history_text` / `checkpoint_delta_summary` (colliding with WS-B's resume rendering). WS-B `pdf_renderer` now reads `professional_summary`. WS-A reworked to use dedicated fields. Existing 1.0.0 docs still load (defaults; WS-C version gate allows minor diffs).
 - 2026-06-29 — Build fix: `config.py` uses `import google.cloud.firestore as firestore` form (mypy namespace-package quirk surfaced once cloud SDKs were installed).
+- 2026-06-29 — **Phase 1.3 hardening COMPLETE** (stays contract v1.1.x; 228→230 tests). Merged #1 (upgrade-signal band-aid via `read_raw_state` + `TurnResult.upgrade_message`), #11 (CLI upgrade-required E2E test), #4 (model_client errors propagate, no `""` swallow), #3 (loud Firestore in-memory fallback). Optional #6 (FakeFirestore move) deferred to Phase 2 — moving it means relocating the whole `_Fake*` hierarchy; low value until the next Firestore touch. Root-cause fixes (#1b typed event, #2 SSRF, #9 stale docstring) remain folded into Phase 1.5 per the triage.
 
 ## Blockers / open questions
 - ⬜ Confirm exact `google-adk` 2.0 module/import names against the installed package → **RESOLVED** (see ADK deviations below).

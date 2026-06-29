@@ -1,14 +1,15 @@
 # CareerEngine — Session Handoff / Resume Point
 
 ## 👉 YOU ARE HERE (updated 2026-06-29)
-**`master` @ origin, clean — no work in flight.** Phase 0 + Phase 1 are built & merged (228 tests, tag
-`phase-1-mvp`). A code review landed (**[REVIEW.md](REVIEW.md)**) and was triaged (§7) into a new
-**Phase 1.3** hardening pass (no contract change) → then **Phase 1.5** (fully GROOMED, 5 launchable
-Sonnet prompts in [GROOMING.md](GROOMING.md)).
-- **NEXT (recommended):** do **Phase 1.3** first — small, non-contract-breaking review fixes that
-  stabilize the foundation. Checklist in [PROGRESS.md](PROGRESS.md) "Phase 1.3"; rationale in
-  [REVIEW.md §7](REVIEW.md). The 3 review open-questions are RESOLVED ([REVIEW.md §5](REVIEW.md)).
-- **To BUILD 1.5 (after 1.3):** say "build Phase 1.5" → CORE (`1.5-CONTRACT`+`1.5-GRILL` in ONE worktree) → Opus-review → merge → `1.5-INGEST` ∥ `1.5-DISCOVERY`.
+**`master`, Phase 1.3 just landed — verify clean & push.** Phase 0 + Phase 1 + **Phase 1.3** are built
+(230 tests; `make check` green: ruff + mypy --strict + pytest). Phase 1.3 was the review-hardening pass
+from **[REVIEW.md §7](REVIEW.md)** (no contract change, stays v1.1.x): #1 upgrade-signal band-aid, #11
+CLI upgrade E2E test, #4 model_client errors propagate, #3 loud Firestore fallback. Optional #6
+(FakeFirestore move) deferred to Phase 2. Next is **Phase 1.5** (fully GROOMED, 5 launchable Sonnet
+prompts in [GROOMING.md](GROOMING.md)).
+- **NEXT (recommended):** **build Phase 1.5** (contract v2.0.0). The root-cause fixes for review
+  findings #1b (typed upgrade event), #2 (SSRF), #9 (stale docstring) are folded into the 1.5 prompts.
+- **To BUILD 1.5:** say "build Phase 1.5" → CORE (`1.5-CONTRACT`+`1.5-GRILL` in ONE worktree) → Opus-review → merge → `1.5-INGEST` ∥ `1.5-DISCOVERY`. The 3 review open-questions are RESOLVED ([REVIEW.md §5](REVIEW.md)).
 - **To IDEATE:** read this file, then [ARCHITECTURE.md](ARCHITECTURE.md) + [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md); capture new ideas back into the docs (don't mutate a spec that's mid-build — version-gate instead).
 
 ---
@@ -22,9 +23,10 @@ Sonnet prompts in [GROOMING.md](GROOMING.md)).
 - **Contract: v1.1.0** (tags `contract-v1.0.0`, `contract-v1.1.0`). Changing `schema.py`/`config.py`/
   public interfaces requires a `CONTRACT_VERSION` bump.
 - **Phase 0:** ✅ frozen. **Phase 1 (WS-A/B/C/D + integration):** ✅ COMPLETE, all Opus-PASS & merged.
-  `make check` on master = ruff clean, mypy --strict clean, **228 tests pass (~5s)**. The CLI discovery
-  loop runs end-to-end (turn-based HITL) and renders a PDF.
-- All Phase-0/Phase-1 worktrees pruned after merge. No work in flight.
+  **Phase 1.3 (review hardening):** ✅ done (stays v1.1.x). `make check` = ruff clean, mypy --strict
+  clean, **230 tests pass (~8s)**. The CLI discovery loop runs end-to-end (turn-based HITL) and renders
+  a PDF; the upgrade-required path now reads the real `_upgrade_required` signal.
+- All Phase-0/Phase-1 worktrees pruned after merge. Phase 1.3 was done in-place on `master`.
 
 ## NEXT: Phase 1.5 (groomed) — then Phase 2
 **Phase 1.5** (resume-aware vision ingest + role/entry timeline + progressive discovery, contract

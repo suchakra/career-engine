@@ -74,18 +74,23 @@ class GeminiModelClient:
             user: User-turn text.
 
         Returns:
-            The model's plain-text response, or an empty string on failure.
+            The model's plain-text response (empty string only when the model
+            genuinely returns no text).
+
+        Raises:
+            Exception: transport / API errors propagate to the caller rather
+                than being swallowed into ``""`` (REVIEW.md #4).  A hard failure
+                masquerading as weak model output hides real outages and makes
+                the discovery loop undebuggable; the node/runner layer is the
+                right place to decide how to surface it.
         """
         from google.genai import types as gtypes
 
-        try:
-            response = self._client.models.generate_content(
-                model=model_id,
-                contents=user,
-                config=gtypes.GenerateContentConfig(system_instruction=system),
-            )
-        except Exception:
-            return ""
+        response = self._client.models.generate_content(
+            model=model_id,
+            contents=user,
+            config=gtypes.GenerateContentConfig(system_instruction=system),
+        )
         return response.text or ""
 
     # ── Interface 2: web_scraper.py convention ────────────────────────────────

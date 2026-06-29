@@ -86,6 +86,46 @@ async def read_state(
     return CareerEngineState.model_validate(session.state)
 
 
+async def read_raw_state(
+    *,
+    session_service: BaseSessionService,
+    app_name: str,
+    user_id: str,
+    session_id: str,
+) -> dict[str, Any]:
+    """Read the raw flat session-state dict, including non-contract keys.
+
+    Unlike :func:`read_state` — which validates into ``CareerEngineState`` and
+    therefore drops any key that is not a contract field — this returns the
+    unfiltered state dict.  The CLI uses it to inspect side-channel signals the
+    workflow shims write outside the schema, notably ``_upgrade_required``
+    (a serialized :class:`~schema.UpgradeRequired`).  This is the v1.1.x
+    band-aid for REVIEW.md #1; the v2.0.0 contract promotes it to a typed field.
+
+    Args:
+        session_service: The ADK session service.
+        app_name: ADK application name.
+        user_id: The authenticated user's stable platform ID.
+        session_id: The session to read.
+
+    Returns:
+        A shallow copy of the session's flat state dict.
+
+    Raises:
+        ValueError: if the session does not exist.
+    """
+    session = await session_service.get_session(
+        app_name=app_name,
+        user_id=user_id,
+        session_id=session_id,
+    )
+    if session is None:
+        raise ValueError(
+            f"Session {session_id!r} not found for user {user_id!r} / app {app_name!r}."
+        )
+    return dict(session.state)
+
+
 async def patch_state(
     *,
     session_service: BaseSessionService,

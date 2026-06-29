@@ -54,7 +54,7 @@ from google.adk.sessions import BaseSessionService, InMemorySessionService
 import cli.session as session_helpers
 from config import AccessMode, get_settings
 from integration.model_client import GeminiModelClient, build_model_client
-from schema import CareerEngineState, PhaseStatus
+from schema import CareerEngineState, PhaseStatus, UpgradeRequired
 from tools.pdf_renderer import render_pdf
 from workflows.discovery_graph import build_runner
 from workflows.nodes import set_model_client_factory
@@ -80,9 +80,19 @@ def build_session_service(*, use_firestore: bool = False) -> BaseSessionService:
             from database.firestore_session import FirestoreSessionService
 
             return FirestoreSessionService()
-        except Exception:
-            # GCP not available — fall through to in-memory
-            pass
+        except Exception as exc:
+            # GCP not available — fall through to in-memory, but make the
+            # downgrade LOUD (REVIEW.md #3): a silent fallback violates the
+            # user's persistence expectation.  The environment-aware hard-stop
+            # policy (prod / explicit use_firestore must fail, not downgrade)
+            # lands in Phase 2 — see REVIEW.md §5 OQ1.
+            print(
+                "⚠  Firestore was requested but is unavailable "
+                f"({type(exc).__name__}: {exc}).\n"
+                "⚠  Falling back to IN-MEMORY session storage — "
+                "nothing will be persisted across runs.",
+                file=sys.stderr,
+            )
     return cast("BaseSessionService", InMemorySessionService())  # type: ignore[no-untyped-call]
 
 
@@ -344,14 +354,20 @@ class DiscoverySession:
             pass
 
     async def _read_turn_result(self) -> TurnResult:
-        """Read state after a grill turn and build a TurnResult."""
-        state = await session_helpers.read_state(
+        """Read state after a grill turn and build a TurnResult.
+
+        Reads the RAW session state (not the schema-validated view) so the real
+        ``_upgrade_required`` side-channel signal written by the grill shim is
+        visible — see ``TurnResult.from_state`` (REVIEW.md #1).
+        """
+        raw = await session_helpers.read_raw_state(
             session_service=self._svc,
             app_name=self._app_name,
             user_id=self._user_id,
             session_id=self._session_id,
         )
-        return TurnResult.from_state(state)
+        state = CareerEngineState.model_validate(raw)
+        return TurnResult.from_state(state, upgrade_signal=raw.get("_upgrade_required"))
 
 
 class TurnResult:
@@ -363,6 +379,8 @@ class TurnResult:
         checkpoint_summary: Non-empty when a 5-turn checkpoint was reached.
         is_complete: True when the session has reached the COMPLETE phase.
         upgrade_required: True if the REASONING_HIGH capability is unavailable.
+        upgrade_message: The ready-to-display message from the UpgradeRequired
+            signal (empty unless ``upgrade_required`` is True).
         stories_count: Number of validated StarStories so far.
     """
 
@@ -375,6 +393,7 @@ class TurnResult:
         is_complete: bool,
         upgrade_required: bool,
         stories_count: int,
+        upgrade_message: str = "",
     ) -> None:
         """Initialise a TurnResult."""
         self.phase = phase
@@ -382,27 +401,51 @@ class TurnResult:
         self.checkpoint_summary = checkpoint_summary
         self.is_complete = is_complete
         self.upgrade_required = upgrade_required
+        self.upgrade_message = upgrade_message
         self.stories_count = stories_count
 
     @classmethod
-    def from_state(cls, state: CareerEngineState) -> TurnResult:
+    def from_state(
+        cls,
+        state: CareerEngineState,
+        *,
+        upgrade_signal: str | None = None,
+    ) -> TurnResult:
         """Build a TurnResult from a CareerEngineState.
+
+        The upgrade-required outcome is read from the REAL side-channel the
+        grill shim writes — ``ctx.state["_upgrade_required"]`` (a serialized
+        ``UpgradeRequired``) — passed in as ``upgrade_signal``.  This replaces
+        the old, effectively-dead heuristic that string-matched the literal
+        token in ``current_question`` (REVIEW.md #1).  The v2.0.0 contract
+        promotes this to a typed state field; this is the v1.1.x band-aid.
 
         Args:
             state: The CareerEngineState after the most recent turn.
+            upgrade_signal: The raw ``_upgrade_required`` JSON value from the
+                unvalidated session state, or ``None`` if absent.
 
         Returns:
             A populated TurnResult.
         """
-        upgrade_required = bool(state.current_question) and "_upgrade_required" in (
-            state.current_question or ""
-        )
+        upgrade_required = bool(upgrade_signal)
+        upgrade_message = ""
+        if upgrade_signal:
+            try:
+                upgrade_message = UpgradeRequired.model_validate_json(
+                    upgrade_signal
+                ).user_message
+            except ValueError:
+                # Malformed signal — still surface the upgrade path, just with
+                # no specific message rather than crashing the turn read.
+                upgrade_message = ""
         return cls(
             phase=state.current_phase,
             next_question=state.current_question,
             checkpoint_summary=state.checkpoint_delta_summary,
             is_complete=(state.current_phase == PhaseStatus.COMPLETE),
             upgrade_required=upgrade_required,
+            upgrade_message=upgrade_message,
             stories_count=len(
                 [s for s in state.extracted_star_stories if s.metrics_validated]
             ),
@@ -512,10 +555,11 @@ def run_interactive_session(
         question = result.next_question
 
         if result.upgrade_required:
-            print(
-                "\n[Upgrade required]: This task requires a paid Gemini model. "
+            message = result.upgrade_message or (
+                "This task requires a paid Gemini model. "
                 "Set DEV_GEMINI_KEY or provide your BYOK key to continue."
             )
+            print(f"\n[Upgrade required]: {message}")
             return
 
         if result.is_complete:
