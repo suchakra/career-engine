@@ -3,6 +3,10 @@
 > The same rules live in [`CLAUDE.md`](../CLAUDE.md) (Claude Code) and
 > [`AGENTS.md`](../AGENTS.md) (Antigravity / generic agents).
 
+## Start every fresh session here
+**Before doing anything else, read `docs/HANDOFF.md`** to orient yourself — it's the resume point.
+Then skim the other `docs/` files as needed (see Project orientation below).
+
 ## Docs-first rule (most important)
 **Durable state lives in `docs/`, not in any assistant's chat memory.** Whenever you make a
 decision, finish a chunk of work, change direction, or learn something worth keeping:
