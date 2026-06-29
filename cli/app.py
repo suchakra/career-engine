@@ -18,10 +18,11 @@ Multi-turn Runner interaction
 The ADK Workflow graph (discovery_graph.py) always runs from START on every
 ``runner.run_async`` call.  For CLI multi-turn sessions this means:
 
-  1. Ingest re-runs each turn.  This is benign: the ingest node is
-     idempotent-like — it re-reads raw_history_text and re-seeds pillars.
-     The active_gaps and extracted_star_stories from prior turns ARE in the
-     flat session state, so subsequent nodes see the accumulated progress.
+  1. Ingest only runs on the first (INGESTING) turn — the graph-entry shim
+     gates it so it seeds the ``work_timeline`` once.  Later turns pass the
+     seeded state straight through.  The ``work_timeline`` and
+     ``extracted_star_stories`` from prior turns ARE in the flat session
+     state, so subsequent nodes see the accumulated progress.
 
   2. The CLI sets ``pending_user_answer`` in the session state BEFORE calling
      ``run_async``.  The grill node reads that field; if populated it runs
@@ -46,15 +47,26 @@ from __future__ import annotations
 import pathlib
 import sys
 import uuid
+from collections.abc import Callable
+from datetime import date
 from typing import cast
 
 from google.adk.runners import Runner
 from google.adk.sessions import BaseSessionService, InMemorySessionService
 
+import cli.prefs as prefs
 import cli.session as session_helpers
 from config import AccessMode, get_settings
 from integration.model_client import GeminiModelClient, build_model_client
-from schema import CareerEngineState, PhaseStatus, UpgradeRequired
+from schema import (
+    CareerEngineState,
+    Entry,
+    EntryStatus,
+    PhaseStatus,
+    UpgradeRequired,
+    discovery_completeness,
+    recent_window_complete,
+)
 from tools.pdf_renderer import render_pdf
 from workflows.discovery_graph import build_runner
 from workflows.nodes import set_model_client_factory
@@ -217,17 +229,31 @@ class DiscoverySession:
         """The Gemini model client used for inference."""
         return self._client
 
-    async def start(self, raw_history_text: str) -> str:
+    async def start(
+        self,
+        raw_history_text: str,
+        *,
+        reference_date: str = "",
+        work_timeline: list[Entry] | None = None,
+    ) -> str:
         """Create the ADK session and run the first turn (ingest + opening question).
 
         Args:
             raw_history_text: The user's raw career history (multi-decade text).
+            reference_date: ISO ``YYYY-MM-DD`` injected clock for the session
+                (stamped by the CLI boundary; nodes never call ``datetime.now``).
+            work_timeline: Optional pre-parsed entries (vision ingest) to seed
+                instead of parsing ``raw_history_text``.
 
         Returns:
             The opening question from the grill node, or an empty string if the
             workflow terminated immediately (e.g. no active gaps after ingest).
         """
-        initial_state = CareerEngineState(raw_history_text=raw_history_text)
+        initial_state = CareerEngineState(
+            raw_history_text=raw_history_text,
+            reference_date=reference_date,
+            work_timeline=list(work_timeline) if work_timeline else [],
+        )
         await session_helpers.create_session(
             session_service=self._svc,
             app_name=self._app_name,
@@ -461,6 +487,142 @@ class TurnResult:
         )
 
 
+# ── Progressive discovery: meter, nudge, return loop (Phase 1.5) ──────────────
+#
+# Core principle: discovery is a NUDGE, never a gate.  Applying / tailoring is
+# NEVER blocked by an incomplete window — these helpers only inform and offer.
+
+_NUDGE_MESSAGE = (
+    "Tailored resumes come out noticeably stronger once the rest of your recent "
+    "history is filled in. You can keep going now or pick it up later — "
+    "applying is never blocked."
+)
+
+
+def _today_iso() -> str:
+    """Return today's date as ISO ``YYYY-MM-DD``.
+
+    This is the ONLY place a wall clock is read; logic everywhere else takes an
+    injected ``today`` / uses ``state.reference_date`` so behavior is testable.
+    """
+    return date.today().isoformat()
+
+
+def _year_of(date_str: str) -> int | None:
+    """Extract the year from a YYYY-MM / YYYY string; None on failure."""
+    if not date_str:
+        return None
+    try:
+        return int(date_str.split("-")[0])
+    except (ValueError, IndexError):
+        return None
+
+
+def _portfolio_depth_years(state: CareerEngineState) -> int:
+    """Span in years from the earliest entry start to ``reference_date``."""
+    ref = _year_of(state.reference_date)
+    starts = [y for y in (_year_of(e.start_date) for e in state.work_timeline) if y is not None]
+    if ref is None or not starts:
+        return 0
+    return max(0, ref - min(starts))
+
+
+def render_progress_meter(state: CareerEngineState) -> str:
+    """Render the discovery progress meter from the derived schema helpers.
+
+    Pure read of ``discovery_completeness`` (over the trailing-5-year window,
+    using ``state.reference_date``) plus the portfolio depth.  No clock access.
+    """
+    pct = round(discovery_completeness(state) * 100)
+    depth = _portfolio_depth_years(state)
+    return f"Recent 5-yr window: {pct}% documented · portfolio depth: {depth} yrs"
+
+
+def should_show_nudge(
+    state: CareerEngineState, *, today: str, prefs_path: pathlib.Path | None = None
+) -> bool:
+    """Return True if the discovery nudge should be shown (never a gate).
+
+    Shown when the recent window is incomplete AND the user has not snoozed it.
+    """
+    if recent_window_complete(state):
+        return False
+    return not prefs.is_snoozed(today, path=prefs_path)
+
+
+def emit_nudge_if_needed(
+    state: CareerEngineState,
+    *,
+    today: str,
+    prefs_path: pathlib.Path | None = None,
+    out: Callable[[str], None] = print,
+) -> bool:
+    """Print the consent-respecting nudge if warranted.  Returns whether shown.
+
+    The caller's action ALWAYS proceeds regardless of the return value — this
+    only emits a message.
+    """
+    if not should_show_nudge(state, today=today, prefs_path=prefs_path):
+        return False
+    out(f"\n💡 {_NUDGE_MESSAGE}")
+    return True
+
+
+def resumable_entries(state: CareerEngineState) -> list[Entry]:
+    """Pending entries older than the current frontier (return-loop candidates).
+
+    These are entries still needing work (``needs_quantifying`` / ``documented``)
+    that sit behind the grill frontier — i.e. the backward continuation a return
+    session would pick up.  With no frontier set, all pending entries qualify.
+    """
+    pending = [
+        e
+        for e in state.work_timeline
+        if e.status in (EntryStatus.NEEDS_QUANTIFYING, EntryStatus.DOCUMENTED)
+    ]
+    if not state.grill_frontier:
+        return pending
+    frontier = next(
+        (e for e in state.work_timeline if str(e.entry_id) == state.grill_frontier),
+        None,
+    )
+    if frontier is None:
+        return pending
+    fy = _year_of(frontier.start_date)
+    out: list[Entry] = []
+    for e in pending:
+        if str(e.entry_id) == state.grill_frontier:
+            continue
+        ey = _year_of(e.start_date)
+        if fy is None or ey is None or ey <= fy:
+            out.append(e)
+    return out
+
+
+def has_resumable_work(state: CareerEngineState) -> bool:
+    """Return True if there is older pending work to continue (return loop)."""
+    return bool(resumable_entries(state))
+
+
+async def run_return_loop(session: DiscoverySession, *, accept: bool) -> bool:
+    """Offer to continue grilling older roles backward from the frontier.
+
+    Reuses the entry-based grill loop (which already advances backward via
+    ``grill_frontier``) by driving one turn through the Runner.  Does nothing if
+    there is no resumable work or the user declines.  Returns whether a grill
+    turn was driven.
+
+    Args:
+        session: The active discovery session.
+        accept: The user's decision (injected; the CLI reads it from a prompt).
+    """
+    state = await session.current_state()
+    if not has_resumable_work(state) or not accept:
+        return False
+    await session.advance()
+    return True
+
+
 # ── Interactive CLI loop ──────────────────────────────────────────────────────
 
 
@@ -501,8 +663,25 @@ def run_interactive_session(
     print(f"\nCareerEngine — discovery session ({access_mode.value} mode)")
     print("=" * 60)
 
-    # ── Start: ingest + opening question ─────────────────────────────────────
-    question = asyncio.run(session.start(raw_history))
+    # ── Start: ingest + opening question (stamp the injected clock here) ─────
+    today = _today_iso()
+    question = asyncio.run(session.start(raw_history, reference_date=today))
+
+    # ── Progressive discovery: progress meter + consent-respecting nudge ─────
+    launch_state = asyncio.run(session.current_state())
+    print(render_progress_meter(launch_state))
+    emit_nudge_if_needed(launch_state, today=today)
+
+    # ── Return loop (resume intent only): offer to continue older roles ──────
+    # Only when the user explicitly asked to resume a session (--session-id) and
+    # there is older pending work behind the frontier.  Applying is never gated;
+    # declining proceeds straight into the normal loop.
+    if session_id is not None and has_resumable_work(launch_state):
+        choice = input(
+            "\nPick up where you left off on older roles? [Y/n]: "
+        ).strip().lower()
+        if asyncio.run(run_return_loop(session, accept=choice in ("", "y", "yes"))):
+            question = asyncio.run(session.current_state()).current_question
 
     while True:
         if not question:
@@ -518,7 +697,7 @@ def run_interactive_session(
             question = result.next_question
             _cur = asyncio.run(session.current_state())
             _pending = any(
-                e.status in ("needs_quantifying", "documented")
+                e.status in (EntryStatus.NEEDS_QUANTIFYING, EntryStatus.DOCUMENTED)
                 for e in _cur.work_timeline
             )
             if not question and not _pending:
@@ -614,6 +793,21 @@ def run_tailor_command(
         jd_text = scrape_job_description(jd_source, client=client)
     else:
         jd_text = jd_source
+
+    # Consent-respecting nudge — tailoring is NEVER blocked by an incomplete
+    # window; we only inform.  The tailor proceeds regardless of the nudge.
+    try:
+        pre_state = asyncio.run(
+            session_helpers.read_state(
+                session_service=svc,
+                app_name="career_engine_discovery",
+                user_id=user_id,
+                session_id=session_id,
+            )
+        )
+        emit_nudge_if_needed(pre_state, today=_today_iso())
+    except ValueError:
+        pass  # no prior session state to evaluate; proceed to tailor
 
     # Patch jd_text into the session state and run the tailor node
     async def _tailor() -> CareerEngineState:
