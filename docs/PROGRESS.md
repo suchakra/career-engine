@@ -12,7 +12,7 @@ Last updated: **2026-06-28** — *Phase 0 contract FROZEN (Opus PASS). Ready for
 |-------|-------|-------|
 | Planning & architecture | ✅ | ARCHITECTURE.md, REFINED_PROJECT_PLAN.md, this file, AGENT_EXECUTION_PROMPT.md |
 | Phase 0 — Contract Freeze | ✅ | Sonnet-built, Opus-reviewed (1 round: dead model IDs + Free-mode grilling fixed). Frozen, tag `contract-v1.0.0`. |
-| Phase 1 — Core loop (CLI) | 🟡 | WS-A/B/C/D all merged & Opus-PASS (201 tests). Contract amended to v1.1.0. Remaining: main.py integration wiring. |
+| Phase 1 — Core loop (CLI) | ✅ | WS-A/B/C/D + integration all merged & Opus-PASS. Turn-based CLI discovery loop runs end-to-end → PDF. 228 tests. Contract v1.1.0. |
 | Phase 2 — Web / Infra / Async | ⬜ | |
 | Phase 3 — Hardening / Eval | ⬜ | |
 
@@ -38,8 +38,8 @@ Last updated: **2026-06-28** — *Phase 0 contract FROZEN (Opus PASS). Ready for
 - ✅ WS-B `tools/pdf_renderer.py` + `templates/classic_resume.html` (WeasyPrint; deviation noted)
 - ✅ WS-* `models/registry.py` — resolver + Free/BYOK routing (Phase 0; capability detection deferred)
 - ✅ WS-D `auth/cli_auth.py` + `auth/key_vault.py` (local + Secret Manager) + `firebase_auth.py`
-- ⬜ `main.py` — CLI entrypoint wiring Runner (integration step)
-- ⬜ Exit demo: vague answer → quantified STAR → checkpoint@5 → PDF
+- ✅ `main.py` + `cli/` + `integration/model_client.py` — CLI entrypoint wiring the ADK Runner (turn-based HITL loop)
+- ✅ Exit demo: vague answer → quantified STAR → checkpoint@5 → PDF (e2e test via real Runner, asserts %PDF)
 
 ### Integration notes carried from WS reviews (for the integration step)
 - WS-C `create_session` is last-write-wins (differs from ADK `InMemorySessionService` which raises on duplicate); ADK event log not durably persisted (state is). Confirm against Runner usage.

@@ -8,40 +8,13 @@
 - **Branch `master`, pushed to origin** at the commit that adds this file (run `git log --oneline -1`).
 - **Contract: v1.1.0** (tags `contract-v1.0.0`, `contract-v1.1.0`). Changing `schema.py`/`config.py`/
   public interfaces requires a `CONTRACT_VERSION` bump.
-- **Phase 0:** ✅ frozen. **Phase 1 builders WS-A/B/C/D:** ✅ all merged, Opus-PASS. `make check` on
-  master = ruff clean, mypy --strict clean, **201 tests pass**.
-- Worktrees for WS-A/B/C/D were pruned after merge.
+- **Phase 0:** ✅ frozen. **Phase 1 (WS-A/B/C/D + integration):** ✅ COMPLETE, all Opus-PASS & merged.
+  `make check` on master = ruff clean, mypy --strict clean, **228 tests pass (~5s)**. The CLI discovery
+  loop runs end-to-end (turn-based HITL) and renders a PDF.
+- All Phase-0/Phase-1 worktrees pruned after merge. No work in flight.
 
-## IN-FLIGHT: Phase-1 integration (INCOMPLETE — being fixed)
-- A Sonnet builder is building the CLI integration: `main.py` (thin entrypoint) + `cli/` runtime +
-  `integration/model_client.py` + `tests/test_integration.py`, plus a minimal change to
-  `workflows/discovery_graph.py`.
-- Background agent id: **`ad00b283a660575a5`**. Worktree: **`.claude/worktrees/agent-ad00b283a660575a5`**,
-  branch `worktree-agent-ad00b283a660575a5`. **WIP is COMMITTED at `1a2f77d`** (snapshot — reset-safe).
-- **Known-broken, fix in progress:** the e2e test `TestEndToEndRunnerFlow::test_vague_answer_rejected_
-  no_story_committed` HANGS (infinite loop): the discovery loop is turn-based/HITL but was driven via a
-  single `run_async` that loops with no pause for input. Fix = drive ONE turn per invocation, human input
-  in the CLI layer (never inside run_async); every test must finish fast. Also 28 ruff + 6 mypy errors to clear.
-
-### Resume the integration (do this first)
-1. `git -C .claude/worktrees/agent-ad00b283a660575a5 status` and `... diff master --stat` to see its work.
-2. **If the worktree has complete work** (`main.py`, `cli/`, `tests/test_integration.py`):
-   - `cd` into it, run `make check` (ruff + mypy --strict + pytest). Expect green.
-   - **Opus review gate** (verify, don't trust): the e2e test drives the real ADK Runner (not a bypass);
-     the model-client adapter satisfies BOTH interfaces — `workflows.nodes` `.generate(model_id,system,user)`
-     (injected via `set_model_client_factory`) AND `tools.web_scraper` `.generate_content_text(model=,system=,prompt=)`;
-     access-mode key wiring (FREE→settings key, BYOK→`SecretManagerKeyVault.fetch_key`); `render_pdf`
-     yields a non-empty `%PDF`; NO frozen-contract files (schema.py/config.py) edited; no hardcoded `gemini-`.
-   - On PASS: commit on its branch (co-author trailer below), `git merge --no-ff` into master, run
-     `make check` on master, then `git push origin master --follow-tags`. Update PROGRESS.md (tick
-     `main.py` + the Phase-1 exit demo; set Phase 1 milestone ✅).
-   - On issues: resume the same builder via its agent id with specific findings, or relaunch (prompt below).
-3. **If the worktree is empty/partial/broken:** relaunch the integration builder. The full prompt is in
-   the conversation that created agent `ad00b283a660575a5`; the scope is summarized in PROGRESS.md
-   "Integration notes" and AGENT_EXECUTION_PROMPT.md "Integration agent" block.
-
-## After integration merges → Phase 1 complete
-Then proceed per [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md):
+## NEXT: Phase 2 (start here)
+Proceed per [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md):
 - **Phase 2:** Streamlit web workspace (reuse the `cli/` runtime seam), `infrastructure/` Terraform
   (Cloud Run, Firestore, Artifact Registry, Secret Manager + SA `secretAccessor`, Cloud Scheduler;
   envs dev/prod), `jobs/pending_action_sweep.py` (14-day), `skills/cloud_ops/SKILL.md`.
