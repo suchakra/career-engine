@@ -19,7 +19,7 @@
 | D5 | **Privacy-first, not zero-knowledge** | Per-user isolation + key encrypted in Secret Manager. ZK rejected because it breaks the server-side 14-day sweep. |
 | D6 | **CLI-first, then Streamlit** | Validate the ADK loop in the terminal; Streamlit is a thin, swappable frontend-for-agents. |
 | D7 | **Strict Pydantic + JSON contracts, versioned** | All boundaries typed; `CONTRACT_VERSION` stamped on every doc/message. |
-| D8 (2026-06-29) | **Resume-aware, role-based, progressive discovery** (Phase 1.5, contract v1.2.0) | Vision ingest of existing resumes; `work_timeline` of roles **replaces** pillar `active_gaps`; the gap = more roles; mandatory last-5-years apply-readiness gate + backward-chronological return loop. See [ARCHITECTURE.md §12](ARCHITECTURE.md). |
+| D8 (2026-06-29) | **Resume-aware, role-based, progressive discovery** (Phase 1.5, contract v2.0.0) | Vision ingest of existing resumes; `work_timeline` of entries **replaces** pillar `active_gaps`; the gap = more entries; nudge-based (NOT gated) readiness over a trailing-5-yr window + backward-chronological return loop. See [ARCHITECTURE.md §12](ARCHITECTURE.md). |
 
 ---
 
@@ -49,14 +49,14 @@ Nothing fans out until these are merged and frozen. They are the interfaces ever
 **Exit criteria:** a terminal session grills a vague answer into a quantified STAR story, checkpoints
 at turn 5, and renders a PDF. ✅ **DONE** (tag `phase-1-mvp`, 228 tests).
 
-### Phase 1.5 — Resume-aware ingestion & progressive discovery  *(contract v1.2.0)*
-Full spec in [ARCHITECTURE.md §12](ARCHITECTURE.md). Backward-compatible contract amendment; reworks
-WS-A's grill loop. Scope:
+### Phase 1.5 — Resume-aware ingestion & progressive discovery  *(contract v2.0.0)*
+Full spec in [ARCHITECTURE.md §12](ARCHITECTURE.md). **Breaking** contract amendment (v2.0.0 — removes
+pillar fields); reworks WS-A's grill loop. (No migration burden — pre-release, no production data.) Scope:
 - **Serves 0–5yr / early-career too:** `work_timeline` holds **experience entries** (jobs, internships,
   projects, research, leadership, …), not just jobs. Discovery is a **nudge, not a gate** over a
   trailing-5-year **window** (not a minimum) — applying is never blocked and nobody is gated on "having 5
   years" (see [ARCHITECTURE.md §12.4/§12.6](ARCHITECTURE.md)).
-- **Contract v1.2.0:** add `work_timeline: list[Entry]`, `coverage_through`, `reference_date` (injected
+- **Contract v2.0.0:** add `work_timeline: list[Entry]`, `coverage_through`, `reference_date` (injected
   clock); add `role_id` to `StarStory`; **replace** pillar fields (`target_competencies`/`active_gaps`/
   `current_pillar`) with role-based equivalents + `grill_frontier`. `is_apply_ready` + progress meter derived.
 - **Vision ingest** — new `tools/resume_parser.py`: file/photo → multimodal Flash → `work_timeline`.

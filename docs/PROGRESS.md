@@ -13,7 +13,7 @@ Last updated: **2026-06-28** — *Phase 0 contract FROZEN (Opus PASS). Ready for
 | Planning & architecture | ✅ | ARCHITECTURE.md, REFINED_PROJECT_PLAN.md, this file, AGENT_EXECUTION_PROMPT.md |
 | Phase 0 — Contract Freeze | ✅ | Sonnet-built, Opus-reviewed (1 round: dead model IDs + Free-mode grilling fixed). Frozen, tag `contract-v1.0.0`. |
 | Phase 1 — Core loop (CLI) | ✅ | WS-A/B/C/D + integration all merged & Opus-PASS. Turn-based CLI discovery loop runs end-to-end → PDF. 228 tests. Contract v1.1.0. |
-| Phase 1.5 — Resume-aware + progressive discovery | ⬜ | Spec'd ([ARCHITECTURE.md §12](ARCHITECTURE.md)). Vision ingest, role-based `work_timeline` (replaces pillars), gap-as-roles, apply-readiness gate, backward continuation. Contract v1.2.0. |
+| Phase 1.5 — Resume-aware + progressive discovery | ⬜ | Spec'd ([ARCHITECTURE.md §12](ARCHITECTURE.md)). Vision ingest, role-based `work_timeline` (replaces pillars), gap-as-roles, apply-readiness gate, backward continuation. Contract v2.0.0. |
 | Phase 2 — Web / Infra / Async | ⬜ | |
 | Phase 3 — Hardening / Eval | ⬜ | |
 
@@ -48,9 +48,9 @@ Last updated: **2026-06-28** — *Phase 0 contract FROZEN (Opus PASS). Ready for
 - WS-A grill uses `pending_user_answer`/`current_question`; CLI loop must set `pending_user_answer` and `checkpoint_verified`, and read `current_question`/`checkpoint_delta_summary`.
 - No live `runner.run_async` end-to-end smoke yet — owned by integration / WS-F.
 
-## Phase 1.5 — Resume-aware ingestion & progressive discovery  *(contract v1.2.0)*
-Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md). Not started.
-- ⬜ Contract v1.2.0: `work_timeline: list[Role]`, `coverage_through`, `reference_date` (injected clock); `role_id` on `StarStory`; replace pillar fields with role-based + `grill_frontier`
+## Phase 1.5 — Resume-aware ingestion & progressive discovery  *(contract v2.0.0)*
+Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) · **groomed prompts + status: [GROOMING.md](GROOMING.md)**. Not started (CONTRACT + INGEST groomed & launchable).
+- ⬜ Contract v2.0.0: `work_timeline: list[Role]`, `coverage_through`, `reference_date` (injected clock); `role_id` on `StarStory`; replace pillar fields with role-based + `grill_frontier`
 - ⬜ `tools/resume_parser.py` — vision ingest (file/photo → multimodal Flash → timeline); multimodal entry point on model-client adapter
 - ⬜ Rework `ingest_node` + grill loop to role-based; add discovery turn (confirm coverage, append missing roles); skip already-quantified bullets
 - ⬜ Progressive discovery: `discovery_completeness` signal over the trailing-5-yr **window** (a measure, NOT a gate/minimum), `grill_frontier` backward continuation (jumpable; soft horizon), derived progress meter

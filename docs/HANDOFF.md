@@ -13,8 +13,15 @@
   loop runs end-to-end (turn-based HITL) and renders a PDF.
 - All Phase-0/Phase-1 worktrees pruned after merge. No work in flight.
 
-## NEXT: Phase 2 (start here)
-Proceed per [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md):
+## NEXT: Phase 1.5 (groomed) — then Phase 2
+**Phase 1.5** (resume-aware vision ingest + role/entry timeline + progressive discovery, contract
+**v2.0.0**) is spec'd ([ARCHITECTURE.md §12](ARCHITECTURE.md)) and partly groomed into sonnet-ready
+prompts — see **[GROOMING.md](GROOMING.md)** for the grooming status table and launchable prompts.
+- **Ready to launch now:** `1.5-CONTRACT` (blocking, solo, freeze first), then `1.5-INGEST`.
+- **Still to groom:** `1.5-GRILL` (draft), `1.5-DISCOVERY` (todo), `1.5-METRICS` (draft).
+To build: groom GRILL → launch CONTRACT (Sonnet, freeze via Opus) → fan out INGEST ∥ GRILL → DISCOVERY.
+
+Phase 2 (after 1.5) proceeds per [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md):
 - **Phase 2:** Streamlit web workspace (reuse the `cli/` runtime seam), `infrastructure/` Terraform
   (Cloud Run, Firestore, Artifact Registry, Secret Manager + SA `secretAccessor`, Cloud Scheduler;
   envs dev/prod), `jobs/pending_action_sweep.py` (14-day), `skills/cloud_ops/SKILL.md`.

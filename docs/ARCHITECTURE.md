@@ -292,10 +292,10 @@ is about (2).
 
 ---
 
-## 12. Resume-aware ingestion & progressive discovery (Phase 1.5 / contract v1.2.0)
+## 12. Resume-aware ingestion & progressive discovery (Phase 1.5 / contract v2.0.0)
 
 > Status: **spec, not yet built.** Lands as Phase 1.5; requires a backward-compatible contract bump to
-> v1.2.0. Replaces the pillar-based `active_gaps` with a role-based `work_timeline`.
+> v2.0.0. Replaces the pillar-based `active_gaps` with a role-based `work_timeline`.
 
 ### 12.1 Premise
 Most users start from an **existing (often stale) resume**, not a blank page. The platform should (a)
@@ -353,7 +353,7 @@ pillar). Flow:
 - **Progress meter:** "last 5 years: 80% covered" / "portfolio depth: 12 yrs" — derived from the
   timeline; the dopamine that drives the return loop.
 
-### 12.5 Contract delta (v1.2.0 — additive, replaces pillar machinery)
+### 12.5 Contract delta (v2.0.0 — additive, replaces pillar machinery)
 `CareerEngineState` (sketch):
 - **add** `work_timeline: list[Entry]` where `Entry = {entry_id, type, title, org, start_date,
   end_date|"present", source: resume|discovered, bullets: list[str],
@@ -366,7 +366,7 @@ pillar). Flow:
 - **replace** pillar fields (`target_competencies`, `active_gaps`, `current_pillar`) with role-based
   equivalents; `grill_frontier`/`current_role_id` replaces `current_pillar`.
 - `is_apply_ready` and the progress meter are **derived** (pure functions), not stored.
-This reworks WS-A's grill loop + router and the ingest prompt; it's the deliberate v1.2.0 amendment.
+This reworks WS-A's grill loop + router and the ingest prompt; it's the deliberate v2.0.0 amendment.
 
 ### 12.6 Early-career (0–5 years) — no "must have 5 years" trap
 Early-career users (0–5 years, including zero jobs) are first-class. Two things make this work, and
@@ -396,7 +396,7 @@ What that looks like in practice:
 
 ---
 
-## 13. Future / post-v1 backlog (NOT in scope for v1)
+## 13. Future / v2.0 backlog (NOT in scope for v1)
 
 Captured so the vision is recorded; explicitly **deferred** — do not build in v1.
 
