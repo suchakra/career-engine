@@ -224,13 +224,18 @@ def execute_grill_turn_node(
     decompose claim → demand a metric → plausibility-check → restate as STAR.
     Tone: senior peer over coffee; NEVER says "STAR" to the user.
 
-    Two-step process per call:
-    1. If the last user message is the previous grill question's ANSWER, run
-       METRIC_EXTRACTION_PROMPT to parse it.  If metrics_found=True, create a
-       StarStory (metrics_validated=True) and remove the pillar from active_gaps.
-       If metrics_found=False, ask a follow-up metric question.
+    Two-step process per call (contract v1.1.0 — dedicated fields):
+    1. If `pending_user_answer` is non-empty, run METRIC_EXTRACTION_PROMPT to
+       parse it.  If metrics_found=True, create a StarStory
+       (metrics_validated=True), remove the pillar from active_gaps, and clear
+       `pending_user_answer`.  If metrics_found=False, set `current_question`
+       to a follow-up metric question and clear `pending_user_answer`.
     2. If there is no pending answer (first question for a pillar), generate an
-       opening question with GRILL_SYSTEM_PROMPT.
+       opening question with GRILL_SYSTEM_PROMPT and set `current_question`.
+
+    The user-facing question is ALWAYS surfaced via `current_question`; the
+    user's answer is ALWAYS read from `pending_user_answer`.  No field is
+    overloaded.
 
     Returns UpgradeRequired (typed) if REASONING_HIGH resolution fails in Free Mode
     after multiple Flash+CoT attempts — never raises.
@@ -249,12 +254,10 @@ def execute_grill_turn_node(
     model_id: str = model_id_result
     client = _get_model_client()
 
-    # The "pending_user_answer" field in state is used to pass the user's
-    # most recent answer to this node.  When it is non-empty, we run
-    # extraction; otherwise we generate an opening question.
-    # Note: raw_history_text doubles as the user's latest answer in the
-    # grill phase to avoid adding new fields to the frozen contract.
-    user_answer = state.raw_history_text.strip() if state.current_phase == PhaseStatus.GRILLING else ""
+    # The dedicated `pending_user_answer` field (contract v1.1.0) carries the
+    # user's most recent answer awaiting extraction.  When it is non-empty we
+    # run metric extraction; otherwise we generate an opening question.
+    user_answer = state.pending_user_answer.strip()
 
     new_question_count = state.question_count + 1
 
@@ -299,8 +302,11 @@ def execute_grill_turn_node(
                     "active_gaps": new_gaps,
                     "current_pillar": next_pillar,
                     "question_count": new_question_count,
-                    # Clear the answer so next call generates a new question
-                    "raw_history_text": "",
+                    # Answer processed: clear the pending buffer.  No new
+                    # question this turn (the next grill turn opens the next
+                    # pillar); current_question is cleared to avoid stale text.
+                    "pending_user_answer": "",
+                    "current_question": "",
                 }
             )
         else:
@@ -316,12 +322,13 @@ def execute_grill_turn_node(
                 system=GRILL_SYSTEM_PROMPT,
                 user=probe_context,
             )
-            # Store the generated question in checkpoint_delta_summary temporarily
-            # (the UI layer reads this to know what to display to the user)
+            # Answer lacked a metric: surface the follow-up question via the
+            # dedicated current_question field and clear the consumed answer.
             return state.model_copy(
                 update={
                     "question_count": new_question_count,
-                    "checkpoint_delta_summary": question_text.strip(),
+                    "current_question": question_text.strip(),
+                    "pending_user_answer": "",
                 }
             )
     else:
@@ -337,10 +344,11 @@ def execute_grill_turn_node(
             system=GRILL_SYSTEM_PROMPT,
             user=opening_context,
         )
+        # Surface the opening question via the dedicated current_question field.
         return state.model_copy(
             update={
                 "question_count": new_question_count,
-                "checkpoint_delta_summary": question_text.strip(),
+                "current_question": question_text.strip(),
             }
         )
 
@@ -427,16 +435,19 @@ def finalize_master_resume_node(state: CareerEngineState) -> CareerEngineState:
     """Assemble all validated StarStories into the master resume structure.
 
     Uses SPEED_FAST capability (Flash baseline).  Sends the validated stories
-    to FINALIZE_SYSTEM_PROMPT to produce a structured resume JSON.  Stores the
-    result in checkpoint_delta_summary (the master resume JSON).  Sets
-    current_phase to COMPLETE.
+    to FINALIZE_SYSTEM_PROMPT to produce a structured resume JSON.  Writes
+    (contract v1.1.0 — dedicated fields):
+      - `master_resume_json`: the structured resume JSON.
+      - `professional_summary`: the prose summary (WS-B's pdf_renderer reads
+        THIS to render the resume's summary section).
+    Sets current_phase to COMPLETE.  Does NOT write checkpoint_delta_summary.
 
     Args:
         state: State with validated extracted_star_stories.
 
     Returns:
-        State with current_phase=COMPLETE and master resume in
-        checkpoint_delta_summary.
+        State with current_phase=COMPLETE, master_resume_json populated, and
+        professional_summary set to a prose summary.
     """
     model_id = _resolve_model(Capability.SPEED_FAST)
     if isinstance(model_id, UpgradeRequired):
@@ -463,10 +474,17 @@ def finalize_master_resume_node(state: CareerEngineState) -> CareerEngineState:
         user=finalize_input,
     )
 
+    # Extract the prose summary from the structured output so the PDF renderer
+    # has a real professional_summary to display.  Fall back gracefully if the
+    # model output is not parseable JSON.
+    parsed = _parse_json_response(resume_json_text)
+    summary = str(parsed.get("summary", "")).strip()
+
     return state.model_copy(
         update={
             "current_phase": PhaseStatus.COMPLETE,
-            "checkpoint_delta_summary": resume_json_text.strip(),
+            "master_resume_json": resume_json_text.strip(),
+            "professional_summary": summary,
         }
     )
 
@@ -474,17 +492,20 @@ def finalize_master_resume_node(state: CareerEngineState) -> CareerEngineState:
 def tailor_node(state: CareerEngineState) -> CareerEngineState:
     """Produce a targeted resume variant from a cleaned job description.
 
-    Uses SPEED_FAST capability (Flash baseline).  The cleaned JD is expected
-    to be present in state.raw_history_text (injected by the CLI/UI layer
-    before calling this node).  The master resume is read from
+    Uses SPEED_FAST capability (Flash baseline).  Reads (contract v1.1.0 —
+    dedicated fields):
+      - the cleaned JD from `jd_text`,
+      - the master resume from `master_resume_json`.
+    Writes the result to `tailored_resume_json`.  Leaves raw_history_text
+    untouched (it now means raw career history only) and does NOT write
     checkpoint_delta_summary.
 
     Args:
-        state: State with current_phase=COMPLETE, master resume in
-               checkpoint_delta_summary, and JD text in raw_history_text.
+        state: State with current_phase=COMPLETE, master_resume_json populated,
+               and jd_text set to the cleaned job description.
 
     Returns:
-        State with tailored resume JSON appended to checkpoint_delta_summary.
+        State with tailored_resume_json populated.
     """
     model_id = _resolve_model(Capability.SPEED_FAST)
     if isinstance(model_id, UpgradeRequired):
@@ -492,8 +513,8 @@ def tailor_node(state: CareerEngineState) -> CareerEngineState:
 
     client = _get_model_client()
 
-    master_resume = state.checkpoint_delta_summary
-    jd_text = state.raw_history_text.strip() or "(no job description provided)"
+    master_resume = state.master_resume_json
+    jd_text = state.jd_text.strip() or "(no job description provided)"
 
     tailor_input = (
         f"MASTER RESUME:\n{master_resume}\n\n"
@@ -508,8 +529,6 @@ def tailor_node(state: CareerEngineState) -> CareerEngineState:
 
     return state.model_copy(
         update={
-            "checkpoint_delta_summary": (
-                master_resume + "\n\n---TAILORED---\n" + tailored_text.strip()
-            ),
+            "tailored_resume_json": tailored_text.strip(),
         }
     )

@@ -154,7 +154,7 @@ class TestGrillVagueAnswerRejected:
             current_phase=PhaseStatus.GRILLING,
             current_pillar="performance_engineering",
             active_gaps=["performance_engineering"],
-            raw_history_text="I improved performance a lot",
+            pending_user_answer="I improved performance a lot",
         )
         result = execute_grill_turn_node(state)
 
@@ -163,9 +163,13 @@ class TestGrillVagueAnswerRejected:
         assert result.extracted_star_stories == []
         # Pillar still in gaps (not resolved)
         assert "performance_engineering" in result.active_gaps
-        # A follow-up question is surfaced asking for a metric
-        assert result.checkpoint_delta_summary != ""
-        assert "latency" in result.checkpoint_delta_summary.lower()
+        # A follow-up question is surfaced via the dedicated current_question field
+        assert result.current_question != ""
+        assert "latency" in result.current_question.lower()
+        # The consumed answer is cleared
+        assert result.pending_user_answer == ""
+        # checkpoint_delta_summary is NOT overloaded by the grill node
+        assert result.checkpoint_delta_summary == ""
         # question_count incremented
         assert result.question_count == 1
 
@@ -192,7 +196,7 @@ class TestGrillVagueAnswerRejected:
             current_phase=PhaseStatus.GRILLING,
             current_pillar="delivery",
             active_gaps=["delivery"],
-            raw_history_text="made it much faster overall",
+            pending_user_answer="made it much faster overall",
         )
         result = execute_grill_turn_node(state)
 
@@ -200,6 +204,9 @@ class TestGrillVagueAnswerRejected:
         # The regex gate overrides the model's false claim -> no story
         assert result.extracted_star_stories == []
         assert "delivery" in result.active_gaps
+        # Answer consumed; a follow-up question surfaced
+        assert result.pending_user_answer == ""
+        assert result.current_question != ""
 
 
 # ── execute_grill_turn_node — specific answer accepted ────────────────────────
@@ -231,7 +238,7 @@ class TestGrillSpecificAnswerAccepted:
             current_phase=PhaseStatus.GRILLING,
             current_pillar="performance_engineering",
             active_gaps=["performance_engineering"],
-            raw_history_text=answer,
+            pending_user_answer=answer,
         )
         result = execute_grill_turn_node(state)
 
@@ -244,6 +251,12 @@ class TestGrillSpecificAnswerAccepted:
         assert story.pillar == "performance_engineering"
         # Pillar removed from active_gaps once a validated story exists
         assert "performance_engineering" not in result.active_gaps
+        # The committed answer is cleared from the pending buffer
+        assert result.pending_user_answer == ""
+        # No overloading: raw_history_text (raw career history) is untouched and
+        # checkpoint_delta_summary is not used by the grill node
+        assert result.raw_history_text == ""
+        assert result.checkpoint_delta_summary == ""
 
     def test_opening_question_when_no_pending_answer(self) -> None:
         """With no pending answer, the node generates an opening question."""
@@ -256,17 +269,21 @@ class TestGrillSpecificAnswerAccepted:
         )
         _install_client(client)
 
-        # phase != GRILLING means raw_history_text is NOT treated as an answer
+        # Empty pending_user_answer means there is no answer to extract;
+        # the node generates an opening question instead.
         state = CareerEngineState(
-            current_phase=PhaseStatus.INGESTING,
+            current_phase=PhaseStatus.GRILLING,
             current_pillar="leadership",
             active_gaps=["leadership"],
+            pending_user_answer="",
         )
         result = execute_grill_turn_node(state)
 
         assert isinstance(result, CareerEngineState)
         assert result.extracted_star_stories == []
-        assert result.checkpoint_delta_summary != ""
+        # Opening question surfaced via the dedicated current_question field
+        assert result.current_question != ""
+        assert result.checkpoint_delta_summary == ""
         assert result.question_count == 1
 
 
@@ -322,7 +339,7 @@ class TestGrillUpgradeRequired:
             current_phase=PhaseStatus.GRILLING,
             current_pillar="scale",
             active_gaps=["scale"],
-            raw_history_text="some answer",
+            pending_user_answer="some answer",
         )
         result = execute_grill_turn_node(state)
 
@@ -338,7 +355,7 @@ class TestGrillUpgradeRequired:
             current_phase=PhaseStatus.GRILLING,
             current_pillar="scale",
             active_gaps=["scale"],
-            raw_history_text="x",
+            pending_user_answer="x",
         )
         # Should simply return, never raise
         result = execute_grill_turn_node(state)
@@ -447,8 +464,8 @@ class TestIngestNode:
 class TestFinalizeNode:
     """Finalize assembles validated stories and marks the session COMPLETE."""
 
-    def test_finalize_marks_complete(self) -> None:
-        """Finalize sets phase=COMPLETE and stores the assembled resume."""
+    def test_finalize_sets_master_resume_and_summary(self) -> None:
+        """Finalize sets phase=COMPLETE, master_resume_json, and professional_summary."""
         client = ScriptedClient(
             responses={
                 "assembling a master resume": json.dumps(
@@ -470,34 +487,62 @@ class TestFinalizeNode:
         result = finalize_master_resume_node(state)
 
         assert result.current_phase == PhaseStatus.COMPLETE
-        assert result.checkpoint_delta_summary != ""
+        # Structured resume written to its dedicated field
+        assert result.master_resume_json != ""
+        assert "achievements_by_pillar" in result.master_resume_json
+        # Prose summary extracted for the PDF renderer (WS-B reads THIS)
+        assert result.professional_summary == "Impactful engineer."
+        # checkpoint_delta_summary is NOT overloaded by finalize
+        assert result.checkpoint_delta_summary == ""
 
 
 # ── tailor_node ───────────────────────────────────────────────────────────────
 
 
 class TestTailorNode:
-    """Tailor produces a JD-targeted variant appended to the master resume."""
+    """Tailor produces a JD-targeted variant in its dedicated field."""
 
-    def test_tailor_appends_variant(self) -> None:
-        """Tailor reads the master resume + JD and appends a tailored section."""
+    def test_tailor_reads_jd_and_master_writes_tailored(self) -> None:
+        """Tailor reads jd_text + master_resume_json and writes tailored_resume_json."""
+        tailored = json.dumps(
+            {"tailored_summary": "Great fit.", "selected_achievements": []}
+        )
         client = ScriptedClient(
-            responses={
-                "tailoring a master resume": json.dumps(
-                    {"tailored_summary": "Great fit.", "selected_achievements": []}
-                )
-            }
+            responses={"tailoring a master resume": tailored}
         )
         _install_client(client)
 
         state = CareerEngineState(
             current_phase=PhaseStatus.COMPLETE,
-            checkpoint_delta_summary='{"summary": "master"}',
-            raw_history_text="We need a backend engineer with Go and Kubernetes.",
+            master_resume_json='{"summary": "master"}',
+            jd_text="We need a backend engineer with Go and Kubernetes.",
         )
         result = tailor_node(state)
 
-        assert "---TAILORED---" in result.checkpoint_delta_summary
+        # Result written to its dedicated field
+        assert result.tailored_resume_json == tailored
+        # raw_history_text and checkpoint_delta_summary are untouched
+        assert result.raw_history_text == ""
+        assert result.checkpoint_delta_summary == ""
+
+    def test_tailor_uses_jd_and_master_in_model_call(self) -> None:
+        """The tailor node feeds jd_text and master_resume_json into the model."""
+        client = ScriptedClient(
+            responses={"tailoring a master resume": "{}"}
+        )
+        _install_client(client)
+
+        state = CareerEngineState(
+            current_phase=PhaseStatus.COMPLETE,
+            master_resume_json="MASTER_MARKER",
+            jd_text="JD_MARKER",
+        )
+        tailor_node(state)
+
+        assert client.calls, "tailor never called the model"
+        prompt = client.calls[-1]["user"]
+        assert "MASTER_MARKER" in prompt
+        assert "JD_MARKER" in prompt
 
 
 # ── Purity — same input -> same output, no external mutation ──────────────────
@@ -529,7 +574,7 @@ class TestNodePurity:
             current_phase=PhaseStatus.GRILLING,
             current_pillar="perf",
             active_gaps=["perf"],
-            raw_history_text="cut p99 from 800ms to 120ms",
+            pending_user_answer="cut p99 from 800ms to 120ms",
         )
         # Two independent input copies
         r1 = execute_grill_turn_node(base.model_copy(deep=True))
@@ -551,7 +596,7 @@ class TestNodePurity:
             current_phase=PhaseStatus.GRILLING,
             current_pillar="perf",
             active_gaps=["perf"],
-            raw_history_text="cut p99 from 800ms to 120ms",
+            pending_user_answer="cut p99 from 800ms to 120ms",
             question_count=0,
         )
         snapshot = original.model_dump_json()
@@ -622,7 +667,7 @@ class TestNoHardcodedModels:
             current_phase=PhaseStatus.GRILLING,
             current_pillar="perf",
             active_gaps=["perf"],
-            raw_history_text="cut p99 from 800ms to 120ms",
+            pending_user_answer="cut p99 from 800ms to 120ms",
         )
         execute_grill_turn_node(state)
 
