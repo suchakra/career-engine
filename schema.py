@@ -141,6 +141,34 @@ class CareerEngineState(BaseModel):
         description="True once the user has confirmed the checkpoint delta",
     )
 
+    # ── Conversational turn buffer (added in v1.1.0) ──────────────────────────
+    pending_user_answer: str = Field(
+        default="",
+        description="The user's most recent answer awaiting metric extraction; cleared once processed",
+    )
+    current_question: str = Field(
+        default="",
+        description="The question the agent wants to surface to the user this turn",
+    )
+
+    # ── Final outputs (added in v1.1.0) ───────────────────────────────────────
+    professional_summary: str = Field(
+        default="",
+        description="Prose professional summary for the rendered resume (set by finalize)",
+    )
+    master_resume_json: str = Field(
+        default="",
+        description="Structured master-resume JSON produced by the finalize node",
+    )
+    tailored_resume_json: str = Field(
+        default="",
+        description="Structured tailored-resume JSON produced by the tailor node",
+    )
+    jd_text: str = Field(
+        default="",
+        description="Cleaned job-description text used as input to the tailor node",
+    )
+
     # ── Contract stamp ────────────────────────────────────────────────────────
     contract_version: str = Field(
         default=CONTRACT_VERSION,

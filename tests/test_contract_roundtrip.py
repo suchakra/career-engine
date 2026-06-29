@@ -145,6 +145,27 @@ class TestCareerEngineStateRoundTrip:
         assert reconstructed.checkpoint_delta_summary == state.checkpoint_delta_summary
         assert reconstructed.checkpoint_verified is False
 
+    def test_v110_fields_default_and_roundtrip(self) -> None:
+        """v1.1.0 fields default to empty and survive round-trip when populated."""
+        default = CareerEngineState()
+        assert default.pending_user_answer == ""
+        assert default.current_question == ""
+        assert default.professional_summary == ""
+        assert default.master_resume_json == ""
+        assert default.tailored_resume_json == ""
+        assert default.jd_text == ""
+
+        state = CareerEngineState(
+            pending_user_answer="Cut p99 from 800ms to 120ms.",
+            current_question="What was the scale?",
+            professional_summary="Principal engineer with a record of latency wins.",
+            master_resume_json='{"sections": []}',
+            tailored_resume_json='{"tailored": true}',
+            jd_text="Required: Python, distributed systems.",
+        )
+        reconstructed = _roundtrip(state)
+        assert reconstructed == state
+
 
 # ── AgentMessage ──────────────────────────────────────────────────────────────
 

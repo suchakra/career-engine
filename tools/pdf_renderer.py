@@ -81,8 +81,8 @@ def _build_template_context(state: CareerEngineState) -> dict[str, Any]:
         "candidate_email": "",
         "candidate_location": "",
         "candidate_linkedin": "",
-        # Summary / competency
-        "summary": state.checkpoint_delta_summary or "",
+        # Summary / competency (v1.1.0: dedicated professional_summary field)
+        "summary": state.professional_summary or "",
         "target_competencies": list(state.target_competencies),
         # STAR stories keyed by pillar; only validated ones
         "stories_by_pillar": dict(by_pillar),
