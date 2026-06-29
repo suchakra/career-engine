@@ -12,7 +12,7 @@ Last updated: **2026-06-28** — *Phase 0 contract FROZEN (Opus PASS). Ready for
 |-------|-------|-------|
 | Planning & architecture | ✅ | ARCHITECTURE.md, REFINED_PROJECT_PLAN.md, this file, AGENT_EXECUTION_PROMPT.md |
 | Phase 0 — Contract Freeze | ✅ | Sonnet-built, Opus-reviewed (1 round: dead model IDs + Free-mode grilling fixed). Frozen, tag `contract-v1.0.0`. |
-| Phase 1 — Core loop (CLI) | ⬜ | Fan-out after freeze |
+| Phase 1 — Core loop (CLI) | 🟡 | WS-A/B/C/D all merged & Opus-PASS (201 tests). Contract amended to v1.1.0. Remaining: main.py integration wiring. |
 | Phase 2 — Web / Infra / Async | ⬜ | |
 | Phase 3 — Hardening / Eval | ⬜ | |
 
@@ -31,15 +31,21 @@ Last updated: **2026-06-28** — *Phase 0 contract FROZEN (Opus PASS). Ready for
 - ✅ **FROZEN**: contract tagged `contract-v1.0.0`; signatures change only via `CONTRACT_VERSION` bump
 
 ## Phase 1 — Core agent loop (CLI-first MVP)
-- ⬜ WS-A `workflows/discovery_graph.py` — graph, edges, `discovery_router`, 5-turn brake
-- ⬜ WS-A `workflows/nodes.py` — ingest / grill / checkpoint(HITL) / finalize / tailor + CoT prompts
-- ⬜ WS-C `database/firestore_session.py` — ADK SessionService adapter
-- ⬜ WS-B `tools/web_scraper.py` — two-step fetch + Flash clean
-- ⬜ WS-B `tools/pdf_renderer.py` + `templates/classic_resume.html`
-- ⬜ WS-* `models/registry.py` — real resolver + capability detection + escalation signal
-- ⬜ WS-D `auth/cli_auth.py` + `auth/key_vault.py` (local + Secret Manager)
-- ⬜ `main.py` — CLI entrypoint wiring Runner
+- ✅ WS-A `workflows/discovery_graph.py` — graph, edges, `discovery_router`, 5-turn brake
+- ✅ WS-A `workflows/nodes.py` — ingest / grill / checkpoint(HITL) / finalize / tailor + CoT prompts
+- ✅ WS-C `database/firestore_session.py` — ADK SessionService adapter (in-memory fake for tests)
+- ✅ WS-B `tools/web_scraper.py` — two-step fetch + BULK_CHEAP clean
+- ✅ WS-B `tools/pdf_renderer.py` + `templates/classic_resume.html` (WeasyPrint; deviation noted)
+- ✅ WS-* `models/registry.py` — resolver + Free/BYOK routing (Phase 0; capability detection deferred)
+- ✅ WS-D `auth/cli_auth.py` + `auth/key_vault.py` (local + Secret Manager) + `firebase_auth.py`
+- ⬜ `main.py` — CLI entrypoint wiring Runner (integration step)
 - ⬜ Exit demo: vague answer → quantified STAR → checkpoint@5 → PDF
+
+### Integration notes carried from WS reviews (for the integration step)
+- WS-C `create_session` is last-write-wins (differs from ADK `InMemorySessionService` which raises on duplicate); ADK event log not durably persisted (state is). Confirm against Runner usage.
+- WS-C `FakeFirestoreClient` lives in the prod module — candidate to move to `tests/`.
+- WS-A grill uses `pending_user_answer`/`current_question`; CLI loop must set `pending_user_answer` and `checkpoint_verified`, and read `current_question`/`checkpoint_delta_summary`.
+- No live `runner.run_async` end-to-end smoke yet — owned by integration / WS-F.
 
 ## Phase 2 — Web, Infra, Async
 - ⬜ `main.py` Streamlit path — dashboard + pending-action surface
