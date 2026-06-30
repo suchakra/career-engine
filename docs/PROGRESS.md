@@ -3,7 +3,7 @@
 > Single source of truth for **what's done vs. pending**. Update this at the end of every work
 > session / sub-agent run. Keep entries terse. Legend: ✅ done · 🟡 in progress · ⬜ not started · 🚫 blocked.
 
-Last updated: **2026-06-30** — *Phase 1.5 COMPLETE; **Phase 1.7 (integration closure) built** — B/A/D/C all landed. Contract **v2.1.0** (additive: `coverage_confirmed`), **338 tests**, `make check` green. 1.7 = session-resume (B), resume-file CLI wiring (A), FakeFirestore→tests (D), discovery_turn graph edge (C). **Sonnet review PASS** (0 must-fix; 4 nits applied, 339 tests); Copilot gate next, then tag contract-v2.1.0 + push. Next: Phase 2.*
+Last updated: **2026-06-30** — *Phase 1.5 COMPLETE; **Phase 1.7 COMPLETE** — B/A/D/C all landed, 339 tests green. Contract **v2.1.0** (additive: `coverage_confirmed`). Sonnet PASS + Copilot PASS (REVIEW.md). Next: tag `contract-v2.1.0`, push, Phase 2.*
 
 ---
 
@@ -15,7 +15,7 @@ Last updated: **2026-06-30** — *Phase 1.5 COMPLETE; **Phase 1.7 (integration c
 | Phase 1 — Core loop (CLI) | ✅ | WS-A/B/C/D + integration all merged & Opus-PASS. Turn-based CLI discovery loop runs end-to-end → PDF. 228 tests. Contract v1.1.0. |
 | Phase 1.3 — Review hardening (no contract change) | ✅ | Done; stays v1.1.x, 230 tests. Required items from [REVIEW.md §7](REVIEW.md) all merged: docs truth (#7,#8), upgrade-signal band-aid + E2E test (#1,#11), model_client errors (#4), Firestore loud-fallback (#3). Optional #6 (FakeFirestore move) now tracked in Phase 1.7. |
 | Phase 1.5 — Resume-aware + progressive discovery | ✅ | All five pieces built (contract v2.0.0, tag `contract-v2.0.0`, 317 tests). CORE (CONTRACT+GRILL+METRICS) Sonnet-built/Opus-reviewed/merged; INGEST + DISCOVERY Opus-built this session + Sonnet-reviewed PASS. Stale-docstring (#9) resolved. Deferred integration items (resume-file CLI wiring, full session-resume, discovery_turn in main graph) tracked in [HANDOFF.md](HANDOFF.md). |
-| Phase 1.7 — Integration closure (deferred Phase-1 work) | 🟡 | **Built (B/A/D/C), 338 tests green; review in progress.** 1.7-A resume-file CLI wiring, 1.7-B true session resume (load-before-create), 1.7-C discovery_turn graph edge (contract **v2.1.0**, additive `coverage_confirmed`), 1.7-D FakeFirestore→`tests/fakes.py`. Opus-built; Sonnet pre-review + Copilot gate pending before tagging `contract-v2.1.0` and flipping to ✅. |
+| Phase 1.7 — Integration closure (deferred Phase-1 work) | ✅ | 1.7-A resume-file CLI wiring, 1.7-B true session resume (load-before-create), 1.7-C discovery_turn graph edge (contract **v2.1.0**, additive `coverage_confirmed`), 1.7-D FakeFirestore→`tests/fakes.py`. 339 tests. Sonnet PASS + Copilot PASS. Tag `contract-v2.1.0` + push pending. |
 | Phase 2 — Web / Infra / Async | ⬜ | Starts after 1.7; groomed for capstone-oriented execution (demoability + reproducibility). |
 | Phase 3 — Hardening / Eval | ⬜ | |
 

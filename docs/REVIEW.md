@@ -1,69 +1,90 @@
-# CareerEngine Review
+# CareerEngine Review — Phase 1.7
 
-Date: 2026-06-29
-Scope: review of the last five commits and the current Phase 1.5 implementation state.
+Date: 2026-06-30
+Scope: diff ec7022e..HEAD (Phase 1.7 — four workstreams: session resume, resume-file CLI upload, discovery-turn graph wiring, FakeFirestore relocation).
+Gate result at review time: **339 tests, make check green** (ruff + mypy --strict + pytest).
 
-## Executive Summary
+## Verdict
 
-The last five commits materially improved the codebase. The earlier highest-risk issue, the upgrade-required path from workflow to CLI, is now handled end-to-end and covered by an integration test. The model client no longer collapses failures into an empty string, Firestore fallback is loud instead of silent, and resume ingest now supports PDFs and images through a multimodal adapter. Phase 1.5 is legitimately complete at the core-contract level.
+**PASS — ready to push.** No must-fix items. Three optional improvements noted below.
 
-What is still open is narrower and mostly intentional: the CLI resume-file path is not yet wired, true session reload for the return loop is still deferred, and `discovery_turn_node` exists but is not yet surfaced as a main-graph edge. Those are real integration gaps, but they are now documented as deferred work rather than mistaken for shipped behavior.
+---
 
-## What The Last Five Commits Landed
+## What landed
 
-1. `dc07f98` and `f3ba142` completed the contract v2.0.0 merge and the entry-based grill loop foundation.
-2. `82a2f82` added the vision resume parser and multimodal model client support.
-3. `986c7c8` added the CLI progress meter, nudge logic, and return-loop flow.
-4. `ec7022e` reconciled the docs to say Phase 1.5 is complete and to list the remaining integration seams explicitly.
+| Commit | Summary |
+|--------|---------|
+| `7b86bb8` | 1.7-B: `get_session_state_if_exists` + load-before-create resume path in CLI |
+| `e032092` | docs: Phase 1.7 grooming (Copilot) |
+| `7c43714` | 1.7-A: `--resume-file` flag, `guess_resume_mime`, `parse_resume_file` |
+| `c39ce72` | 1.7-D: `FakeFirestoreClient` + `_Fake*` hierarchy moved to `tests/fakes.py` |
+| `6cc736c` | 1.7-C: `discovery_turn_node` wired into graph; `coverage_confirmed` field; CONTRACT_VERSION 2.1.0 |
+| `2d1a939` | docs: reconcile |
+| `67ca0ec` | Sonnet review nits (PASS, 0 must-fix) |
+| `614e25a` | docs: record Sonnet PASS |
 
-The important part is that these commits do not just add features; they also close most of the earlier review concerns at the right layer.
+---
 
-## Findings
+## Finding-by-finding
 
-### 1. The earlier upgrade-required bug is fixed and now tested
+### 1.7-B — session resume (PASS)
 
-This was the most important concern in the original review. It is no longer a live blocker. The CLI now reads the actual `_upgrade_required` signal from session state in [cli/app.py](../cli/app.py#L382-L396), and the integration test in [tests/test_integration.py](../tests/test_integration.py#L598-L701) asserts that the real signal produces `upgrade_required=True` and surfaces the user message.
+`get_session_state_if_exists` in [cli/session.py](../cli/session.py) is the right primitive: thin, clearly docstringed, returns `None` for a missing session rather than raising. The CLI in [cli/app.py](../cli/app.py) uses it to gate the resume path correctly — a missing session id prints a user-safe error and returns cleanly instead of clobbering or crashing.
 
-That closes the gap between the workflow signal and the user-facing result. It also removes the old string-match failure mode from the review history.
+The `is None` guard also correctly distinguishes in-memory vs. Firestore by telling the user they need Firestore to resume cross-run when not using `--firestore`. That is the right user-facing message.
 
-### 2. Resume ingest is now meaningfully safer and more capable, but only for the parser path
+Test coverage in [tests/test_session_resume.py](../tests/test_session_resume.py) is complete: existing session loads without clobber (frontier and question_count preserved), missing session returns None, fresh session starts as INGESTING, and the CLI error path is asserted on stderr without raising. All four pass.
 
-The ingest path now accepts PDFs and common image formats in [tools/resume_parser.py](../tools/resume_parser.py#L35-L187) and sends them through a multimodal client instead of rasterizing or silently dropping content. The adapter in [integration/model_client.py](../integration/model_client.py#L78-L200) now has a dedicated multimodal entry point.
+**No issues.**
 
-The remaining gap is not the parser itself; it is the CLI wiring. [docs/HANDOFF.md](../docs/HANDOFF.md#L11-L19) correctly says the file-upload seam is still missing from `grill`, even though `ingest_node` already accepts a pre-seeded `work_timeline`. That means the code path is solid, but the user-facing entry point is still incomplete.
+### 1.7-A — resume-file CLI upload (PASS)
 
-### 3. Firestore fallback is no longer silent, but it still downgrades
+`guess_resume_mime` in [cli/app.py](../cli/app.py) is correct: extension-first lookup with `mimetypes` fallback and safe default (`application/octet-stream`) that `parse_resume` will reject with a clear `ParseError`. Raw bytes never touch `CareerEngineState` — the helper reads, parses, and discards them at the CLI boundary.
 
-The warning in [cli/app.py](../cli/app.py#L77-L104) is a real improvement over the earlier behavior. The operator now sees that the app is falling back to in-memory storage instead of being tricked into thinking persistence is active.
+The `main.py` option wiring is clean: `--resume-file` accepts an existing readable path, text history becomes optional when a file is given, and the empty-input guard was correctly updated to only fail when neither source is present.
 
-That said, the behavior is still a downgrade rather than a hard failure. For local development that is acceptable, and the docs now frame it that way. For a production posture, the fallback still deserves a Phase 2 policy decision because it can hide persistence failures if the warning is missed.
+Test coverage in [tests/test_resume_file_cli.py](../tests/test_resume_file_cli.py) covers MIME detection (parametrized), PDF + image parse-and-seed, unsupported extension raises `ParseError`, and empty file raises `ParseError`. All pass.
 
-### 4. The model-client failure handling is materially better
+**Optional (non-blocking).** `guess_resume_mime` does case-folding with `.suffix.lower()` but does not give an explicit early message for files with no extension. An extensionless file gets `application/octet-stream` and then a generic `ParseError` from the downstream parser. The behavior is correct but the user message could be friendlier. A one-liner guard could be added later with no contract impact.
 
-The old empty-string failure mode is gone from [integration/model_client.py](../integration/model_client.py#L78-L200). That matters because empty strings blur actual model output with infrastructure failure. The client now exposes multimodal generation directly and does not pretend failure is a valid response.
+### 1.7-C — discovery-turn graph wiring (PASS)
 
-This is a good repair. It makes debugging the ingest and discovery paths much more honest.
+The router change in [workflows/discovery_graph.py](../workflows/discovery_graph.py) is well-structured: `COMPLETE` is now its own early return, and the discovery-turn branch fires only when `coverage_through` is set, `coverage_confirmed` is False, and the phase is not `CHECKPOINT`. Those three guards prevent the turn from running on text-only sessions, from re-running after the user answers, and from interrupting a checkpoint-in-progress. All three conditions have dedicated router tests in [tests/test_workflow.py](../tests/test_workflow.py).
 
-### 5. Phase 1.5 is complete in the core graph, but one workflow edge is still intentionally missing
+The `_discovery_shim` and `FunctionNode` addition are correctly wired as terminal-per-turn, consistent with the grill and checkpoint shims. The `discovery_turn_node` changes in [workflows/nodes.py](../workflows/nodes.py) correctly set `coverage_confirmed=True` and clear `current_question` on the PROCESS pass, and provide a non-empty defensive fallback question on the ASK pass.
 
-`discovery_turn_node` exists in [workflows/nodes.py](../workflows/nodes.py#L460-L460) and the graph file explicitly says it is not yet part of the main workflow in [workflows/discovery_graph.py](../workflows/discovery_graph.py#L18-L19). The handoff repeats that same point in [docs/HANDOFF.md](../docs/HANDOFF.md#L11-L19).
+The contract bump to `v2.1.0` for the `coverage_confirmed` field is correct: backward-compatible MINOR addition (new optional field, default False), properly stamped in `config.py`, round-trip test updated.
 
-This is not a hidden bug anymore; it is a documented deferred integration item. I still consider it the main remaining surface gap because it is the difference between "the node exists and is tested" and "the CLI actually surfaces the return-loop experience end-to-end."
+The end-to-end integration test `TestDiscoveryTurnInGraph` in [tests/test_integration.py](../tests/test_integration.py) exercises both turns through the real ADK runner — ASK (question surfaced, `coverage_confirmed` still False) then PROCESS (entry appended, `coverage_confirmed` True). This is the strongest possible coverage short of a live network call.
 
-## Strengths
+**Optional (non-blocking).** The routing invariant relies on `coverage_through` only being set by `ingest_node`. If a future flow sets it manually without going through vision ingest, the discovery turn would fire unexpectedly. This is not a present bug. Worth adding a sentence to the `coverage_through` field description in `schema.py` noting that only `ingest_node` should write it, to protect the invariant for future contributors.
 
-The repository is now in a much healthier place than it was before these commits. The contract boundaries are typed, the new phase-specific behavior is covered by tests, the docs finally match the shipped state, and the deferred work is called out plainly instead of being implied.
+### 1.7-D — FakeFirestore relocation (PASS)
 
-The strongest change in this round is not any single function. It is that the repo now has a cleaner contract between "built and tested" and "surfaced in the CLI," which makes the remaining roadmap much easier to trust.
+The move from [database/firestore_session.py](../database/firestore_session.py) to [tests/fakes.py](../tests/fakes.py) is complete and correct. The production module docstring for `FirestoreSessionService` was updated to drop the `FakeFirestoreClient` mention and replace it with "any object with the async Firestore client surface," which is the right abstraction. The `test_firestore_session.py` import was updated. No logic changed.
 
-## Residual Risks
+**No issues.**
 
-1. The Firestore fallback still relies on the operator noticing a warning, so it remains a durability risk until Phase 2 policy hardens it.
-2. The resume-file path is still only half-done from a user perspective because the parser exists but the CLI upload is not wired.
-3. The discovery return loop is implemented, but the missing main-graph edge means the feature is not yet fully discoverable from the normal path.
+---
 
-## Recommendation
+## Security checklist
 
-Treat Phase 1.5 as complete and move on to the small integration pass before broadening scope. The next best work is to wire the resume-file upload into `grill`, decide whether the Firestore fallback should become a hard stop in the hosted path, and connect `discovery_turn_node` to the main graph when you are ready to surface the return-loop experience publicly.
+- No secrets written to Firestore or logged.
+- Raw resume bytes are read at the CLI boundary and passed straight to the parser; not stored on `CareerEngineState`, not logged anywhere.
+- No hardcoded model IDs in any new or changed file.
+- `CONTRACT_VERSION` bumped and stamped correctly (2.0.0 → 2.1.0, MINOR).
+- No new broad exception catches; `ParseError` and `OSError` are the specific catch sites in the resume-file path, both handled gracefully with user-facing messages.
 
-If you want the next review to be stricter, the best target is not the core Phase 1.5 code anymore; it is the remaining CLI and persistence seams.
+---
+
+## Strengths of this diff
+
+The four workstreams were merged in dependency order (B → A → D → C), which is the right sequencing. Test files are well-scoped and named to match the workstreams. The `coverage_confirmed` field is the minimal possible contract addition — no new enums, no breaking changes. The `_discovery_shim` follows the exact pattern of `_grill_shim` and `_checkpoint_shim`, keeping the graph code uniform.
+
+---
+
+## Optional improvements (non-blocking, all low priority)
+
+1. Add an early guard or clearer error in `guess_resume_mime` for files with no extension, so users get a friendlier message than a generic `ParseError`.
+2. Add a note to the `coverage_through` field description in `schema.py` that only `ingest_node` should write it, to protect the routing invariant.
+3. The `test_missing_session_id_prints_safe_message_no_raise` test monkeypatches `resolve_auth_and_client` by name; a future rename would silently break the test. A named fixture or interface extraction would make it more resilient.
