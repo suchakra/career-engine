@@ -1,7 +1,7 @@
 # CareerEngine — Session Handoff / Resume Point
 
 ## 👉 YOU ARE HERE (updated 2026-06-30)
-**`master`, Phase 1.7 BUILT + Sonnet-reviewed PASS + **Copilot-reviewed PASS** (contract v2.1.0). Tag `contract-v2.1.0` → push → Phase 2.**
+**`master`, Phase 1.7 DONE (Sonnet + Copilot PASS, tagged `contract-v2.1.0`, pushed). Phase 2 starting.**
 Phase 0 + Phase 1 + Phase 1.3 + Phase 1.5 + **all of Phase 1.7** are built (**339 tests**; `make check`
 green). Sonnet review verdict **PASS** (0 must-fix; 4 nits applied incl. a discovery-turn empty-question
 fallback). Phase 1.7 closed the deferred Phase-1/1.5 integration seams, all Opus-built this session +
@@ -11,12 +11,12 @@ Sonnet-reviewed (Copilot gate planned):
   - **1.7-C** `discovery_turn_node` wired into the main graph + router branch — contract bumped
     **v2.0.0 → v2.1.0** (additive `coverage_confirmed`; user-approved).
   - **1.7-D** FakeFirestore doubles moved to `tests/fakes.py`.
-- **Unpushed commits:** the 1.7 series (`feat(1.7-B)`, `feat(1.7-A)`, `refactor(1.7-D)`, `feat(1.7-C)`)
-  + this docs reconcile. Tree clean.
-- **BEFORE moving on:** **tag `contract-v2.1.0`**, flip Phase 1.7 to ✅ in PROGRESS.md, push.
-- **NEXT:** **Phase 2** (web/infra/async) per [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md). The only
-  1.7 leftover is a single scripted end-to-end capstone runbook (resume-file → discovery → resume →
-  tailor), folded into Phase 2 demoability polish.
+- **Pushed:** the full 1.7 series + reviews + tag `contract-v2.1.0` are on origin/master. Tree clean.
+- **NEXT:** **Phase 2** (web/infra/async) per [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md).
+- **Carried into Phase 2 polish** (non-blocking): the scripted end-to-end capstone runbook (resume-file →
+  discovery → resume → tailor), plus Copilot's 3 optional 1.7 nits in [REVIEW.md](REVIEW.md) —
+  (1) friendlier message for extensionless resume files, (2) a `coverage_through` schema docstring note
+  that only `ingest_node` writes it, (3) make the resume-CLI test resilient to a `resolve_auth_and_client` rename.
 - **To IDEATE:** read this file, then [ARCHITECTURE.md](ARCHITECTURE.md) + [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md); capture new ideas back into the docs (don't mutate a spec that's mid-build — version-gate instead).
 
 ---
