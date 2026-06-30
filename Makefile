@@ -49,25 +49,38 @@ test:  ## Run pytest (golden round-trip test + any Phase-specific tests)
 .PHONY: check
 check: lint typecheck test  ## Run all quality gates in sequence
 
-# ── Build / deploy (Phase 2 stubs — not implemented yet) ─────────────────────
+# ── Infrastructure (Terraform) ───────────────────────────────────────────────
+# fmt/validate run with no cloud credentials; plan/deploy/destroy need GCP creds
+# (gcloud auth application-default login) and a real project_id in terraform.tfvars.
+
+TF_DEV  := terraform -chdir=infrastructure/envs/dev
+TF_PROD := terraform -chdir=infrastructure/envs/prod
 
 .PHONY: build
-build:  ## (Phase 2) Build container image via Google Cloud Build
-	@echo "Phase 2 task: build is not yet implemented."
+build:  ## Build + push the container image via Google Cloud Build
 	@echo "Will run: gcloud builds submit --config=cloudbuild.yaml"
 	@exit 0
 
+.PHONY: tf-fmt
+tf-fmt:  ## Check Terraform formatting (no credentials needed)
+	terraform fmt -check -recursive infrastructure
+
+.PHONY: tf-validate
+tf-validate:  ## Init (backend-less) + validate both env roots (no credentials needed)
+	$(TF_DEV) init -backend=false -input=false >/dev/null && $(TF_DEV) validate
+	$(TF_PROD) init -backend=false -input=false >/dev/null && $(TF_PROD) validate
+
+.PHONY: tf-check
+tf-check: tf-fmt tf-validate  ## Terraform fmt + validate (the gateable infra checks)
+
 .PHONY: deploy
-deploy:  ## (Phase 2) Deploy to dev environment via Terraform
-	@echo "Phase 2 task: deploy is not yet implemented."
-	@echo "Will run: terraform -chdir=infrastructure/envs/dev apply"
-	@exit 0
+deploy:  ## Deploy the dev environment via Terraform (needs GCP creds)
+	$(TF_DEV) init -input=false
+	$(TF_DEV) apply -auto-approve
 
 .PHONY: destroy
-destroy:  ## (Phase 2) Destroy dev environment via Terraform
-	@echo "Phase 2 task: destroy is not yet implemented."
-	@echo "Will run: terraform -chdir=infrastructure/envs/dev destroy"
-	@exit 0
+destroy:  ## Destroy the dev environment via Terraform (needs GCP creds)
+	$(TF_DEV) destroy -auto-approve
 
 # ── Housekeeping ──────────────────────────────────────────────────────────────
 

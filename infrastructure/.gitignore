@@ -1,0 +1,11 @@
+# Terraform — never commit state, plans, or filled-in tfvars (may carry secrets).
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfplan
+terraform.tfvars
+*.auto.tfvars
+override.tf
+override.tf.json

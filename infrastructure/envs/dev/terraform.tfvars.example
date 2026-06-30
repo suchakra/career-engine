@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars (gitignored) and fill in. No secrets belong here —
+# per-user BYOK keys live in Secret Manager, created at runtime by the app.
+
+project_id = "your-dev-project-id"
+region     = "us-central1"
+
+# After the first image build/push, set the real image:
+# image = "us-central1-docker.pkg.dev/your-dev-project-id/career-engine-dev-images/app:latest"
