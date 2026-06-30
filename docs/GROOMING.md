@@ -36,10 +36,14 @@ Phase 1.7 + Phase 2.
 
 | WS | Scope | Depends on | Grooming |
 |----|-------|-----------|----------|
-| 1.7-A | Resume-file upload wired into CLI grill start path | 1.5 INGEST complete | ✅ Ready |
-| 1.7-B | True session resume semantics for return-loop flows | 1.5 DISCOVERY complete | ✅ Ready |
-| 1.7-C | discovery_turn_node wired into main graph/CLI path | 1.5 GRILL + DISCOVERY complete | ✅ Ready |
-| 1.7-D | Move FakeFirestore test doubles out of production module | none | ✅ Ready |
+| 1.7-A | Resume-file upload wired into CLI grill start path | 1.5 INGEST complete | ✅✅ BUILT (review in progress) |
+| 1.7-B | True session resume semantics for return-loop flows | 1.5 DISCOVERY complete | ✅✅ BUILT (review in progress) |
+| 1.7-C | discovery_turn_node wired into main graph/CLI path (contract v2.1.0) | 1.5 GRILL + DISCOVERY complete | ✅✅ BUILT (review in progress) |
+| 1.7-D | Move FakeFirestore test doubles out of production module | none | ✅✅ BUILT (review in progress) |
+
+> **Status:** all four 1.7 workstreams built by Opus this session (B→A→D→C), 338 tests green,
+> Sonnet pre-review + Copilot gate pending before tagging `contract-v2.1.0`. 1.7-C took the approved
+> additive minor bump (`coverage_confirmed`) rather than the original "no contract bump" note.
 
 ### Sequencing for 1.7
 

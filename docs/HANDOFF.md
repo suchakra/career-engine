@@ -1,23 +1,22 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-06-29)
-**`master`, Phase 1.5 COMPLETE (contract v2.0.0). Two unpushed commits — review (Copilot) & push; next is Phase 1.7 then Phase 2.**
-Phase 0 + Phase 1 + Phase 1.3 + **all of Phase 1.5** are built (**317 tests**; `make check` green: ruff +
-mypy --strict + pytest). CORE (`1.5-CONTRACT`+`1.5-GRILL`+`1.5-METRICS`) was Sonnet-built/Opus-reviewed/merged
-(tag **`contract-v2.0.0`**). **INGEST + DISCOVERY** were built directly by Opus this session (token-efficient
-path, user-approved) and **Sonnet-reviewed PASS** (0 must-fix; 4 nits applied). A Copilot review is planned.
-- **Two local commits not yet pushed:** `feat(1.5): INGEST …`, `feat(1.5): DISCOVERY …`. Tree is clean.
-- **NEXT (recommended):** **Phase 1.7** (integration closure for deferred Phase-1 work), then **Phase 2**
-  (web/infra/async) per [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md).
-- **Phase 1.7 integration scope** (engine + helpers are built and tested; CLI surfacing is partial):
-  1. Wire resume-file upload into the `grill` command (`main.py`/`cli/app.py`): call
-     `tools.resume_parser.parse_resume(bytes, mime)` and seed `start(work_timeline=…)`. The seam exists
-     (`ingest_node` consumes a pre-seeded `work_timeline`); only the CLI option + file read are missing.
-  2. Full session-resume for the return loop: `run_return_loop` + `has_resumable_work` are built/tested and
-      the launch offer is gated on `--session-id`, but WS-C `create_session` is last-write-wins; Phase 1.7
-      should add a load-before-create resume path so prior state is reused instead of clobbered.
-  3. `discovery_turn_node` exists + is tested but is **not yet an edge in the main graph** — wire it into the
-     CLI/graph flow when surfacing the "what have you done since?" discovery turn.
+## 👉 YOU ARE HERE (updated 2026-06-30)
+**`master`, Phase 1.7 BUILT (contract v2.1.0). Sonnet review running + Copilot gate pending; then tag & push; next is Phase 2.**
+Phase 0 + Phase 1 + Phase 1.3 + Phase 1.5 + **all of Phase 1.7** are built (**338 tests**; `make check`
+green). Phase 1.7 closed the deferred Phase-1/1.5 integration seams, all Opus-built this session +
+Sonnet-reviewed (Copilot gate planned):
+  - **1.7-A** resume-file upload wired into `grill` (`--resume-file`).
+  - **1.7-B** true session resume (`get_session_state_if_exists`, load-before-create).
+  - **1.7-C** `discovery_turn_node` wired into the main graph + router branch — contract bumped
+    **v2.0.0 → v2.1.0** (additive `coverage_confirmed`; user-approved).
+  - **1.7-D** FakeFirestore doubles moved to `tests/fakes.py`.
+- **Unpushed commits:** the 1.7 series (`feat(1.7-B)`, `feat(1.7-A)`, `refactor(1.7-D)`, `feat(1.7-C)`)
+  + this docs reconcile. Tree clean.
+- **BEFORE moving on:** once Sonnet + Copilot reviews PASS → **tag `contract-v2.1.0`**, flip Phase 1.7 to
+  ✅ in PROGRESS, push.
+- **NEXT:** **Phase 2** (web/infra/async) per [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md). The only
+  1.7 leftover is a single scripted end-to-end capstone runbook (resume-file → discovery → resume →
+  tailor), folded into Phase 2 demoability polish.
 - **To IDEATE:** read this file, then [ARCHITECTURE.md](ARCHITECTURE.md) + [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md); capture new ideas back into the docs (don't mutate a spec that's mid-build — version-gate instead).
 
 ---
@@ -27,9 +26,10 @@ path, user-approved) and **Sonnet-reviewed PASS** (0 must-fix; 4 nits applied). 
 > (roadmap), [AGENT_EXECUTION_PROMPT.md](AGENT_EXECUTION_PROMPT.md) (builder/reviewer prompts).
 
 ## Where we are
-- **Branch `master`** — origin is behind by 2 commits (INGEST, DISCOVERY) awaiting Copilot review + push.
-- **Contract: v2.0.0** (tags `contract-v1.0.0`, `contract-v1.1.0`, `contract-v2.0.0`). Changing
-  `schema.py`/`config.py`/public interfaces requires a `CONTRACT_VERSION` bump.
+- **Branch `master`** — origin behind by the Phase-1.7 series + docs, awaiting Copilot review + push.
+- **Contract: v2.1.0** (tags `contract-v1.0.0`, `contract-v1.1.0`, `contract-v2.0.0`; **`contract-v2.1.0`
+  to be tagged after review**). v2.1.0 adds `coverage_confirmed` (additive, backward-compatible).
+  Changing `schema.py`/`config.py`/public interfaces requires a `CONTRACT_VERSION` bump.
 - **Phase 0:** ✅ frozen. **Phase 1 (WS-A/B/C/D + integration):** ✅ COMPLETE. **Phase 1.3:** ✅ done.
   **Phase 1.5:** ✅ COMPLETE (all 5 pieces). `make check` = ruff clean, mypy --strict clean,
   **317 tests pass (~6s)**. CLI discovery loop runs end-to-end (turn-based HITL) → PDF; entry-based grill

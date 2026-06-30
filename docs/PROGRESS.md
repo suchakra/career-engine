@@ -3,7 +3,7 @@
 > Single source of truth for **what's done vs. pending**. Update this at the end of every work
 > session / sub-agent run. Keep entries terse. Legend: ✅ done · 🟡 in progress · ⬜ not started · 🚫 blocked.
 
-Last updated: **2026-06-29** — *Phase 0 + Phase 1 + Phase 1.3 + **Phase 1.5 (COMPLETE)** built. Contract **v2.0.0** (tag `contract-v2.0.0`), **317 tests**. All five 1.5 pieces landed: CONTRACT+GRILL+METRICS (CORE), INGEST (vision parser), DISCOVERY (nudge/meter/return-loop). Next: **Phase 1.7** (integration closure), then Phase 2 (web/infra/async).*
+Last updated: **2026-06-30** — *Phase 1.5 COMPLETE; **Phase 1.7 (integration closure) built** — B/A/D/C all landed. Contract **v2.1.0** (additive: `coverage_confirmed`), **338 tests**, `make check` green. 1.7 = session-resume (B), resume-file CLI wiring (A), FakeFirestore→tests (D), discovery_turn graph edge (C). Sonnet review + Copilot gate in progress before tagging contract-v2.1.0. Next: Phase 2.*
 
 ---
 
@@ -15,7 +15,7 @@ Last updated: **2026-06-29** — *Phase 0 + Phase 1 + Phase 1.3 + **Phase 1.5 (C
 | Phase 1 — Core loop (CLI) | ✅ | WS-A/B/C/D + integration all merged & Opus-PASS. Turn-based CLI discovery loop runs end-to-end → PDF. 228 tests. Contract v1.1.0. |
 | Phase 1.3 — Review hardening (no contract change) | ✅ | Done; stays v1.1.x, 230 tests. Required items from [REVIEW.md §7](REVIEW.md) all merged: docs truth (#7,#8), upgrade-signal band-aid + E2E test (#1,#11), model_client errors (#4), Firestore loud-fallback (#3). Optional #6 (FakeFirestore move) now tracked in Phase 1.7. |
 | Phase 1.5 — Resume-aware + progressive discovery | ✅ | All five pieces built (contract v2.0.0, tag `contract-v2.0.0`, 317 tests). CORE (CONTRACT+GRILL+METRICS) Sonnet-built/Opus-reviewed/merged; INGEST + DISCOVERY Opus-built this session + Sonnet-reviewed PASS. Stale-docstring (#9) resolved. Deferred integration items (resume-file CLI wiring, full session-resume, discovery_turn in main graph) tracked in [HANDOFF.md](HANDOFF.md). |
-| Phase 1.7 — Integration closure (deferred Phase-1 work) | ⬜ | Formalized from Phase 1.5 deferred seams: resume-file CLI wiring, true session resume for return loop, discovery_turn graph edge, and FakeFirestore move to tests. Groomed launch specs in [GROOMING.md](GROOMING.md). |
+| Phase 1.7 — Integration closure (deferred Phase-1 work) | 🟡 | **Built (B/A/D/C), 338 tests green; review in progress.** 1.7-A resume-file CLI wiring, 1.7-B true session resume (load-before-create), 1.7-C discovery_turn graph edge (contract **v2.1.0**, additive `coverage_confirmed`), 1.7-D FakeFirestore→`tests/fakes.py`. Opus-built; Sonnet pre-review + Copilot gate pending before tagging `contract-v2.1.0` and flipping to ✅. |
 | Phase 2 — Web / Infra / Async | ⬜ | Starts after 1.7; groomed for capstone-oriented execution (demoability + reproducibility). |
 | Phase 3 — Hardening / Eval | ⬜ | |
 
@@ -69,12 +69,13 @@ Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.
 - ✅ **1.5-DISCOVERY** (cli/): `discovery_completeness` progress meter + portfolio depth, never-block consent-respecting nudge (snooze via `cli/prefs.py`, injected "today"), backward return loop. Stale-docstring (#9) resolved.
 - 🟡 Exit demo (engine built; CLI surfacing partial — now tracked as **Phase 1.7**): stale resume → timeline → discovery adds roles → grilling → readiness nudge → resume backward. Helpers/nodes are tested; full end-to-end CLI wiring of resume-file upload + session-resume moves to Phase 1.7.
 
-## Phase 1.7 — Integration closure (deferred Phase-1 work)
-- ⬜ Wire resume-file upload into `grill` (`main.py` / `cli/app.py`) via `tools.resume_parser.parse_resume`
-- ⬜ Implement true session resume semantics for return-loop continuation (load prior state, avoid last-write-wins clobber)
-- ⬜ Wire `discovery_turn_node` into the main graph / CLI path
-- ⬜ Move `FakeFirestoreClient` and `_Fake*` hierarchy from `database/firestore_session.py` into `tests/`
-- ⬜ Exit: run a full resumed-session demo from uploaded resume file through discovery/grilling with `make check` green
+## Phase 1.7 — Integration closure (deferred Phase-1 work)  *(built; review in progress)*
+- ✅ **1.7-A** resume-file upload wired into `grill` (`main.py --resume-file`; `cli/app.py` `guess_resume_mime`/`parse_resume_file` → `parse_resume` → `start(work_timeline=…)`). Parse failures surfaced; bytes never persisted; no-file path unchanged.
+- ✅ **1.7-B** true session resume: `cli.session.get_session_state_if_exists` (load-before-create); `--session-id` = resume intent (loads prior state, no clobber); missing id → user-safe message.
+- ✅ **1.7-C** `discovery_turn_node` wired into the main graph + router branch (contract **v2.1.0**, additive `coverage_confirmed`; fires once when a coverage boundary is unconfirmed; terminal-per-turn, no spin).
+- ✅ **1.7-D** `FakeFirestoreClient` + `_Fake*` moved to `tests/fakes.py`; prod module exposes no test doubles.
+- 🟡 Exit demo: resume-file → timeline → discovery turn (in-graph) → backward grilling → resume same session id → tailor (never gated). Unit/integration tested; one scripted end-to-end runbook remains for the capstone (Phase 2 polish).
+- ⬜ **Tag `contract-v2.1.0`** after Sonnet + Copilot review PASS.
 
 ## Phase 2 — Web, Infra, Async
 - ⬜ `main.py` Streamlit path — dashboard + pending-action surface (incl. progressive-discovery login nudge, consent-respecting)
