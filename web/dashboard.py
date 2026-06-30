@@ -113,9 +113,9 @@ def render_dashboard(view: DashboardView, *, st: _StLike) -> None:
     st.subheader("Your portfolio")
     st.write(f"Tracked applications: {view.application_count}")
 
-    # Entry points — ALWAYS available (applying/tailoring is never blocked).
+    # Entry points — ALWAYS rendered unconditionally (applying/tailoring is
+    # never blocked). The can_* view flags document this invariant (asserted in
+    # tests); they intentionally do NOT gate rendering here.
     st.subheader("Actions")
-    if view.can_start_grill:
-        st.button("Start / continue grilling")
-    if view.can_tailor:
-        st.button("Tailor a resume")
+    st.button("Start / continue grilling")
+    st.button("Tailor a resume")

@@ -65,6 +65,7 @@ module "scheduler" {
   job_name                      = "${var.name_prefix}-pending-action-sweep"
   schedule                      = var.sweep_schedule
   target_uri                    = "${module.cloud_run.service_uri}/jobs/pending-action-sweep"
+  cloud_run_service_name        = module.cloud_run.service_name
   invoker_service_account_email = module.cloud_run.service_account_email
 }
 

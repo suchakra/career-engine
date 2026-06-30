@@ -161,6 +161,12 @@ class TestRenderDashboard:
         render_dashboard(self._view(show_nudge=True, pending=[]), st=st)
         assert "Tailor a resume" in st.buttons
 
+    def test_grill_entry_point_always_rendered_even_with_nudge(self) -> None:
+        """Grilling is never gated either — the entry point shows even with the nudge."""
+        st = FakeSt()
+        render_dashboard(self._view(show_nudge=True, pending=[]), st=st)
+        assert "Start / continue grilling" in st.buttons
+
     def test_pending_action_rendered(self) -> None:
         """A pending-action item is written to the dashboard."""
         st = FakeSt()

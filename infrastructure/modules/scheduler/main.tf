@@ -44,9 +44,24 @@ variable "target_uri" {
   description = "Cloud Run sweep endpoint to invoke (e.g. <service_uri>/jobs/pending-action-sweep)."
 }
 
+variable "cloud_run_service_name" {
+  type        = string
+  description = "Name of the Cloud Run service to invoke (for the run.invoker binding)."
+}
+
 variable "invoker_service_account_email" {
   type        = string
   description = "Service account whose OIDC token authenticates the invocation."
+}
+
+# Without roles/run.invoker the OIDC token is rejected (HTTP 403) and the sweep
+# never fires. Grant the invoker SA permission to invoke exactly this service.
+resource "google_cloud_run_v2_service_iam_member" "scheduler_invoker" {
+  project  = var.project_id
+  location = var.region
+  name     = var.cloud_run_service_name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${var.invoker_service_account_email}"
 }
 
 resource "google_cloud_scheduler_job" "pending_action_sweep" {

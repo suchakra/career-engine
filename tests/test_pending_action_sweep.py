@@ -85,9 +85,16 @@ class TestSweepWorkspace:
 class _FakeStore:
     """In-memory WorkspaceStore; one user can be configured to fail on load."""
 
-    def __init__(self, workspaces: dict[str, UserWorkspace], *, failing: str | None = None) -> None:
+    def __init__(
+        self,
+        workspaces: dict[str, UserWorkspace],
+        *,
+        failing: str | None = None,
+        failing_save: str | None = None,
+    ) -> None:
         self._ws = workspaces
         self._failing = failing
+        self._failing_save = failing_save
         self.saved: dict[str, UserWorkspace] = {}
 
     def list_user_ids(self) -> list[str]:
@@ -99,6 +106,8 @@ class _FakeStore:
         return self._ws[user_id]
 
     def save(self, user_id: str, workspace: UserWorkspace) -> None:
+        if user_id == self._failing_save:
+            raise RuntimeError("simulated save failure")
         self.saved[user_id] = workspace
 
 
@@ -136,6 +145,20 @@ class TestRunSweep:
         assert report.pending_actions_created == 1
         assert "good" in store.saved
         assert any("bad" in line for line in logs)
+
+    def test_save_failure_counted_not_credited(self) -> None:
+        """A save() failure isolates the user and does not credit a created action."""
+        logs: list[str] = []
+        store = _FakeStore(
+            {"u": UserWorkspace(applications=[_applied("2026-06-01")])},
+            failing_save="u",
+        )
+        report = run_sweep(store=store, today=TODAY, log=logs.append)
+        assert report.users_failed == 1
+        assert report.users_processed == 0
+        assert report.pending_actions_created == 0
+        assert "u" not in store.saved
+        assert any("u" in line for line in logs)
 
     def test_rerun_idempotent_across_orchestration(self) -> None:
         """Running the orchestration twice does not duplicate markers."""

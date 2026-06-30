@@ -158,6 +158,9 @@ def run_sweep(
             processed += 1
         except Exception as exc:  # isolate per-user failure
             failed += 1
+            # user_id is an opaque Firebase UID (not PII). NOTE: when the
+            # optional LLM follow-up path is added, scrub exception text before
+            # logging — Firestore/Secret Manager errors can echo resource paths.
             log(f"pending-action sweep failed for user {user_id}: {type(exc).__name__}: {exc}")
 
     return SweepReport(

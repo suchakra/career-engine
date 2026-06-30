@@ -81,3 +81,18 @@ Prod is driven directly (guard rails on): `terraform -chdir=infrastructure/envs/
 
 > CI note: only `make tf-check` runs in this repo's gates (no credentials in CI).
 > `plan`/`apply` are operator steps in a credentialed environment.
+
+## Access / auth posture (handoff for Phase 2B)
+
+The Cloud Run service uses `ingress = INGRESS_TRAFFIC_ALL` but **no `allUsers`
+`run.invoker` binding** — so it requires authentication for every request
+(correct security posture). Consequences:
+
+- The Cloud Scheduler sweep works because the scheduler module grants the
+  invoker SA `roles/run.invoker` (OIDC). 
+- A **browser hitting the service URL directly will get HTTP 403.** Reaching the
+  Streamlit app from a browser needs Identity-Aware Proxy (IAP) or a
+  Firebase-Hosting/Identity-Platform proxy — wired in **Phase 2B**. Do not add a
+  public `allUsers` invoker binding to "fix" 403s; route through authenticated
+  access instead.
+
