@@ -86,6 +86,40 @@ async def read_state(
     return CareerEngineState.model_validate(session.state)
 
 
+async def get_session_state_if_exists(
+    *,
+    session_service: BaseSessionService,
+    app_name: str,
+    user_id: str,
+    session_id: str,
+) -> CareerEngineState | None:
+    """Return the persisted CareerEngineState for a session, or None if absent.
+
+    The load-before-create primitive behind true session resume (Phase 1.7-B):
+    callers use this to reuse an existing session instead of blindly calling
+    ``create_session`` (which is last-write-wins and would clobber prior
+    progress).  Unlike :func:`read_state`, a missing session is NOT an error —
+    it returns ``None`` so a brand-new session can start cleanly.
+
+    Args:
+        session_service: The ADK session service.
+        app_name: ADK application name.
+        user_id: The authenticated user's stable platform ID.
+        session_id: The session to look up.
+
+    Returns:
+        The validated CareerEngineState if the session exists, else ``None``.
+    """
+    session = await session_service.get_session(
+        app_name=app_name,
+        user_id=user_id,
+        session_id=session_id,
+    )
+    if session is None:
+        return None
+    return CareerEngineState.model_validate(session.state)
+
+
 async def read_raw_state(
     *,
     session_service: BaseSessionService,

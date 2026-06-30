@@ -346,6 +346,20 @@ class DiscoverySession:
             session_id=self._session_id,
         )
 
+    async def resume_state(self) -> CareerEngineState | None:
+        """Return this session's persisted state if it exists, else None.
+
+        Used by the resume path (Phase 1.7-B) to reuse an existing session
+        instead of clobbering it with a fresh ``start``.  Returns ``None`` when
+        no session has been persisted under this id.
+        """
+        return await session_helpers.get_session_state_if_exists(
+            session_service=self._svc,
+            app_name=self._app_name,
+            user_id=self._user_id,
+            session_id=self._session_id,
+        )
+
     async def render_resume_pdf(self, output_path: pathlib.Path) -> pathlib.Path:
         """Render the finalised master resume to a PDF file.
 
@@ -663,20 +677,36 @@ def run_interactive_session(
     print(f"\nCareerEngine — discovery session ({access_mode.value} mode)")
     print("=" * 60)
 
-    # ── Start: ingest + opening question (stamp the injected clock here) ─────
+    # ── Start or resume (stamp the injected clock here) ──────────────────────
+    # An explicit --session-id means "resume": load the persisted session and
+    # continue from where it left off rather than clobbering it (Phase 1.7-B).
+    # No --session-id means a fresh session (auto id) → ingest + opening question.
     today = _today_iso()
-    question = asyncio.run(session.start(raw_history, reference_date=today))
+    resumed = False
+    if session_id is not None:
+        existing = asyncio.run(session.resume_state())
+        if existing is None:
+            print(
+                f"\nNo saved session {session_id!r} was found"
+                + (" (Firestore session storage is required to resume across runs)."
+                   if not use_firestore else ".")
+                + "\nStart a new session by omitting --session-id.",
+                file=sys.stderr,
+            )
+            return
+        resumed = True
+        question = existing.current_question
+    else:
+        question = asyncio.run(session.start(raw_history, reference_date=today))
 
     # ── Progressive discovery: progress meter + consent-respecting nudge ─────
     launch_state = asyncio.run(session.current_state())
     print(render_progress_meter(launch_state))
     emit_nudge_if_needed(launch_state, today=today)
 
-    # ── Return loop (resume intent only): offer to continue older roles ──────
-    # Only when the user explicitly asked to resume a session (--session-id) and
-    # there is older pending work behind the frontier.  Applying is never gated;
-    # declining proceeds straight into the normal loop.
-    if session_id is not None and has_resumable_work(launch_state):
+    # ── Return loop (resumed sessions only): offer to continue older roles ───
+    # Applying is never gated; declining proceeds straight into the normal loop.
+    if resumed and has_resumable_work(launch_state):
         choice = input(
             "\nPick up where you left off on older roles? [Y/n]: "
         ).strip().lower()
