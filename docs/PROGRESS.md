@@ -3,7 +3,7 @@
 > Single source of truth for **what's done vs. pending**. Update this at the end of every work
 > session / sub-agent run. Keep entries terse. Legend: ✅ done · 🟡 in progress · ⬜ not started · 🚫 blocked.
 
-Last updated: **2026-06-30** — *Phase 1.5 COMPLETE; **Phase 1.7 COMPLETE** — B/A/D/C all landed, 339 tests green. Contract **v2.1.0** (additive: `coverage_confirmed`). Sonnet PASS + Copilot PASS (REVIEW.md). Next: tag `contract-v2.1.0`, push, Phase 2.*
+Last updated: **2026-06-30** — *Phase 1.7 DONE (tagged `contract-v2.1.0`, pushed). **Phase 2 in progress:** 2C (infra) + contract **v2.2.0** (`UserWorkspace`/`Application`) + 2D (sweep) + 2A (dashboard) built, **363 tests** green. Sonnet review running; then Copilot gate + push. Remaining: 2B (web auth), UserWorkspace Firestore repo, 2E (capstone pkg).*
 
 ---
 
@@ -16,7 +16,7 @@ Last updated: **2026-06-30** — *Phase 1.5 COMPLETE; **Phase 1.7 COMPLETE** —
 | Phase 1.3 — Review hardening (no contract change) | ✅ | Done; stays v1.1.x, 230 tests. Required items from [REVIEW.md §7](REVIEW.md) all merged: docs truth (#7,#8), upgrade-signal band-aid + E2E test (#1,#11), model_client errors (#4), Firestore loud-fallback (#3). Optional #6 (FakeFirestore move) now tracked in Phase 1.7. |
 | Phase 1.5 — Resume-aware + progressive discovery | ✅ | All five pieces built (contract v2.0.0, tag `contract-v2.0.0`, 317 tests). CORE (CONTRACT+GRILL+METRICS) Sonnet-built/Opus-reviewed/merged; INGEST + DISCOVERY Opus-built this session + Sonnet-reviewed PASS. Stale-docstring (#9) resolved. Deferred integration items (resume-file CLI wiring, full session-resume, discovery_turn in main graph) tracked in [HANDOFF.md](HANDOFF.md). |
 | Phase 1.7 — Integration closure (deferred Phase-1 work) | ✅ | 1.7-A resume-file CLI wiring, 1.7-B true session resume (load-before-create), 1.7-C discovery_turn graph edge (contract **v2.1.0**, additive `coverage_confirmed`), 1.7-D FakeFirestore→`tests/fakes.py`. 339 tests. Sonnet PASS + Copilot PASS; **tagged `contract-v2.1.0`, pushed.** 3 optional non-blocking polish items in [REVIEW.md](REVIEW.md) deferred to Phase 2. |
-| Phase 2 — Web / Infra / Async | 🟡 | **2C (Terraform infra baseline) built** — modules + dev/prod envs, `fmt`+`validate` green (plan needs creds), Makefile `tf-check`/`deploy`/`destroy`, README. Opus-built; review pending. Remaining: 2A (Streamlit), 2B (web auth), 2D (sweep), 2E (capstone pkg). **Note:** 2A/2D need a new application-tracking model (Application/PendingAction → ~contract v2.2.0) not yet in `schema.py` — decision pending. |
+| Phase 2 — Web / Infra / Async | 🟡 | **2C + contract v2.2.0 + 2D + 2A built** (363 tests; Sonnet review in progress). 2C Terraform infra (fmt+validate green both envs); contract v2.2.0 adds `UserWorkspace`/`Application`/`PendingAction` (additive); 2D async pending-action sweep (pure+idempotent); 2A Streamlit dashboard (view-model + injectable renderer, never gates tailoring). **Remaining:** 2B (web auth), 2E (capstone pkg); + deferred wiring: Firestore `UserWorkspace` repo (load/save for 2D/2A), streamlit auth/session load. |
 | Phase 3 — Hardening / Eval | ⬜ | |
 
 ---
@@ -77,14 +77,14 @@ Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.
 - 🟡 Exit demo: resume-file → timeline → discovery turn (in-graph) → backward grilling → resume same session id → tailor (never gated). Unit/integration tested; one scripted end-to-end runbook remains for the capstone (Phase 2 polish).
 - ⬜ **Tag `contract-v2.1.0`** after Sonnet + Copilot review PASS.
 
-## Phase 2 — Web, Infra, Async
-- ⬜ `main.py` Streamlit path — dashboard + pending-action surface (incl. progressive-discovery login nudge, consent-respecting)
-- ⬜ `auth/firebase_auth.py` — Identity Platform (web)
-- ⬜ `infrastructure/modules/*` — Cloud Run, Firestore, Artifact Registry, Secret Manager
-- ⬜ Terraform SA grant `roles/secretmanager.secretAccessor`
-- ⬜ `infrastructure/envs/{dev,prod}` + `infrastructure/README.md`
-- ⬜ `jobs/pending_action_sweep.py` + Cloud Scheduler wiring (14-day)
-- ⬜ `skills/cloud_ops/SKILL.md`
+## Phase 2 — Web, Infra, Async  *(2C/contract/2D/2A built; Sonnet review in progress)*
+- ✅ **2A** `web/` Streamlit dashboard — `main.py web` path; view-model + injectable renderer (testable without Streamlit runtime); pending-action surface + consent-respecting nudge (never gates tailoring).
+- ✅ **contract v2.2.0** `UserWorkspace` + `Application`(+`ApplicationStatus`) + `PendingAction` (additive; per-user portfolio doc distinct from session state).
+- ✅ **2C** `infrastructure/modules/*` (Cloud Run, Firestore, Artifact Registry, Secret Manager, Scheduler) + `envs/{dev,prod}` + README; Terraform SA grant `roles/secretmanager.secretAccessor` (least privilege); `make tf-check`/`deploy`/`destroy`. fmt+validate green both envs.
+- ✅ **2D** `jobs/pending_action_sweep.py` — pure+idempotent 14-day sweep over `UserWorkspace` + `WorkspaceStore` orchestration with per-user error isolation (Cloud Scheduler→Cloud Run job; wiring via 2C scheduler module).
+- ⬜ **2B** `auth/firebase_auth.py` — Identity Platform (web) auth/session bootstrap.
+- ⬜ Firestore `UserWorkspace` repository (load/save) — the real `WorkspaceStore` backing 2D + 2A; streamlit auth/session load wiring.
+- ⬜ **2E** capstone packaging — reproducible demo runbook + evidence set; `skills/cloud_ops/SKILL.md`.
 - ⬜ Exit: `make deploy` to dev; web+CLI share state; sweep flags stale apps; capstone demo runbook is reproducible
 
 ## Phase N — opportunistic value-adds (wanted; not v1-blocking)
