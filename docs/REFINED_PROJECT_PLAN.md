@@ -20,6 +20,7 @@
 | D6 | **CLI-first, then Streamlit** | Validate the ADK loop in the terminal; Streamlit is a thin, swappable frontend-for-agents. |
 | D7 | **Strict Pydantic + JSON contracts, versioned** | All boundaries typed; `CONTRACT_VERSION` stamped on every doc/message. |
 | D8 (2026-06-29) | **Resume-aware, role-based, progressive discovery** (Phase 1.5, contract v2.0.0) | Vision ingest of existing resumes; `work_timeline` of entries **replaces** pillar `active_gaps`; the gap = more entries; nudge-based (NOT gated) readiness over a trailing-5-yr window + backward-chronological return loop. See [ARCHITECTURE.md §12](ARCHITECTURE.md). |
+| D9 (2026-06-29) | **Capstone-deliverable discipline** (Google X Kaggle 5-day intensive) | Prioritize a demoable end-to-end slice, reproducible setup/gates, and evidence artifacts over speculative scope. Phase 1.7 closes integration seams before broad Phase 2 fan-out. |
 
 ---
 
@@ -57,7 +58,7 @@ pillar fields); reworks WS-A's grill loop. (No migration burden — pre-release,
   trailing-5-year **window** (not a minimum) — applying is never blocked and nobody is gated on "having 5
   years" (see [ARCHITECTURE.md §12.4/§12.6](ARCHITECTURE.md)).
 - **Contract v2.0.0:** add `work_timeline: list[Entry]`, `coverage_through`, `reference_date` (injected
-  clock); add `role_id` to `StarStory`; **replace** pillar fields (`target_competencies`/`active_gaps`/
+  clock); add `entry_id` to `StarStory`; **replace** pillar fields (`target_competencies`/`active_gaps`/
   `current_pillar`) with role-based equivalents + `grill_frontier`. `is_apply_ready` + progress meter derived.
 - **Vision ingest** — new `tools/resume_parser.py`: file/photo → multimodal Flash → `work_timeline`.
   Add a multimodal entry point to the model-client adapter. PDF + images first; DOCX later.
@@ -75,7 +76,21 @@ pillar fields); reworks WS-A's grill loop. (No migration burden — pre-release,
 missing roles → role-by-role grilling → `is_apply_ready` unlocks tailoring; returning a later session
 resumes grilling backward from the frontier.
 
-### Phase 2 — Web, Infra, Async  *(PARALLEL)*
+### Phase 1.7 — Integration closure (deferred Phase-1 work)  *(SEQUENTIAL, short hardening pass)*
+This phase is the formal home for deferred Phase-1/1.5 integration seams. It is intentionally
+small and execution-oriented so Phase 2 can fan out cleanly.
+- **1.7-A CLI resume-upload wiring:** add `--resume-file` support to `grill` and seed
+  `start(work_timeline=...)` using `tools.resume_parser.parse_resume`.
+- **1.7-B Session resume correctness:** load and resume prior state for return-loop flows instead of
+  relying on last-write-wins `create_session` semantics.
+- **1.7-C Discovery graph integration:** wire `discovery_turn_node` into the main graph/CLI path.
+- **1.7-D Persistence test hygiene:** move fake Firestore hierarchy out of production module into
+  `tests/` to keep runtime modules production-only.
+
+**Exit criteria:** user can start from a resume file, pause, resume the same session, continue backward
+discovery through the wired graph, and complete `make check` with no production test-fake classes.
+
+### Phase 2 — Web, Infra, Async  *(PARALLEL after Phase 1.7)*
 - Streamlit workspace (`main.py` web path) — dashboard, pending-action surface
 - `auth/firebase_auth.py` (Identity Platform web)
 - `infrastructure/` Terraform: Cloud Run, Firestore, Artifact Registry, Secret Manager + SA
@@ -83,7 +98,9 @@ resumes grilling backward from the frontier.
 - `jobs/pending_action_sweep.py` (14-day sweep) + scheduler wiring
 - `skills/cloud_ops/SKILL.md`
 
-**Exit criteria:** deploy to `dev` via `make deploy`; web + CLI share state; sweep flags stale apps.
+**Exit criteria:** deploy to `dev` via `make deploy`; web + CLI share state; sweep flags stale apps;
+capstone demo path (resume upload → grill/discovery continuation → tailoring → pending-action surface)
+is reproducible in one scripted runbook.
 
 ### Phase 3 — Hardening & Eval  *(PARALLEL)*
 - `evaluation/user_simulator.py` + `test_config.json` (vague-applicant adversarial scenarios)

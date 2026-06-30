@@ -1,21 +1,21 @@
 # CareerEngine — Session Handoff / Resume Point
 
 ## 👉 YOU ARE HERE (updated 2026-06-29)
-**`master`, Phase 1.5 COMPLETE (contract v2.0.0). Two unpushed commits — review (Copilot) & push; next is Phase 2.**
+**`master`, Phase 1.5 COMPLETE (contract v2.0.0). Two unpushed commits — review (Copilot) & push; next is Phase 1.7 then Phase 2.**
 Phase 0 + Phase 1 + Phase 1.3 + **all of Phase 1.5** are built (**317 tests**; `make check` green: ruff +
 mypy --strict + pytest). CORE (`1.5-CONTRACT`+`1.5-GRILL`+`1.5-METRICS`) was Sonnet-built/Opus-reviewed/merged
 (tag **`contract-v2.0.0`**). **INGEST + DISCOVERY** were built directly by Opus this session (token-efficient
 path, user-approved) and **Sonnet-reviewed PASS** (0 must-fix; 4 nits applied). A Copilot review is planned.
 - **Two local commits not yet pushed:** `feat(1.5): INGEST …`, `feat(1.5): DISCOVERY …`. Tree is clean.
-- **NEXT (recommended):** **Phase 2** (web/infra/async) per [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md).
-  Before/alongside Phase 2, optionally close the Phase-1.5 **deferred integration items** below.
-- **Phase 1.5 deferred integration items** (engine + helpers are built and tested; CLI surfacing is partial):
+- **NEXT (recommended):** **Phase 1.7** (integration closure for deferred Phase-1 work), then **Phase 2**
+  (web/infra/async) per [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md).
+- **Phase 1.7 integration scope** (engine + helpers are built and tested; CLI surfacing is partial):
   1. Wire resume-file upload into the `grill` command (`main.py`/`cli/app.py`): call
      `tools.resume_parser.parse_resume(bytes, mime)` and seed `start(work_timeline=…)`. The seam exists
      (`ingest_node` consumes a pre-seeded `work_timeline`); only the CLI option + file read are missing.
   2. Full session-resume for the return loop: `run_return_loop` + `has_resumable_work` are built/tested and
-     the launch offer is gated on `--session-id`, but WS-C `create_session` is last-write-wins, so a real
-     reload of prior state isn't wired yet (depends on the Phase-2 persistence pass).
+      the launch offer is gated on `--session-id`, but WS-C `create_session` is last-write-wins; Phase 1.7
+      should add a load-before-create resume path so prior state is reused instead of clobbered.
   3. `discovery_turn_node` exists + is tested but is **not yet an edge in the main graph** — wire it into the
      CLI/graph flow when surfacing the "what have you done since?" discovery turn.
 - **To IDEATE:** read this file, then [ARCHITECTURE.md](ARCHITECTURE.md) + [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md); capture new ideas back into the docs (don't mutate a spec that's mid-build — version-gate instead).
@@ -37,9 +37,9 @@ path, user-approved) and **Sonnet-reviewed PASS** (0 must-fix; 4 nits applied). 
 - All Phase-0/Phase-1/Phase-1.5-CORE worktrees pruned. Phase 1.3 and Phase 1.5 INGEST+DISCOVERY were done
   in-place on `master`.
 
-## NEXT: Phase 2 (web / infra / async)
-Phase 1.5 is done. See the deferred Phase-1.5 integration items in the "YOU ARE HERE" banner above —
-optionally close them before/alongside Phase 2. Phase 2 proceeds per
+## NEXT: Phase 1.7 then Phase 2 (web / infra / async)
+Phase 1.5 is done. Phase 1.7 closes the deferred integration seams listed in the "YOU ARE HERE"
+banner above. After that, Phase 2 proceeds per
 [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md):
 - **Phase 2:** Streamlit web workspace (reuse the `cli/` runtime seam), `infrastructure/` Terraform
   (Cloud Run, Firestore, Artifact Registry, Secret Manager + SA `secretAccessor`, Cloud Scheduler;

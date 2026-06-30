@@ -3,7 +3,7 @@
 > Single source of truth for **what's done vs. pending**. Update this at the end of every work
 > session / sub-agent run. Keep entries terse. Legend: ✅ done · 🟡 in progress · ⬜ not started · 🚫 blocked.
 
-Last updated: **2026-06-29** — *Phase 0 + Phase 1 + Phase 1.3 + **Phase 1.5 (COMPLETE)** built. Contract **v2.0.0** (tag `contract-v2.0.0`), **317 tests**. All five 1.5 pieces landed: CONTRACT+GRILL+METRICS (CORE), INGEST (vision parser), DISCOVERY (nudge/meter/return-loop). Next: Phase 2 (web/infra/async). See [HANDOFF.md](HANDOFF.md) for deferred integration items.*
+Last updated: **2026-06-29** — *Phase 0 + Phase 1 + Phase 1.3 + **Phase 1.5 (COMPLETE)** built. Contract **v2.0.0** (tag `contract-v2.0.0`), **317 tests**. All five 1.5 pieces landed: CONTRACT+GRILL+METRICS (CORE), INGEST (vision parser), DISCOVERY (nudge/meter/return-loop). Next: **Phase 1.7** (integration closure), then Phase 2 (web/infra/async).*
 
 ---
 
@@ -13,9 +13,10 @@ Last updated: **2026-06-29** — *Phase 0 + Phase 1 + Phase 1.3 + **Phase 1.5 (C
 | Planning & architecture | ✅ | ARCHITECTURE.md, REFINED_PROJECT_PLAN.md, this file, AGENT_EXECUTION_PROMPT.md |
 | Phase 0 — Contract Freeze | ✅ | Sonnet-built, Opus-reviewed (1 round: dead model IDs + Free-mode grilling fixed). Frozen, tag `contract-v1.0.0`. |
 | Phase 1 — Core loop (CLI) | ✅ | WS-A/B/C/D + integration all merged & Opus-PASS. Turn-based CLI discovery loop runs end-to-end → PDF. 228 tests. Contract v1.1.0. |
-| Phase 1.3 — Review hardening (no contract change) | ✅ | Done; stays v1.1.x, 230 tests. Required items from [REVIEW.md §7](REVIEW.md) all merged: docs truth (#7,#8), upgrade-signal band-aid + E2E test (#1,#11), model_client errors (#4), Firestore loud-fallback (#3). Optional #6 (FakeFirestore move) DEFERRED to Phase 2. |
+| Phase 1.3 — Review hardening (no contract change) | ✅ | Done; stays v1.1.x, 230 tests. Required items from [REVIEW.md §7](REVIEW.md) all merged: docs truth (#7,#8), upgrade-signal band-aid + E2E test (#1,#11), model_client errors (#4), Firestore loud-fallback (#3). Optional #6 (FakeFirestore move) now tracked in Phase 1.7. |
 | Phase 1.5 — Resume-aware + progressive discovery | ✅ | All five pieces built (contract v2.0.0, tag `contract-v2.0.0`, 317 tests). CORE (CONTRACT+GRILL+METRICS) Sonnet-built/Opus-reviewed/merged; INGEST + DISCOVERY Opus-built this session + Sonnet-reviewed PASS. Stale-docstring (#9) resolved. Deferred integration items (resume-file CLI wiring, full session-resume, discovery_turn in main graph) tracked in [HANDOFF.md](HANDOFF.md). |
-| Phase 2 — Web / Infra / Async | ⬜ | |
+| Phase 1.7 — Integration closure (deferred Phase-1 work) | ⬜ | Formalized from Phase 1.5 deferred seams: resume-file CLI wiring, true session resume for return loop, discovery_turn graph edge, and FakeFirestore move to tests. Groomed launch specs in [GROOMING.md](GROOMING.md). |
+| Phase 2 — Web / Infra / Async | ⬜ | Starts after 1.7; groomed for capstone-oriented execution (demoability + reproducibility). |
 | Phase 3 — Hardening / Eval | ⬜ | |
 
 ---
@@ -56,17 +57,24 @@ Stabilize the foundation before launching 1.5 builders. Triage + rationale: [REV
 - ✅ **#1 band-aid** upgrade signal: `TurnResult.from_state` now reads the real `_upgrade_required` side-channel via new `cli.session.read_raw_state` (drops the dead `current_question` string-match) and surfaces the signal's `user_message`
 - ✅ **#11** added CLI→workflow upgrade-required E2E assertions in `tests/test_integration.py` (`TestUpgradeRequiredReachesCli`: shortfall → `upgrade_required=True`; normal turn → `False`)
 - ✅ **#4** `integration/model_client.py` `generate()` no longer swallows transport errors into `""` — exceptions propagate (matches the default factory)
-- ✅ **#3** Firestore: in-memory fallback is now LOUD (stderr warning naming the failure + "nothing will be persisted"); env-aware hard-stop policy still deferred to Phase 2 (decision: [REVIEW.md §5](REVIEW.md))
-- ⬜ **#6** *(optional — DEFERRED to Phase 2 / next Firestore touch)* move `FakeFirestoreClient` + its `_Fake*` helper hierarchy out of `database/firestore_session.py` into `tests/`; low value now, per [REVIEW.md §7.3](REVIEW.md)
+- ✅ **#3** Firestore: in-memory fallback is now LOUD (stderr warning naming the failure + "nothing will be persisted"); env-aware hard-stop policy remains a hosted-path decision in Phase 2 (decision: [REVIEW.md §5](REVIEW.md))
+- ⬜ **#6** *(optional — now tracked in Phase 1.7)* move `FakeFirestoreClient` + its `_Fake*` helper hierarchy out of `database/firestore_session.py` into `tests/`; low value now, per [REVIEW.md §7.3](REVIEW.md)
 
 ## Phase 1.5 — Resume-aware ingestion & progressive discovery  *(contract v2.0.0)*
-Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) · **groomed prompts + status: [GROOMING.md](GROOMING.md)**. **CORE merged; 2 follow-ups remain.**
+Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) · **groomed prompts + status: [GROOMING.md](GROOMING.md)**. **All 1.5 build pieces merged; integration closure moves to Phase 1.7.**
 - ✅ **CONTRACT** v2.0.0: `work_timeline: list[Entry]`, `coverage_through`, `reference_date` (injected clock), `grill_frontier`; `entry_id` on `StarStory`; pillar fields removed; pure helpers `discovery_completeness` / `recent_window_complete`. Tag `contract-v2.0.0`.
 - ✅ **GRILL**: entry-based grill loop (backward-chronological, jumpable frontier), discovery turn (confirm coverage, append discovered entries), skip already-quantified, ~15-yr soft horizon → summarized, 5-turn brake + HITL preserved. Minimal entry-based `ingest_node` seam (INGEST upgrades it).
 - ✅ **METRICS**: `_contains_real_metric` extended (users/downloads/stars, team size, rank, dataset scale, citations, GPA) with per-pattern tests; eng patterns retained.
 - ✅ **1.5-INGEST** `tools/resume_parser.py` — vision ingest (PDF/photo → multimodal Flash → timeline); `GeminiModelClient.generate_multimodal` + `MediaPart`; `ingest_node` derives `coverage_through` + handles vision-preseeded timelines. Bytes are PII (never persisted). PDFs sent natively (no rasterization dep). Note: SSRF guard (#2) is a URL-fetch concern — N/A to file/byte ingest; revisit if a URL-based resume fetch is added.
 - ✅ **1.5-DISCOVERY** (cli/): `discovery_completeness` progress meter + portfolio depth, never-block consent-respecting nudge (snooze via `cli/prefs.py`, injected "today"), backward return loop. Stale-docstring (#9) resolved.
-- 🟡 Exit demo (engine built; CLI surfacing partial — see HANDOFF deferred items): stale resume → timeline → discovery adds roles → grilling → readiness nudge → resume backward. Helpers/nodes are tested; full end-to-end CLI wiring of resume-file upload + session-resume is the remaining integration step.
+- 🟡 Exit demo (engine built; CLI surfacing partial — now tracked as **Phase 1.7**): stale resume → timeline → discovery adds roles → grilling → readiness nudge → resume backward. Helpers/nodes are tested; full end-to-end CLI wiring of resume-file upload + session-resume moves to Phase 1.7.
+
+## Phase 1.7 — Integration closure (deferred Phase-1 work)
+- ⬜ Wire resume-file upload into `grill` (`main.py` / `cli/app.py`) via `tools.resume_parser.parse_resume`
+- ⬜ Implement true session resume semantics for return-loop continuation (load prior state, avoid last-write-wins clobber)
+- ⬜ Wire `discovery_turn_node` into the main graph / CLI path
+- ⬜ Move `FakeFirestoreClient` and `_Fake*` hierarchy from `database/firestore_session.py` into `tests/`
+- ⬜ Exit: run a full resumed-session demo from uploaded resume file through discovery/grilling with `make check` green
 
 ## Phase 2 — Web, Infra, Async
 - ⬜ `main.py` Streamlit path — dashboard + pending-action surface (incl. progressive-discovery login nudge, consent-respecting)
@@ -76,7 +84,7 @@ Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.
 - ⬜ `infrastructure/envs/{dev,prod}` + `infrastructure/README.md`
 - ⬜ `jobs/pending_action_sweep.py` + Cloud Scheduler wiring (14-day)
 - ⬜ `skills/cloud_ops/SKILL.md`
-- ⬜ Exit: `make deploy` to dev; web+CLI share state; sweep flags stale apps
+- ⬜ Exit: `make deploy` to dev; web+CLI share state; sweep flags stale apps; capstone demo runbook is reproducible
 
 ## Phase N — opportunistic value-adds (wanted; not v1-blocking)
 - ⬜ Outcome learning, positive-reinforcement only — per user + per job type, learn what résumé format/wording correlated with reaching interview; transparent; opt-in anonymized global "what works" DB; reuses §8 async infra — [ARCHITECTURE.md §8.1](ARCHITECTURE.md)
@@ -104,7 +112,7 @@ Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.
 - 2026-06-29 — **Contract amended 1.1.0 → 2.0.0** (BREAKING MAJOR; user-approved, no migration — no production data). Tag `contract-v2.0.0`. Added `Entry` model + `ExperienceType`/`EntryStatus` enums; `CareerEngineState` gains `work_timeline`/`coverage_through`/`reference_date`/`grill_frontier` and **loses** pillar fields (`target_competencies`, `active_gaps`, `current_pillar`); `StarStory` gains `entry_id`. Pure helpers `discovery_completeness`/`recent_window_complete` (nudge/meter only; gate nothing; use injected `reference_date`, never `datetime.now()`).
 - 2026-06-29 — **Phase 1.5 COMPLETE** (INGEST + DISCOVERY landed; 285→317 tests). **Process note:** to conserve session budget, INGEST + DISCOVERY were built directly by Opus (inverting the usual Sonnet-builds rule) and then **Sonnet-reviewed** (verdict PASS, 0 must-fix; 4 optional nits all applied: enum-vs-string-literal, stronger adapter assertion, `_apply_entry_status_rules` preserves prior progress, test docstring accuracy). A Copilot review is also planned by the user. INGEST = vision parser + multimodal adapter (PDFs native, no rasterization dep; bytes are PII, never persisted). DISCOVERY = CLI-only nudge/meter/return-loop + `cli/prefs.py` snooze (UI state kept off `CareerEngineState`). Deferred integration items recorded in HANDOFF.
 - 2026-06-29 — **Phase 1.5 CORE COMPLETE** (CONTRACT+GRILL+METRICS, one Sonnet worktree, Opus-PASS, merged `--no-ff`; 230→285 tests). Grill loop is now entry-based (backward-chronological, jumpable frontier), with discovery turn, already-quantified skip, ~15-yr soft horizon, and extended metric patterns; 5-turn brake + HITL preserved. Reviewer notes (non-blocking): `discovery_completeness` counts SKIPPED as done; `recent_window_complete` treats DOCUMENTED as incomplete (stricter than spec) — both defensible. Remaining 1.5: INGEST ∥ DISCOVERY.
-- 2026-06-29 — **Phase 1.3 hardening COMPLETE** (stays contract v1.1.x; 228→230 tests). Merged #1 (upgrade-signal band-aid via `read_raw_state` + `TurnResult.upgrade_message`), #11 (CLI upgrade-required E2E test), #4 (model_client errors propagate, no `""` swallow), #3 (loud Firestore in-memory fallback). Optional #6 (FakeFirestore move) deferred to Phase 2 — moving it means relocating the whole `_Fake*` hierarchy; low value until the next Firestore touch. Root-cause fixes (#1b typed event, #2 SSRF, #9 stale docstring) remain folded into Phase 1.5 per the triage.
+- 2026-06-29 — **Phase 1.3 hardening COMPLETE** (stays contract v1.1.x; 228→230 tests). Merged #1 (upgrade-signal band-aid via `read_raw_state` + `TurnResult.upgrade_message`), #11 (CLI upgrade-required E2E test), #4 (model_client errors propagate, no `""` swallow), #3 (loud Firestore in-memory fallback). Optional #6 (FakeFirestore move) now carried into Phase 1.7 — moving it means relocating the whole `_Fake*` hierarchy; low value until the next Firestore touch. Root-cause fixes (#1b typed event, #2 SSRF, #9 stale docstring) remain folded into Phase 1.5 per the triage.
 
 ## Blockers / open questions
 - ⬜ Confirm exact `google-adk` 2.0 module/import names against the installed package → **RESOLVED** (see ADK deviations below).
