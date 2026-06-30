@@ -44,6 +44,7 @@ The ADK Workflow graph (discovery_graph.py) always runs from START on every
 
 from __future__ import annotations
 
+import mimetypes
 import pathlib
 import sys
 import uuid
@@ -68,8 +69,53 @@ from schema import (
     recent_window_complete,
 )
 from tools.pdf_renderer import render_pdf
+from tools.resume_parser import ParseError, parse_resume
 from workflows.discovery_graph import build_runner
 from workflows.nodes import set_model_client_factory
+
+# ── Resume-file ingestion (Phase 1.7-A) ───────────────────────────────────────
+
+_RESUME_EXT_MIME: dict[str, str] = {
+    ".pdf": "application/pdf",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+}
+
+
+def guess_resume_mime(path: pathlib.Path) -> str:
+    """Best-effort MIME type for a resume file from its extension.
+
+    Falls back to ``mimetypes`` then ``application/octet-stream`` (which
+    ``parse_resume`` rejects with a clear ParseError).
+    """
+    mime = _RESUME_EXT_MIME.get(path.suffix.lower())
+    if mime:
+        return mime
+    guessed, _ = mimetypes.guess_type(str(path))
+    return guessed or "application/octet-stream"
+
+
+def parse_resume_file(path: pathlib.Path, *, client: GeminiModelClient) -> list[Entry]:
+    """Read a resume file and parse it into a work_timeline (Phase 1.7-A).
+
+    The raw bytes are read here at the CLI boundary, passed straight to the
+    vision parser, and never stored — only the returned Entries persist.
+
+    Args:
+        path: Path to a PDF or image resume file.
+        client: The resolved multimodal model client.
+
+    Returns:
+        The parsed list of Entry objects.
+
+    Raises:
+        ParseError: if the file is empty, an unsupported type, or unparseable.
+        OSError: if the file cannot be read.
+    """
+    data = path.read_bytes()
+    return parse_resume(data, guess_resume_mime(path), client=client)
 
 # ── Runner / session assembly ─────────────────────────────────────────────────
 
@@ -646,20 +692,25 @@ def run_interactive_session(
     output_pdf: pathlib.Path | None = None,
     session_id: str | None = None,
     use_firestore: bool = False,
+    resume_file: pathlib.Path | None = None,
 ) -> None:
     """Run a full interactive discovery session in the terminal.
 
     Implements the CLI grill loop:
-    1. Ingest raw history.
+    1. Ingest raw history (or a parsed resume file, if ``resume_file`` is given).
     2. Print each question; read the user's answer from stdin.
     3. At the 5-turn checkpoint, print the summary and ask for confirmation.
     4. On COMPLETE, render a PDF if ``output_pdf`` is provided.
 
     Args:
-        raw_history: Raw career history text (may be multi-line).
+        raw_history: Raw career history text (may be multi-line or empty when a
+            resume file is supplied).
         output_pdf: Optional path to write the final PDF resume.
-        session_id: Optional caller-supplied session ID.
+        session_id: Optional caller-supplied session ID (treated as resume intent).
         use_firestore: If ``True``, use Firestore for session persistence.
+        resume_file: Optional PDF/image resume to vision-parse and seed the
+            timeline from (fresh sessions only).  Parse failures are surfaced
+            and the session continues from text instead of crashing.
     """
     import asyncio
 
@@ -697,7 +748,22 @@ def run_interactive_session(
         resumed = True
         question = existing.current_question
     else:
-        question = asyncio.run(session.start(raw_history, reference_date=today))
+        # Fresh session: optionally seed the timeline from a vision-parsed resume.
+        seed_timeline: list[Entry] | None = None
+        if resume_file is not None:
+            try:
+                seed_timeline = parse_resume_file(resume_file, client=client)
+                print(f"Parsed {len(seed_timeline)} entr(y/ies) from {resume_file.name}.")
+            except (ParseError, OSError) as exc:
+                print(
+                    f"\nCouldn't read resume {resume_file.name!r}: {exc}\n"
+                    "Continuing without it — type your career history when prompted.",
+                    file=sys.stderr,
+                )
+                seed_timeline = None
+        question = asyncio.run(
+            session.start(raw_history, reference_date=today, work_timeline=seed_timeline)
+        )
 
     # ── Progressive discovery: progress meter + consent-respecting nudge ─────
     launch_state = asyncio.run(session.current_state())

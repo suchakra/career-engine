@@ -46,6 +46,13 @@ def cli() -> None:
     help="Optional path for the rendered PDF resume.",
 )
 @click.option(
+    "--resume-file",
+    "-r",
+    type=click.Path(exists=True, readable=True, path_type=pathlib.Path),
+    default=None,
+    help="Path to an existing resume (PDF/PNG/JPG/WEBP) to vision-ingest as your starting timeline.",
+)
+@click.option(
     "--session-id",
     "-s",
     default=None,
@@ -60,6 +67,7 @@ def cli() -> None:
 def grill(
     history_file: pathlib.Path | None,
     output_pdf: pathlib.Path | None,
+    resume_file: pathlib.Path | None,
     session_id: str | None,
     firestore: bool,
 ) -> None:
@@ -81,19 +89,22 @@ def grill(
     from cli.app import run_interactive_session
 
     # ── Resolve raw history text ──────────────────────────────────────────────
+    # A resume file is itself a history source, so text is optional when given.
     if history_file:
         raw_history = history_file.read_text(encoding="utf-8")
     elif not sys.stdin.isatty():
         raw_history = sys.stdin.read()
+    elif resume_file is not None:
+        raw_history = ""
     else:
         click.echo(
-            "No career history provided.  Use --history-file or pipe text to stdin.",
+            "No career history provided.  Use --resume-file, --history-file, or pipe text to stdin.",
             err=True,
         )
         sys.exit(1)
 
-    if not raw_history.strip():
-        click.echo("Career history is empty.  Provide some text to analyse.", err=True)
+    if resume_file is None and not raw_history.strip():
+        click.echo("Career history is empty.  Provide some text or a --resume-file.", err=True)
         sys.exit(1)
 
     # ── Delegate to CLI app ───────────────────────────────────────────────────
@@ -102,6 +113,7 @@ def grill(
         output_pdf=output_pdf,
         session_id=session_id,
         use_firestore=firestore,
+        resume_file=resume_file,
     )
 
 
