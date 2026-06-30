@@ -516,14 +516,9 @@ def discovery_turn_node(state: CareerEngineState) -> CareerEngineState:
             )
             new_entries.append(entry)
 
-        # Determine coverage_through from existing timeline
-        coverage = state.coverage_through
-        if not coverage and state.work_timeline:
-            # Default to the latest end_date in the timeline
-            for e in state.work_timeline:
-                if e.end_date:
-                    coverage = e.end_date
-                    break
+        # Determine coverage_through from existing timeline (ingest_node usually
+        # sets it; fall back to the latest end_date for consistency).
+        coverage = state.coverage_through or _latest_end_date(state.work_timeline)
 
         new_timeline = list(state.work_timeline) + new_entries
         new_frontier = state.grill_frontier or _next_frontier(new_timeline, "")
@@ -561,9 +556,16 @@ def discovery_turn_node(state: CareerEngineState) -> CareerEngineState:
             system=DISCOVERY_SYSTEM_PROMPT,
             user=question_context,
         )
+        # Defensive fallback: never surface an empty question.  An empty
+        # current_question would stall the turn-based CLI loop (it advances on a
+        # missing question); a concrete prompt keeps the discovery turn live even
+        # if the model returns nothing.
+        question = question_text.strip() or (
+            "What have you been working on since your resume was last updated?"
+        )
         return state.model_copy(
             update={
-                "current_question": question_text.strip(),
+                "current_question": question,
             }
         )
 

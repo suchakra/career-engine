@@ -8,10 +8,15 @@ start cleanly), and prior grill progress / frontier continuity survives.
 from __future__ import annotations
 
 from typing import cast
+from unittest.mock import MagicMock
 
+import pytest
 from google.adk.sessions import BaseSessionService, InMemorySessionService
 
+import cli.app as app
 from cli.session import create_session, get_session_state_if_exists
+from config import AccessMode
+from integration.model_client import GeminiModelClient
 from schema import (
     CareerEngineState,
     Entry,
@@ -106,3 +111,35 @@ class TestSessionResume:
         assert loaded is not None
         assert loaded.current_phase == PhaseStatus.INGESTING
         assert loaded.work_timeline == []
+
+
+@pytest.fixture
+def _restore_nodes_client() -> object:
+    """Restore the global node client factory after a test installs one."""
+    import workflows.nodes as nodes
+
+    original = nodes._client_factory
+    yield None
+    nodes._client_factory = original
+
+
+class TestResumeCliErrorPath:
+    """run_interactive_session surfaces a user-safe error for a missing session."""
+
+    def test_missing_session_id_prints_safe_message_no_raise(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        _restore_nodes_client: object,
+    ) -> None:
+        """--session-id with no persisted state prints guidance and returns cleanly."""
+        monkeypatch.setattr(
+            app,
+            "resolve_auth_and_client",
+            lambda: ("u", AccessMode.FREE, cast(GeminiModelClient, MagicMock())),
+        )
+        # Default (in-memory) service is fresh → the session id does not exist.
+        app.run_interactive_session(raw_history="x", session_id="no-such-id")
+        err = capsys.readouterr().err
+        assert "No saved session" in err
+        assert "no-such-id" in err

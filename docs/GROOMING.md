@@ -137,7 +137,8 @@ Acceptance criteria (named tests required):
 
 DoD:
 - make check green.
-- No contract bump.
+- Contract bumped v2.0.0 → v2.1.0 (additive: `coverage_confirmed`; user-approved — the one-shot
+  discovery turn needs a state marker to record it has run; see status table note above).
 - READY FOR REVIEW with explicit regression-test list.
 ```
 
