@@ -162,5 +162,21 @@ def tailor(
     )
 
 
+@cli.command()
+def web() -> None:
+    """Launch the Streamlit web workspace (dashboard).
+
+    Thin wrapper around ``streamlit run web/streamlit_app.py``. All UI logic
+    lives in ``web/`` and reuses the same session/runner core as the CLI.
+    """
+    import subprocess
+
+    app_path = pathlib.Path(__file__).parent / "web" / "streamlit_app.py"
+    subprocess.run(
+        [sys.executable, "-m", "streamlit", "run", str(app_path)],
+        check=False,
+    )
+
+
 if __name__ == "__main__":
     cli()

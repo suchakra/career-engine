@@ -559,6 +559,11 @@ _NUDGE_MESSAGE = (
 )
 
 
+def discovery_nudge_message() -> str:
+    """Return the consent-respecting discovery nudge text (shared by CLI + web)."""
+    return _NUDGE_MESSAGE
+
+
 def _today_iso() -> str:
     """Return today's date as ISO ``YYYY-MM-DD``.
 
