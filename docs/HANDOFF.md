@@ -1,7 +1,18 @@
 # CareerEngine — Session Handoff / Resume Point
 
 ## 👉 YOU ARE HERE (updated 2026-06-30)
-**`master`, Phase 1.7 DONE (Sonnet + Copilot PASS, tagged `contract-v2.1.0`, pushed). Phase 2 starting.**
+**`master`, Phase 2 IN PROGRESS — 2C (Terraform infra) built & gated; review + 2A/2D contract decision pending.**
+Phase 1.7 DONE (tagged `contract-v2.1.0`, pushed). **2C** (infra baseline) is built: `infrastructure/`
+modules (cloud_run/firestore/artifact_registry/secret_manager/scheduler) + dev/prod env roots + README +
+Makefile `tf-check`/`deploy`/`destroy`. Gates: `terraform fmt -check` + `validate` green on BOTH envs
+(`plan`/`apply` need GCP creds — operator step); `make check` still 339 green. Opus-built; not yet pushed;
+Sonnet/Copilot review pending. **terraform installed ad-hoc in the devcontainer — see memory: add it as a
+devcontainer dependency.**
+- **OPEN DECISION (blocks 2A/2D):** application-tracking data model. ARCHITECTURE §8 needs
+  `applied`/`applied_at` applications flagged as `pending_action` on the workspace doc, but `schema.py`
+  has no Application/PendingAction model. Building 2A's pending-action surface and 2D's sweep needs this
+  (additive → ~contract v2.2.0). Decide the model shape before 2A/2D.
+- **NEXT:** review/push 2C → decide the application model → 2A (Streamlit) ∥ 2B (web auth) → 2D (sweep) → 2E (capstone pkg).
 Phase 0 + Phase 1 + Phase 1.3 + Phase 1.5 + **all of Phase 1.7** are built (**339 tests**; `make check`
 green). Sonnet review verdict **PASS** (0 must-fix; 4 nits applied incl. a discovery-turn empty-question
 fallback). Phase 1.7 closed the deferred Phase-1/1.5 integration seams, all Opus-built this session +
