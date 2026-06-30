@@ -21,13 +21,13 @@ import pytest
 from config import CONTRACT_VERSION
 from database.firestore_session import (
     ContractVersionError,
-    FakeFirestoreClient,
     FirestoreSessionService,
     _check_version,
     _dict_to_state,
     _state_to_dict,
 )
 from schema import CareerEngineState, PhaseStatus, StarStory
+from tests.fakes import FakeFirestoreClient
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
