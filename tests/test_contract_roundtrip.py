@@ -26,14 +26,18 @@ from pydantic import BaseModel
 from config import CONTRACT_VERSION, AccessMode
 from schema import (
     AgentMessage,
+    Application,
+    ApplicationStatus,
     Capability,
     CareerEngineState,
     Entry,
     EntryStatus,
     ExperienceType,
+    PendingAction,
     PhaseStatus,
     StarStory,
     UpgradeRequired,
+    UserWorkspace,
     discovery_completeness,
     recent_window_complete,
 )
@@ -222,11 +226,11 @@ class TestCareerEngineStateRoundTrip:
         reconstructed = _roundtrip(original)
         assert original == reconstructed
 
-    def test_state_carries_contract_version_210(self) -> None:
-        """CareerEngineState must be stamped with CONTRACT_VERSION == '2.1.0'."""
+    def test_state_carries_contract_version_220(self) -> None:
+        """CareerEngineState must be stamped with CONTRACT_VERSION == '2.2.0'."""
         state = CareerEngineState()
         assert state.contract_version == CONTRACT_VERSION
-        assert CONTRACT_VERSION == "2.1.0"
+        assert CONTRACT_VERSION == "2.2.0"
 
     def test_coverage_confirmed_defaults_false_and_roundtrips(self) -> None:
         """coverage_confirmed (v2.1.0) defaults to False and round-trips."""
@@ -643,9 +647,9 @@ class TestCapabilityEnum:
 class TestContractVersion:
     """Tests to ensure CONTRACT_VERSION is semver-formatted and consistent."""
 
-    def test_contract_version_is_210(self) -> None:
-        """CONTRACT_VERSION must be exactly '2.1.0' (Phase 1.7-C additive bump)."""
-        assert CONTRACT_VERSION == "2.1.0"
+    def test_contract_version_is_220(self) -> None:
+        """CONTRACT_VERSION must be exactly '2.2.0' (Phase 2 application-tracking bump)."""
+        assert CONTRACT_VERSION == "2.2.0"
 
     def test_contract_version_is_semver(self) -> None:
         """CONTRACT_VERSION must be a valid semver string (MAJOR.MINOR.PATCH)."""
@@ -717,3 +721,60 @@ class TestEntryStatusEnum:
     def test_is_str_enum(self) -> None:
         """EntryStatus must be a str enum."""
         assert isinstance(EntryStatus.GRILLED, str)
+
+
+# ── Application / PendingAction / UserWorkspace (v2.2.0) ──────────────────────
+
+
+class TestWorkspaceRoundTrip:
+    """Round-trip + stamping for the v2.2.0 application-tracking models."""
+
+    def test_application_roundtrip(self) -> None:
+        """An Application round-trips with status enum and dates preserved."""
+        app = Application(
+            company="Acme",
+            job_title="Senior Engineer",
+            status=ApplicationStatus.INTERVIEW,
+            applied_on="2026-06-01",
+            jd_text="...",
+            tailored_resume_json='{"x": 1}',
+        )
+        rt = _roundtrip(app)
+        assert rt == app
+        assert rt.status is ApplicationStatus.INTERVIEW
+        assert rt.applied_on == "2026-06-01"
+
+    def test_pending_action_roundtrip(self) -> None:
+        """A PendingAction round-trips and links to an application id."""
+        pa = PendingAction(
+            application_id="app-123",
+            kind="follow_up",
+            reason="Applied 14 days ago with no response.",
+            created_on="2026-06-30",
+        )
+        rt = _roundtrip(pa)
+        assert rt == pa
+        assert rt.application_id == "app-123"
+
+    def test_userworkspace_roundtrip_with_nested(self) -> None:
+        """UserWorkspace round-trips with nested applications + pending actions."""
+        ws = UserWorkspace(
+            applications=[Application(company="Acme", applied_on="2026-06-01")],
+            pending_actions=[PendingAction(application_id="x", created_on="2026-06-30")],
+        )
+        rt = _roundtrip(ws)
+        assert rt == ws
+        assert len(rt.applications) == 1
+        assert len(rt.pending_actions) == 1
+
+    def test_userworkspace_is_contract_stamped(self) -> None:
+        """UserWorkspace carries CONTRACT_VERSION like every persisted document."""
+        assert UserWorkspace().contract_version == CONTRACT_VERSION
+
+    def test_userworkspace_holds_no_identity(self) -> None:
+        """Identity travels via context — no user_id field on the workspace model."""
+        assert "user_id" not in UserWorkspace.model_fields
+
+    def test_application_defaults_to_applied(self) -> None:
+        """A new Application defaults to APPLIED status."""
+        assert Application().status is ApplicationStatus.APPLIED

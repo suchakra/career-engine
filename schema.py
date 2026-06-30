@@ -297,6 +297,101 @@ class CareerEngineState(BaseModel):
     )
 
 
+# ── Application tracking & per-user workspace (v2.2.0) ────────────────────────
+#
+# UserWorkspace is the PER-USER portfolio document (keyed by user_id in the
+# persistence layer — identity travels via session/context, not stored here),
+# distinct from the per-discovery-session CareerEngineState. It holds tracked
+# job applications and the pending-action markers the async sweep writes (§8).
+
+
+class ApplicationStatus(StrEnum):
+    """Lifecycle status of a tracked job application."""
+
+    APPLIED = "applied"
+    INTERVIEW = "interview"
+    OFFER = "offer"
+    REJECTED = "rejected"
+    WITHDRAWN = "withdrawn"
+
+
+class Application(BaseModel):
+    """A single tracked job application (no secrets/PII beyond what the user enters)."""
+
+    model_config = ConfigDict(frozen=False)
+
+    application_id: UUID = Field(default_factory=uuid4, description="Stable identifier")
+    company: str = Field(default="", description="Employer / organisation name")
+    job_title: str = Field(default="", description="Role title applied for")
+    status: ApplicationStatus = Field(
+        default=ApplicationStatus.APPLIED,
+        description="Application lifecycle status",
+    )
+    applied_on: str = Field(
+        default="",
+        description=(
+            "ISO date (YYYY-MM-DD) the application was submitted; set at the "
+            "boundary, never via datetime.now() in logic. Drives the 14-day sweep."
+        ),
+    )
+    jd_text: str = Field(
+        default="",
+        description="Cleaned job-description text this application was tailored against",
+    )
+    tailored_resume_json: str = Field(
+        default="",
+        description="The tailored resume variant used for this application (JSON)",
+    )
+
+
+class PendingAction(BaseModel):
+    """A follow-up marker the async sweep writes onto a user's workspace (§8)."""
+
+    model_config = ConfigDict(frozen=False)
+
+    action_id: UUID = Field(default_factory=uuid4, description="Stable identifier")
+    application_id: str = Field(
+        default="",
+        description="UUID string of the Application this action refers to",
+    )
+    kind: str = Field(
+        default="follow_up",
+        description="Action type (e.g. 'follow_up')",
+    )
+    reason: str = Field(
+        default="",
+        description="Human-readable reason surfaced in the dashboard",
+    )
+    created_on: str = Field(
+        default="",
+        description="ISO date the marker was created (injected clock, not datetime.now())",
+    )
+
+
+class UserWorkspace(BaseModel):
+    """Per-user portfolio document: tracked applications + pending actions.
+
+    Persisted keyed by user_id (identity via context, per the contract rule —
+    not stored on the model). Stamped with CONTRACT_VERSION like every
+    persisted document; consumers refuse on major-version mismatch.
+    """
+
+    model_config = ConfigDict(frozen=False)
+
+    applications: list[Application] = Field(
+        default_factory=list,
+        description="All job applications the user is tracking",
+    )
+    pending_actions: list[PendingAction] = Field(
+        default_factory=list,
+        description="Outstanding follow-up markers (written by the async sweep)",
+    )
+    contract_version: str = Field(
+        default=CONTRACT_VERSION,
+        description="Schema version; consumers refuse on major-version mismatch",
+    )
+
+
 # ── Derived pure helpers (NOT stored) ────────────────────────────────────────
 
 
