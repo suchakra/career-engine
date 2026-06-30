@@ -52,7 +52,16 @@ from google.adk.sessions import BaseSessionService, InMemorySessionService
 from config import AccessMode
 from integration.model_client import GeminiModelClient, build_model_client
 from models.registry import BaseModelRegistry, get_registry, set_registry
-from schema import Capability, CareerEngineState, PhaseStatus, StarStory, UpgradeRequired
+from schema import (
+    Capability,
+    CareerEngineState,
+    Entry,
+    EntryStatus,
+    ExperienceType,
+    PhaseStatus,
+    StarStory,
+    UpgradeRequired,
+)
 from workflows import nodes
 from workflows.discovery_graph import build_runner, discovery_router
 from workflows.nodes import set_model_client_factory
@@ -1024,3 +1033,73 @@ class TestImportSanity:
         assert hasattr(main, "cli")
         assert hasattr(main, "grill")
         assert hasattr(main, "tailor")
+
+
+# ── Discovery turn wired into the main graph (Phase 1.7-C) ────────────────────
+
+
+class TestDiscoveryTurnInGraph:
+    """The router reaches discovery_turn_node and it appends discovered entries."""
+
+    async def test_discovery_turn_appends_entry_and_confirms(
+        self, svc: BaseSessionService
+    ) -> None:
+        """No pending work + coverage boundary → discovery asks, then ingests a role."""
+
+        class _Client:
+            def generate(self, model_id: str, system: str, user: str) -> str:
+                if "Extract any newly mentioned" in user:
+                    return json.dumps(
+                        {
+                            "entries": [
+                                {
+                                    "title": "ML Engineer",
+                                    "org": "StartupY",
+                                    "type": "full_time",
+                                    "start_date": "2024",
+                                    "end_date": "",
+                                }
+                            ]
+                        }
+                    )
+                return "Your resume runs through 2022 — what have you worked on since?"
+
+        set_model_client_factory(lambda: _Client())
+
+        grilled = Entry(
+            type=ExperienceType.FULL_TIME,
+            title="Past Role",
+            start_date="2019",
+            end_date="2022",
+            status=EntryStatus.GRILLED,
+        )
+        sid = _new_session_id()
+        runner = _runner(svc)
+        await _create_session(
+            svc,
+            session_id=sid,
+            state=CareerEngineState(
+                current_phase=PhaseStatus.GRILLING,
+                work_timeline=[grilled],
+                coverage_through="2022",
+                reference_date="2026-06-30",
+            ),
+        )
+
+        # Turn 1: router → discovery_turn ASK (no pending answer) → a question.
+        await _run_turn(runner, session_id=sid)
+        state = await _get_state(svc, session_id=sid)
+        assert state.current_question, "discovery turn must surface a coverage question"
+        assert state.coverage_confirmed is False
+
+        # Turn 2: user answers → discovery PROCESS appends the discovered role.
+        await _patch_state(
+            svc, session_id=sid, pending_user_answer="I joined StartupY as ML Engineer in 2024"
+        )
+        await _run_turn(runner, session_id=sid)
+        state = await _get_state(svc, session_id=sid)
+        assert state.coverage_confirmed is True
+        discovered = [e for e in state.work_timeline if e.source == "discovered"]
+        assert len(discovered) == 1
+        assert discovered[0].title == "ML Engineer"
+        assert discovered[0].status == EntryStatus.NEEDS_QUANTIFYING

@@ -226,6 +226,14 @@ class CareerEngineState(BaseModel):
             "Jumpable: setting it explicitly targets that entry next."
         ),
     )
+    coverage_confirmed: bool = Field(
+        default=False,
+        description=(
+            "True once the discovery turn has run and the user has confirmed/added "
+            "work since coverage_through (v2.1.0).  Records that the one-shot "
+            "discovery turn is done so the router does not re-ask it."
+        ),
+    )
 
     # ── Extracted content ─────────────────────────────────────────────────────
     extracted_star_stories: list[StarStory] = Field(

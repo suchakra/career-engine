@@ -54,6 +54,7 @@ from google.adk.workflow import DEFAULT_ROUTE, START, Edge, FunctionNode, Workfl
 
 from schema import CareerEngineState, EntryStatus, PhaseStatus
 from workflows.nodes import (
+    discovery_turn_node,
     execute_grill_turn_node,
     finalize_master_resume_node,
     ingest_node,
@@ -96,20 +97,40 @@ def discovery_router(state: CareerEngineState) -> str:
         while phase==CHECKPOINT" — keeps holding without re-triggering the
         checkpoint node.
 
-    Routing rules (v2.0.0 — entry-based):
-        - phase == COMPLETE or no pending work → finalize_master_resume_node.
-        - 5-turn brake: question_count > 0, a multiple of 5, and phase is NOT
-          already CHECKPOINT → user_checkpoint_node.
-        - otherwise → execute_grill_turn_node.
+    Routing rules (v2.1.0 — entry-based, with the one-shot discovery turn):
+        - phase == COMPLETE → finalize_master_resume_node.
+        - pending work: 5-turn brake (question_count > 0, multiple of 5, phase
+          NOT already CHECKPOINT) → user_checkpoint_node; otherwise →
+          execute_grill_turn_node.
+        - no pending work: if there is a coverage boundary to confirm
+          (coverage_through set), it is unconfirmed, and we are not paused at a
+          checkpoint → discovery_turn_node (once); otherwise →
+          finalize_master_resume_node.
 
     Args:
         state: Current session state.
 
     Returns:
         Node name string: one of 'execute_grill_turn_node',
-        'user_checkpoint_node', or 'finalize_master_resume_node'.
+        'user_checkpoint_node', 'discovery_turn_node', or
+        'finalize_master_resume_node'.
     """
-    if state.current_phase == PhaseStatus.COMPLETE or not _has_pending_work(state):
+    if state.current_phase == PhaseStatus.COMPLETE:
+        return "finalize_master_resume_node"
+
+    if not _has_pending_work(state):
+        # No entries need grilling.  Before finalizing, run the one-shot discovery
+        # turn IF there is a coverage boundary to confirm (coverage_through set by
+        # a resume ingest) and it has not been confirmed yet.  This surfaces the
+        # "your resume runs through X — what have you done since?" turn.  Skipped
+        # for present-role / text sessions (coverage_through empty) and once the
+        # user has answered (coverage_confirmed).  Suppressed during CHECKPOINT.
+        if (
+            state.coverage_through
+            and not state.coverage_confirmed
+            and state.current_phase != PhaseStatus.CHECKPOINT
+        ):
+            return "discovery_turn_node"
         return "finalize_master_resume_node"
 
     # 5-turn checkpoint brake
@@ -236,6 +257,18 @@ def _checkpoint_shim(ctx: object) -> None:
     _write_state(ctx, new_state)
 
 
+def _discovery_shim(ctx: object) -> None:
+    """ADK shim: reads state, calls discovery_turn_node, writes result back.
+
+    Terminal-per-turn like grill/checkpoint: the ASK pass surfaces a question and
+    the run ends; the PROCESS pass (with pending_user_answer) appends discovered
+    entries and flips coverage_confirmed so the router stops re-routing here.
+    """
+    state = _read_state(ctx)
+    new_state = discovery_turn_node(state)
+    _write_state(ctx, new_state)
+
+
 def _finalize_shim(ctx: object) -> None:
     """ADK shim: reads state, calls finalize_master_resume_node, writes result back."""
     state = _read_state(ctx)
@@ -269,6 +302,7 @@ def build_discovery_workflow() -> Workflow:
     router = FunctionNode(func=_router_shim, name="discovery_router")
     grill = FunctionNode(func=_grill_shim, name="execute_grill_turn_node")
     checkpoint = FunctionNode(func=_checkpoint_shim, name="user_checkpoint_node")
+    discovery = FunctionNode(func=_discovery_shim, name="discovery_turn_node")
     finalize = FunctionNode(func=_finalize_shim, name="finalize_master_resume_node")
     tailor = FunctionNode(func=_tailor_shim, name="tailor_node")
 
@@ -289,7 +323,10 @@ def build_discovery_workflow() -> Workflow:
         # Router branches (route strings match discovery_router return values)
         Edge(from_node=router, to_node=grill, route="execute_grill_turn_node"),
         Edge(from_node=router, to_node=checkpoint, route="user_checkpoint_node"),
+        Edge(from_node=router, to_node=discovery, route="discovery_turn_node"),
         Edge(from_node=router, to_node=finalize, route="finalize_master_resume_node"),
+        # discovery is terminal-per-turn (like grill/checkpoint): it asks the
+        # coverage question or processes the answer, then the run ends.
         # grill is terminal-per-turn: it surfaces a question (or commits a story)
         # and the run ends; the CLI injects the next pending_user_answer.
         # checkpoint is terminal-per-turn: it emits the delta summary and pauses;

@@ -103,6 +103,50 @@ class TestDiscoveryRouter:
         )
         assert discovery_router(state) == "finalize_master_resume_node"
 
+    def test_discovery_turn_when_coverage_set_and_unconfirmed(self) -> None:
+        """No pending work + coverage boundary + unconfirmed → discovery turn (1.7-C)."""
+        state = CareerEngineState(
+            current_phase=PhaseStatus.GRILLING,
+            work_timeline=[_entry_done()],
+            coverage_through="2022",
+            coverage_confirmed=False,
+            question_count=3,
+        )
+        assert discovery_router(state) == "discovery_turn_node"
+
+    def test_finalize_when_coverage_confirmed(self) -> None:
+        """Once the discovery turn is confirmed, no pending work → finalize."""
+        state = CareerEngineState(
+            current_phase=PhaseStatus.GRILLING,
+            work_timeline=[_entry_done()],
+            coverage_through="2022",
+            coverage_confirmed=True,
+            question_count=3,
+        )
+        assert discovery_router(state) == "finalize_master_resume_node"
+
+    def test_no_discovery_when_coverage_empty(self) -> None:
+        """A present-role/text session (no coverage boundary) skips discovery."""
+        state = CareerEngineState(
+            current_phase=PhaseStatus.GRILLING,
+            work_timeline=[_entry_done()],
+            coverage_through="",
+            coverage_confirmed=False,
+            question_count=3,
+        )
+        assert discovery_router(state) == "finalize_master_resume_node"
+
+    def test_no_discovery_during_checkpoint_phase(self) -> None:
+        """Discovery is suppressed while paused at a checkpoint."""
+        state = CareerEngineState(
+            current_phase=PhaseStatus.CHECKPOINT,
+            work_timeline=[_entry_done()],
+            coverage_through="2022",
+            coverage_confirmed=False,
+            question_count=3,
+        )
+        assert discovery_router(state) == "finalize_master_resume_node"
+
     def test_finalize_when_phase_complete(self) -> None:
         """A COMPLETE phase routes to finalize regardless of timeline."""
         state = CareerEngineState(
@@ -171,6 +215,7 @@ class TestBuildDiscoveryWorkflow:
             "discovery_router",
             "execute_grill_turn_node",
             "user_checkpoint_node",
+            "discovery_turn_node",
             "finalize_master_resume_node",
             "tailor_node",
         ]:
@@ -187,6 +232,7 @@ class TestBuildDiscoveryWorkflow:
         assert router_routes == {
             "execute_grill_turn_node",
             "user_checkpoint_node",
+            "discovery_turn_node",
             "finalize_master_resume_node",
         }
 

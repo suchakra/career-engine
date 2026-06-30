@@ -18,7 +18,7 @@ from pydantic_settings import BaseSettings
 load_dotenv()
 
 # ── Contract version ──────────────────────────────────────────────────────────
-CONTRACT_VERSION: str = "2.0.0"
+CONTRACT_VERSION: str = "2.1.0"
 """Semver version of the shared schema contract.
 
 Every persisted document and every inter-agent message envelope is stamped

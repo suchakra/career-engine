@@ -528,12 +528,17 @@ def discovery_turn_node(state: CareerEngineState) -> CareerEngineState:
         new_timeline = list(state.work_timeline) + new_entries
         new_frontier = state.grill_frontier or _next_frontier(new_timeline, "")
 
+        # The user's answer has been processed: mark the one-shot discovery turn
+        # done (so the router won't re-ask) and clear the surfaced question so the
+        # loop advances to grill any newly discovered entries (or finalize).
         return state.model_copy(
             update={
                 "work_timeline": new_timeline,
                 "coverage_through": coverage,
                 "grill_frontier": new_frontier,
+                "coverage_confirmed": True,
                 "pending_user_answer": "",
+                "current_question": "",
             }
         )
     else:
