@@ -1,9 +1,10 @@
 # CareerEngine — Session Handoff / Resume Point
 
 ## 👉 YOU ARE HERE (updated 2026-06-30)
-**`master`, Phase 1.7 BUILT (contract v2.1.0). Sonnet review running + Copilot gate pending; then tag & push; next is Phase 2.**
-Phase 0 + Phase 1 + Phase 1.3 + Phase 1.5 + **all of Phase 1.7** are built (**338 tests**; `make check`
-green). Phase 1.7 closed the deferred Phase-1/1.5 integration seams, all Opus-built this session +
+**`master`, Phase 1.7 BUILT + Sonnet-reviewed PASS (contract v2.1.0). Copilot gate next → tag & push; then Phase 2.**
+Phase 0 + Phase 1 + Phase 1.3 + Phase 1.5 + **all of Phase 1.7** are built (**339 tests**; `make check`
+green). Sonnet review verdict **PASS** (0 must-fix; 4 nits applied incl. a discovery-turn empty-question
+fallback). Phase 1.7 closed the deferred Phase-1/1.5 integration seams, all Opus-built this session +
 Sonnet-reviewed (Copilot gate planned):
   - **1.7-A** resume-file upload wired into `grill` (`--resume-file`).
   - **1.7-B** true session resume (`get_session_state_if_exists`, load-before-create).

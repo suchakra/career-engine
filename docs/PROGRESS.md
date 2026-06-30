@@ -3,7 +3,7 @@
 > Single source of truth for **what's done vs. pending**. Update this at the end of every work
 > session / sub-agent run. Keep entries terse. Legend: ✅ done · 🟡 in progress · ⬜ not started · 🚫 blocked.
 
-Last updated: **2026-06-30** — *Phase 1.5 COMPLETE; **Phase 1.7 (integration closure) built** — B/A/D/C all landed. Contract **v2.1.0** (additive: `coverage_confirmed`), **338 tests**, `make check` green. 1.7 = session-resume (B), resume-file CLI wiring (A), FakeFirestore→tests (D), discovery_turn graph edge (C). Sonnet review + Copilot gate in progress before tagging contract-v2.1.0. Next: Phase 2.*
+Last updated: **2026-06-30** — *Phase 1.5 COMPLETE; **Phase 1.7 (integration closure) built** — B/A/D/C all landed. Contract **v2.1.0** (additive: `coverage_confirmed`), **338 tests**, `make check` green. 1.7 = session-resume (B), resume-file CLI wiring (A), FakeFirestore→tests (D), discovery_turn graph edge (C). **Sonnet review PASS** (0 must-fix; 4 nits applied, 339 tests); Copilot gate next, then tag contract-v2.1.0 + push. Next: Phase 2.*
 
 ---
 
