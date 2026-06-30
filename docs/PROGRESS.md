@@ -3,7 +3,7 @@
 > Single source of truth for **what's done vs. pending**. Update this at the end of every work
 > session / sub-agent run. Keep entries terse. Legend: ✅ done · 🟡 in progress · ⬜ not started · 🚫 blocked.
 
-Last updated: **2026-06-30** — *Phase 1.7 DONE (tagged `contract-v2.1.0`, pushed). **Phase 2 in progress:** 2C (infra) + contract **v2.2.0** (`UserWorkspace`/`Application`) + 2D (sweep) + 2A (dashboard) built, **363 tests** green. Sonnet review running; then Copilot gate + push. Remaining: 2B (web auth), UserWorkspace Firestore repo, 2E (capstone pkg).*
+Last updated: **2026-06-30** — *Phase 1.7 DONE (tagged `contract-v2.1.0`, pushed). **Phase 2 in progress:** 2C (infra) + contract **v2.2.0** (`UserWorkspace`/`Application`) + 2D (sweep) + 2A (dashboard) built, **363 tests** green. **Sonnet review addressed** (CHANGES REQUESTED → 2 must-fix: scheduler run.invoker binding, stale TF contract_version; + 4 nits — all fixed, 365 tests). Copilot gate next, then tag `contract-v2.2.0` + push. Remaining: 2B (web auth), UserWorkspace Firestore repo, 2E (capstone pkg).*
 
 ---
 

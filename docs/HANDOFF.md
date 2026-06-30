@@ -1,7 +1,7 @@
 # CareerEngine — Session Handoff / Resume Point
 
 ## 👉 YOU ARE HERE (updated 2026-06-30)
-**`master`, Phase 2 IN PROGRESS — 2C + contract v2.2.0 + 2D + 2A built (363 tests). Sonnet review running → Copilot gate → push.**
+**`master`, Phase 2 IN PROGRESS — 2C + contract v2.2.0 + 2D + 2A built + Sonnet-reviewed (CHANGES REQUESTED → all fixed, 365 tests). Copilot gate → tag contract-v2.2.0 → push.**
 Phase 1.7 DONE (tagged `contract-v2.1.0`, pushed). Phase 2 increment built this session, Opus-direct
 (unpushed):
   - **2C** Terraform infra (`infrastructure/` modules + dev/prod + README + Makefile `tf-check`/`deploy`/`destroy`).
