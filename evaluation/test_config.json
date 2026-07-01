@@ -1,0 +1,34 @@
+{
+  "scenarios": [
+    {
+      "name": "eventually_specific",
+      "raw_history": "Backend engineer at Acme for a few years; worked on performance.",
+      "entry_title": "Senior Backend Engineer",
+      "entry_org": "Acme",
+      "reference_date": "2026-07-01",
+      "vague_answers": [
+        "we made the system a lot faster",
+        "it was a really big improvement overall"
+      ],
+      "specific_answer": "cut p99 latency from 800ms to 120ms across 40 services",
+      "metric_after_turn": 2
+    },
+    {
+      "name": "persistent_vague",
+      "raw_history": "Product engineer; shipped many features over the years.",
+      "entry_title": "Product Engineer",
+      "entry_org": "Globex",
+      "reference_date": "2026-07-01",
+      "vague_answers": [
+        "we improved things significantly",
+        "it was much better than before",
+        "customers were happier",
+        "the team moved faster",
+        "overall a great outcome",
+        "really strong impact"
+      ],
+      "specific_answer": "grew signups by 35% quarter over quarter",
+      "metric_after_turn": 999
+    }
+  ]
+}

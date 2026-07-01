@@ -72,7 +72,7 @@ strict = true
 # Allow untyped stubs for third-party packages that lack them
 ignore_missing_imports = true
 # Exclude non-source directories
-exclude = ["infrastructure/", "evaluation/", "templates/"]
+exclude = ["infrastructure/", "templates/"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
