@@ -29,7 +29,8 @@ from web.dashboard import build_dashboard_view, render_dashboard
 def _read_id_token() -> str | None:
     """Read the Identity Platform ID token from query params or session state."""
     token = st.query_params.get("id_token") or st.session_state.get("id_token")
-    return str(token) if token else None
+    # Only accept a non-empty string; a non-str session_state value is ignored.
+    return token if isinstance(token, str) and token else None
 
 
 def main() -> None:

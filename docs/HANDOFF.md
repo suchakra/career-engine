@@ -1,16 +1,16 @@
 # CareerEngine — Session Handoff / Resume Point
 
 ## 👉 YOU ARE HERE (updated 2026-07-01)
-**`master`, ALL of Phase 2 built — core (2C/v2.2.0/2D/2A, pushed) + UserWorkspace repo + 2B + 2E (3 unpushed commits, Sonnet gate in progress). 380 tests green.**
+**`master`, Phase 2 COMPLETE & PUSHED — all workstreams Sonnet-reviewed PASS, `contract-v2.2.0` tagged. 381 tests green. Next: Phase 3 / deferred wiring / live runbook dry-run.**
 **Copilot is out for the month — Sonnet is the sole review gate now** (Opus builds → Sonnet reviews → merge/push).
-- **Unpushed (under review):** `feat(2): Firestore UserWorkspace repository`, `feat(2B): web auth + session
-  bootstrap`, `feat(2E): capstone runbook + cloud_ops skill`. On Sonnet PASS → push (core already pushed +
-  tagged `contract-v2.2.0`).
-- **Phase 2 = feature-complete for the capstone MVP.** Deferred thin wiring (logic built + tested, only
-  outermost glue remains): streamlit discovery-session load for the meter; the sweep's Cloud Run HTTP
-  endpoint + IdP frontend token exchange; `terraform` as a devcontainer dependency (see memory).
-- **NEXT after push:** Phase 3 (eval/hardening) per [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md), or
-  close the deferred wiring, or a live capstone dry-run of [CAPSTONE_RUNBOOK.md](CAPSTONE_RUNBOOK.md).
+- **Phase 2 = feature-complete for the capstone MVP**, all pushed. 2C infra · contract v2.2.0
+  (UserWorkspace/Application/PendingAction) · 2D sweep · 2A dashboard · UserWorkspace Firestore repo ·
+  2B web-auth bootstrap · 2E capstone runbook + cloud_ops skill. Sonnet gates: 3 rounds total, all fixed.
+- **Deferred thin wiring** (logic built + tested, only outermost glue remains): streamlit discovery-session
+  load for the meter; the sweep's Cloud Run HTTP endpoint + IdP frontend token exchange; `terraform` as a
+  devcontainer dependency (see memory).
+- **NEXT:** Phase 3 (eval/hardening) per [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md), or close the
+  deferred wiring, or a live capstone dry-run of [CAPSTONE_RUNBOOK.md](CAPSTONE_RUNBOOK.md).
 Phase 1.7 DONE (tagged `contract-v2.1.0`, pushed). Phase 2 increment built this session, Opus-direct
 (unpushed):
   - **2C** Terraform infra (`infrastructure/` modules + dev/prod + README + Makefile `tf-check`/`deploy`/`destroy`).

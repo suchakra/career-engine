@@ -22,7 +22,7 @@ import asyncio
 from typing import Any
 
 from config import CONTRACT_VERSION, get_firestore_client
-from database.firestore_session import ContractVersionError, _check_version
+from database.firestore_session import ContractVersionError, check_version
 from schema import UserWorkspace
 
 _WORKSPACE_KEY = "workspace"
@@ -68,7 +68,7 @@ class FirestoreWorkspaceStore:
         if not snapshot.exists:
             return UserWorkspace()  # a brand-new user has an empty workspace
         data = snapshot.to_dict() or {}
-        _check_version(data.get("contract_version", "0.0.0"))
+        check_version(data.get("contract_version", "0.0.0"))
         return UserWorkspace.model_validate(data[_WORKSPACE_KEY])
 
     async def _asave(self, user_id: str, workspace: UserWorkspace) -> None:
@@ -80,9 +80,14 @@ class FirestoreWorkspaceStore:
         await self._doc_ref(user_id).set(document)
 
     # ── Sync WorkspaceStore protocol ──────────────────────────────────────────
+    #
+    # CONSTRAINT: these use asyncio.run(), which raises if called from a thread
+    # that already has a running event loop. Callers must be sync: the sweep job
+    # (run_sweep is sync) and the Streamlit script thread (no loop) are both
+    # safe. Do NOT call from an async def / coroutine.
 
     def list_user_ids(self) -> list[str]:
-        """Return the user_ids that have a workspace document."""
+        """Return the user_ids that have a workspace document. (Sync-only — see above.)"""
         return asyncio.run(self._alist_user_ids())
 
     def load(self, user_id: str) -> UserWorkspace:

@@ -15,11 +15,14 @@ Rules (ARCHITECTURE §5):
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Protocol
 
 from auth.provider import AuthenticationError
 from schema import UserWorkspace
+
+_log = logging.getLogger(__name__)
 
 
 class _AuthProviderLike(Protocol):
@@ -102,4 +105,11 @@ def try_bootstrap_web_session(
             workspace_store=workspace_store,
         )
     except AuthenticationError:
+        return None
+    except Exception:
+        # Any non-auth failure (e.g. ContractVersionError from a workspace load
+        # after a contract bump) must NOT crash the UI or leak a stack trace —
+        # the caller renders a safe sign-in/empty surface. Log generically (no
+        # exception text) so ops can distinguish a schema issue from a bad token.
+        _log.warning("web session bootstrap failed for a non-auth reason; rendering sign-in")
         return None

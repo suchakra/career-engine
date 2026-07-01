@@ -125,3 +125,16 @@ class TestTryBootstrap:
         )
         assert session is not None
         assert session.user_id == "uid-123"
+
+    def test_non_auth_load_failure_returns_none_no_leak(self) -> None:
+        """A non-auth error from the workspace load (e.g. version mismatch) → None, not a crash."""
+        from database.firestore_session import ContractVersionError
+
+        class _BadStore:
+            def load(self, user_id: str) -> UserWorkspace:
+                raise ContractVersionError("stored=99.0.0")
+
+        result = try_bootstrap_web_session(
+            id_token="good", auth_provider=_FakeAuth(), workspace_store=_BadStore()
+        )
+        assert result is None

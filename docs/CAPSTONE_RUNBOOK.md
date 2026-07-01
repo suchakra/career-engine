@@ -25,7 +25,7 @@ pip install -e ".[dev]"
 make check           # ruff + mypy --strict + pytest
 ```
 
-**Expected:** `380 passed` (deterministic; no network, no GCP, no `input()`).
+**Expected:** `381 passed` (deterministic; no network, no GCP, no `input()`).
 This single command is the backbone of the evidence set — every capability below
 is asserted by a named test.
 
@@ -94,7 +94,7 @@ Every claim maps to a command whose output is the proof.
 
 ## Evidence capture checklist (paste outputs, don't paraphrase)
 
-- [ ] `make check` → `380 passed`
+- [ ] `make check` → `381 passed`
 - [ ] `make tf-check` → `Success!` (dev + prod)
 - [ ] core-loop e2e test → pass (`%PDF` asserted)
 - [ ] sweep test → pass (idempotent, per-user isolation)

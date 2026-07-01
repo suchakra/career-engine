@@ -77,6 +77,17 @@ def _check_version(stored_version: str) -> None:
         )
 
 
+# Public alias — the major-version gate is reused by other persistence adapters
+# (e.g. database/workspace_store.py) so they don't import a private symbol.
+def check_version(stored_version: str) -> None:
+    """Public wrapper for the CONTRACT_VERSION major-version gate.
+
+    Raises:
+        ContractVersionError: If the stored major version differs from ours.
+    """
+    _check_version(stored_version)
+
+
 def _state_to_dict(state: CareerEngineState) -> dict[str, Any]:
     """Serialise CareerEngineState to a Firestore-safe dict.
 

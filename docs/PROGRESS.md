@@ -3,7 +3,7 @@
 > Single source of truth for **what's done vs. pending**. Update this at the end of every work
 > session / sub-agent run. Keep entries terse. Legend: ✅ done · 🟡 in progress · ⬜ not started · 🚫 blocked.
 
-Last updated: **2026-07-01** — *ALL of Phase 2 built (**380 tests** green). Core (2C + contract **v2.2.0** + 2D + 2A) Sonnet-PASS, tagged `contract-v2.2.0`, pushed. + UserWorkspace Firestore repo + 2B web-auth bootstrap + 2E capstone runbook/skill — **3 commits under Sonnet gate before push**. **Copilot out for the month — Sonnet is the sole gate.** Next after push: Phase 3 or deferred wiring or a live runbook dry-run.*
+Last updated: **2026-07-01** — *ALL of Phase 2 built & **Sonnet-reviewed PASS** (**381 tests** green). Core (2C + contract **v2.2.0** + 2D + 2A) tagged `contract-v2.2.0`; + UserWorkspace Firestore repo + 2B web-auth bootstrap + 2E capstone runbook/skill (Sonnet gate: 1 must-fix [try_bootstrap swallows non-auth errors] + 3 nits, all fixed). Pushed. **Copilot out for the month — Sonnet is the sole gate.** Next: Phase 3, or deferred thin wiring, or a live runbook dry-run.*
 
 ---
 
@@ -16,7 +16,7 @@ Last updated: **2026-07-01** — *ALL of Phase 2 built (**380 tests** green). Co
 | Phase 1.3 — Review hardening (no contract change) | ✅ | Done; stays v1.1.x, 230 tests. Required items from [REVIEW.md §7](REVIEW.md) all merged: docs truth (#7,#8), upgrade-signal band-aid + E2E test (#1,#11), model_client errors (#4), Firestore loud-fallback (#3). Optional #6 (FakeFirestore move) now tracked in Phase 1.7. |
 | Phase 1.5 — Resume-aware + progressive discovery | ✅ | All five pieces built (contract v2.0.0, tag `contract-v2.0.0`, 317 tests). CORE (CONTRACT+GRILL+METRICS) Sonnet-built/Opus-reviewed/merged; INGEST + DISCOVERY Opus-built this session + Sonnet-reviewed PASS. Stale-docstring (#9) resolved. Deferred integration items (resume-file CLI wiring, full session-resume, discovery_turn in main graph) tracked in [HANDOFF.md](HANDOFF.md). |
 | Phase 1.7 — Integration closure (deferred Phase-1 work) | ✅ | 1.7-A resume-file CLI wiring, 1.7-B true session resume (load-before-create), 1.7-C discovery_turn graph edge (contract **v2.1.0**, additive `coverage_confirmed`), 1.7-D FakeFirestore→`tests/fakes.py`. 339 tests. Sonnet PASS + Copilot PASS; **tagged `contract-v2.1.0`, pushed.** 3 optional non-blocking polish items in [REVIEW.md](REVIEW.md) deferred to Phase 2. |
-| Phase 2 — Web / Infra / Async | 🟡 | **All workstreams built (380 tests).** Core (2C infra + contract v2.2.0 + 2D sweep + 2A dashboard) Sonnet-PASS, tagged `contract-v2.2.0`, pushed. + UserWorkspace Firestore repo + 2B web-auth bootstrap + 2E capstone runbook/skill — **3 commits under Sonnet gate before push.** Deferred thin wiring (streamlit discovery-state load, sweep HTTP endpoint) noted. Gate is Sonnet-only (Copilot out). |
+| Phase 2 — Web / Infra / Async | ✅ | **All workstreams built & Sonnet-reviewed PASS (381 tests), tagged `contract-v2.2.0`, pushed.** 2C infra + contract v2.2.0 + 2D sweep + 2A dashboard + UserWorkspace Firestore repo + 2B web-auth bootstrap + 2E capstone runbook/skill. Deferred thin wiring (streamlit discovery-state load, sweep HTTP endpoint, terraform devcontainer dep) tracked in [HANDOFF.md](HANDOFF.md). Gate is Sonnet-only (Copilot out). |
 | Phase 3 — Hardening / Eval | ⬜ | |
 
 ---
@@ -85,7 +85,7 @@ Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.
 - ✅ **2B** web auth/session bootstrap — `web/bootstrap.py` ties the (already-built) `FirebaseAuthProvider` → stable user_id → workspace load; `try_*` safe unauthenticated path; streamlit login gate. (Provider from Phase-1 WS-D; glue is new.)
 - ✅ **UserWorkspace Firestore repo** — `database/workspace_store.py` `FirestoreWorkspaceStore` (sync bridge over async client; keyed by user_id, contract-stamped, unknown-major refused, no secrets). The real `WorkspaceStore` for 2D + 2A.
 - ✅ **2E** capstone packaging — `docs/CAPSTONE_RUNBOOK.md` (reproducible runbook + proof-point→evidence map + honest tradeoffs) + `skills/cloud_ops/SKILL.md`.
-- 🟡 Exit criteria: `make check` (380) + `make tf-check` green (deterministic); `make deploy` needs GCP creds; web+CLI share state via the workspace repo. **Deferred thin wiring:** streamlit discovery-session load for the meter; sweep Cloud Run HTTP endpoint + IdP frontend token exchange. All under Sonnet gate (in progress) before push.
+- 🟡 Exit criteria: `make check` (381) + `make tf-check` green (deterministic); `make deploy` needs GCP creds; web+CLI share state via the workspace repo. **Deferred thin wiring:** streamlit discovery-session load for the meter; sweep Cloud Run HTTP endpoint + IdP frontend token exchange. All under Sonnet gate (in progress) before push.
 
 ## Phase N — opportunistic value-adds (wanted; not v1-blocking)
 - ⬜ Outcome learning, positive-reinforcement only — per user + per job type, learn what résumé format/wording correlated with reaching interview; transparent; opt-in anonymized global "what works" DB; reuses §8 async infra — [ARCHITECTURE.md §8.1](ARCHITECTURE.md)
