@@ -1,7 +1,8 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-06-30)
-**`master`, Phase 2 IN PROGRESS — 2C + contract v2.2.0 + 2D + 2A built + Sonnet-reviewed (CHANGES REQUESTED → all fixed, 365 tests). Copilot gate → tag contract-v2.2.0 → push.**
+## 👉 YOU ARE HERE (updated 2026-07-01)
+**`master`, Phase 2 core DONE — 2C + contract v2.2.0 + 2D + 2A Sonnet-reviewed PASS, tagged `contract-v2.2.0`, PUSHED. Next: 2B, UserWorkspace repo, 2E.**
+**Copilot is out for the month — Sonnet is the sole review gate now** (Opus builds → Sonnet reviews → merge/push).
 Phase 1.7 DONE (tagged `contract-v2.1.0`, pushed). Phase 2 increment built this session, Opus-direct
 (unpushed):
   - **2C** Terraform infra (`infrastructure/` modules + dev/prod + README + Makefile `tf-check`/`deploy`/`destroy`).
@@ -63,10 +64,17 @@ banner above. After that, Phase 2 proceeds per
 - Launch as Sonnet builders in worktrees, fan-out where files are disjoint.
 
 ## Process (how we work — keep doing this)
-- **Sonnet builds, Opus reviews & merges.** Spawn builders with `model: "sonnet"`, `isolation: "worktree"`.
-  No agent self-declares done; only an Opus PASS merges. Reviewer must independently re-run gates and
-  read the diff (don't trust the report).
-- **master must stay green after every merge** (`make check`). Merge with `--no-ff`.
+- **Current model (since Phase 1.5 fan-out): Opus builds in-context, Sonnet reviews as the gate.** Chosen
+  for token efficiency on small/coupled work — spawning cold Sonnet worktree builders re-derives context
+  and costs more. Opus builds directly on `master`, commits per workstream (green each), then a Sonnet
+  review agent re-runs all gates + reads the diff and returns PASS / CHANGES REQUESTED. **Copilot was a
+  third independent gate but is out for the month → Sonnet is now the SOLE gate.**
+- **Alternative (large, file-disjoint work): Sonnet builds in worktrees, Opus reviews** (`model: "sonnet"`,
+  `isolation: "worktree"`). Use when workstreams are big and don't share files.
+- No agent self-declares done; only a review PASS ticks `docs/PROGRESS.md`. The reviewer independently
+  re-runs gates and reads the diff (don't trust the report).
+- **master must stay green after every commit** (`make check`; `make tf-check` for infra). Contract
+  changes require a `CONTRACT_VERSION` bump + tag after review PASS.
 - Commit trailer: `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
 
 ## Known gotchas
