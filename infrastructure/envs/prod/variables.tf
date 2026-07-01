@@ -25,8 +25,12 @@ variable "name_prefix" {
 
 variable "image" {
   type        = string
-  description = "Container image to deploy (Artifact Registry path:tag)."
-  default     = "us-docker.pkg.dev/cloudrun/container/hello"
+  description = "Container image to deploy (Artifact Registry path:tag). Required for prod — no placeholder default."
+
+  validation {
+    condition     = var.image != "us-docker.pkg.dev/cloudrun/container/hello"
+    error_message = "Set a real image for prod (the hello placeholder is not allowed)."
+  }
 }
 
 variable "contract_version" {

@@ -41,7 +41,12 @@ variable "time_zone" {
 
 variable "target_uri" {
   type        = string
-  description = "Cloud Run sweep endpoint to invoke (e.g. <service_uri>/jobs/pending-action-sweep)."
+  description = "Cloud Run sweep endpoint to POST (e.g. <service_uri>/jobs/pending-action-sweep)."
+}
+
+variable "service_uri" {
+  type        = string
+  description = "BASE Cloud Run service URL — used as the OIDC token audience (Cloud Run validates aud against the base URL, NOT the request path)."
 }
 
 variable "cloud_run_service_name" {
@@ -77,9 +82,14 @@ resource "google_cloud_scheduler_job" "pending_action_sweep" {
 
     oidc_token {
       service_account_email = var.invoker_service_account_email
-      audience              = var.target_uri
+      # Audience is the BASE service URL, not the request path, or Cloud Run
+      # rejects the token (401).
+      audience = var.service_uri
     }
   }
+
+  # Ensure the invoker binding exists before the job that relies on it.
+  depends_on = [google_cloud_run_v2_service_iam_member.scheduler_invoker]
 }
 
 output "job_name" {

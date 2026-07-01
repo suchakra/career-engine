@@ -4,4 +4,5 @@
 project_id = "your-prod-project-id"
 region     = "us-central1"
 
-# image = "us-central1-docker.pkg.dev/your-prod-project-id/career-engine-prod-images/app:latest"
+# REQUIRED for prod (no default; the hello placeholder is rejected):
+image = "us-central1-docker.pkg.dev/your-prod-project-id/career-engine-prod-images/app:latest"
