@@ -118,9 +118,11 @@ A result counts as having a real metric if it contains at least ONE of:
   • A before/after comparison (e.g. "from 800ms to 120ms")
   • A percentage change with context (e.g. "reduced by 85%")
   • A scale figure (e.g. "across 40 services", "serving 2M requests/day")
-  • An approximate or hedged figure that still conveys scale (e.g. "about 30%
-    faster", "roughly doubled throughput", "~2x", "a few thousand users").
-    An approximate number is still a number — extract it as a real metric.
+  • An approximate or hedged figure that still conveys scale, AS LONG AS it
+    contains a digit (e.g. "about 30% faster", "~2x throughput", "roughly 5k
+    users"). An approximate number is still a number — extract it as a real
+    metric.  A purely verbal claim with NO digit ("doubled", "a few thousand")
+    does NOT qualify; keep probing for the number.
 
 A result does NOT count as having a real metric if it only contains:
   • Vague qualifiers ("significantly", "greatly", "a lot", "noticeably")
