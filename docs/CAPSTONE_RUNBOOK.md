@@ -1,6 +1,6 @@
 # CareerEngine — Capstone Demo Runbook & Evidence
 
-> Status: **active**. Last reviewed 2026-07-01. Audience: a fresh reviewer/judge
+> Status: **active**. Last reviewed 2026-07-02. Audience: a fresh reviewer/judge
 > (Google × Kaggle 5-day intensive). Goal: reproduce the end-to-end story in
 > **bounded time** with **deterministic evidence** — concrete commands and file
 > outputs, not prose claims. See decision D9 in
@@ -25,7 +25,7 @@ pip install -e ".[dev]"
 make check           # ruff + mypy --strict + pytest
 ```
 
-**Expected:** `381 passed` (deterministic; no network, no GCP, no `input()`).
+**Expected:** `424 passed` (deterministic; no network, no GCP, no `input()`).
 This single command is the backbone of the evidence set — every capability below
 is asserted by a named test.
 
@@ -94,13 +94,44 @@ Every claim maps to a command whose output is the proof.
 
 ## Evidence capture checklist (paste outputs, don't paraphrase)
 
-- [ ] `make check` → `381 passed`
+- [ ] `make check` → `424 passed`
 - [ ] `make tf-check` → `Success!` (dev + prod)
 - [ ] core-loop e2e test → pass (`%PDF` asserted)
 - [ ] sweep test → pass (idempotent, per-user isolation)
 - [ ] `grep -rn "gemini-"` over source → empty (capability routing)
 - [ ] `resume.pdf` artifact from the live demo (screenshot / `file resume.pdf`)
 - [ ] web dashboard screenshot (`python -m main web`)
+
+## Dry-run results (2026-07-02, executed)
+
+Deterministic evidence — **all green**, captured from this repo at `contract-v2.3.0`:
+
+| Check | Command | Result |
+|---|---|---|
+| Full gate | `make check` | **424 passed** |
+| Core-loop e2e (real Runner → `%PDF`) | `pytest tests/test_integration.py -k full_end_to_end_turn_sequence` | **1 passed** |
+| Async sweep (idempotent) | `pytest tests/test_pending_action_sweep.py` | **11 passed** |
+| Infra | `make tf-check` | **Success!** (dev + prod) |
+| Capability routing (no hardcoded model IDs) | `grep -rn "gemini-" config.py schema.py workflows/ tools/ cli/ web/ jobs/ integration/` | **empty** |
+
+Live path (real Gemini, `DEV_USER_ID` dev-hatch + platform key, FREE mode):
+- **Validated:** authentication, model resolution, and live `generate_content` calls
+  all work — ingest, the opening grill question, and metric extraction executed
+  against `gemini-2.5-flash` and returned real responses.
+- **Bug found & fixed:** the live model returned JSON `null` for `situation`/`task`
+  while `metrics_found=true`; `execute_grill_turn_node` used `dict.get(k, "")`,
+  which yields `None` on a present-but-null key and crashed `StarStory`
+  construction. Fixed by coercing null/absent → `""` (`get(k) or ""`) across all
+  STAR string fields, with a regression test
+  (`tests/test_nodes.py::TestGrillNullStarFields`). The deterministic suite missed
+  this because its scripted client always returns full strings — a live dry-run
+  earned its keep.
+- **Known limitation:** a *complete* session makes ~5–6 model calls (ingest →
+  question → extraction → discovery-turn → finalize); the Gemini **free tier caps
+  at 5 requests/min**, so a full live session cannot render a PDF in a single burst
+  (HTTP 429). This is an external quota ceiling, not a code defect. For a live PDF,
+  use a paid/raised-quota key; the reproducible PDF proof for CI/judging is the
+  deterministic `full_end_to_end_turn_sequence` test above (real Runner → `%PDF`).
 
 ## Honest tradeoffs & deferred scope (state these plainly)
 
@@ -109,9 +140,12 @@ Every claim maps to a command whose output is the proof.
   for the async sweep). ZK was deliberately rejected (§5).
 - **Firestore fallback is loud, not a hard stop** (in-memory fallback warns on
   stderr); a hosted hard-stop policy is a Phase-2+ decision.
-- **Deferred wiring:** the Streamlit path loads the workspace per authenticated
-  user but not yet the discovery-session state for the meter; the sweep's Cloud
-  Run HTTP endpoint + Identity Platform frontend token exchange are thin
-  follow-ups. Logic is built and tested; only the outermost wiring remains.
+- **Deferred wiring (mostly closed in PR #5):** the Streamlit path now loads both
+  the per-user workspace AND the latest discovery-session state for the meter
+  (`web/session_loader.py`), and the sweep has an OIDC-verified HTTP handler
+  (`jobs/sweep_endpoint.py`, aud/iss pinned). The only remaining thin follow-ups
+  are the outermost glue: mounting that handler in a served app, and the Identity
+  Platform *frontend* (browser SDK) token exchange that supplies the `id_token`.
 - **`terraform plan/apply`** need GCP credentials; only `fmt`+`validate` run in
-  CI. `terraform` is not yet a devcontainer dependency (tracked follow-up).
+  CI. `terraform` is now a devcontainer feature (`.devcontainer/devcontainer.json`;
+  effective after a rebuild).
