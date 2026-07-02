@@ -1,7 +1,7 @@
 # CareerEngine — Session Handoff / Resume Point
 
 ## 👉 YOU ARE HERE (updated 2026-07-02)
-**`master`, **contract v2.4.0** (grill-hardening from a live résumé run — in review as `feat/grill-hardening`). **Phase 3 COMPLETE** (PRs #2–#6); repo public-ready with README + CI/CD + LICENSE + Dockerfile (PRs #7–#8). 434 tests green; `make check` + `make tf-check` clean.**
+**`master` at contract v2.3.0 (tag `contract-v2.3.0`). Grill-hardening (contract v2.4.0, from a live résumé run) is IN REVIEW on `feat/grill-hardening` — PR #9, CI green. Phase 3 COMPLETE (PRs #2–#6); repo public-ready with README + CI/CD + LICENSE + Dockerfile (PRs #7–#8). 434 tests green; `make check` + `make tf-check` clean.**
 - **Grill hardening (feat/grill-hardening, contract v2.4.0):** from the user's real run — (A) graceful `ModelAPIError` handling so a `429`/quota shows a friendly resumable message, not a crash; (B) `grill_answers` per-entry memory (accumulated extraction + no re-asking); (C) frontier ranks current/substantive roles first (`end_date` present-first + experience-type weight). See ARCHITECTURE §6.3.1.
 - **Deadline:** Kaggle × Google submission **2026-07-06** — product + writeup + video.
 - **Known live-run constraint:** the Gemini **free tier is 5 req/min + 20/day**; a full live session needs a paid/raised-quota key (deterministic tests prove the pipeline without one).

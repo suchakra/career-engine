@@ -715,7 +715,7 @@ def format_model_api_error(exc: ModelAPIError, *, use_firestore: bool) -> str:
     if exc.is_rate_limited:
         retry = (
             f" Try again in ~{exc.retry_after_seconds:.0f}s."
-            if exc.retry_after_seconds
+            if exc.retry_after_seconds is not None
             else ""
         )
         resume = (

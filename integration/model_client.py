@@ -142,11 +142,10 @@ class GeminiModelClient:
             genuinely returns no text).
 
         Raises:
-            Exception: transport / API errors propagate to the caller rather
-                than being swallowed into ``""`` (REVIEW.md #4).  A hard failure
-                masquerading as weak model output hides real outages and makes
-                the discovery loop undebuggable; the node/runner layer is the
-                right place to decide how to surface it.
+            ModelAPIError: transport / API errors (quota, 429, server) are wrapped
+                and propagated rather than swallowed into ``""`` (REVIEW.md #4).  A
+                hard failure masquerading as weak model output hides real outages;
+                the node/runner/CLI layer decides how to surface it.
         """
         from google.genai import types as gtypes
 
@@ -188,8 +187,8 @@ class GeminiModelClient:
             genuinely returns no text).
 
         Raises:
-            Exception: transport / API errors propagate to the caller rather
-                than being swallowed (mirrors :meth:`generate`).
+            ModelAPIError: transport / API errors are wrapped and propagated
+                rather than swallowed (mirrors :meth:`generate`).
         """
         from google.genai import types as gtypes
 
