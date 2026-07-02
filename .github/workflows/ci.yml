@@ -27,8 +27,10 @@ jobs:
         with:
           python-version: "3.12"
 
-      # WeasyPrint (PDF renderer) needs Pango at import time; the end-to-end
-      # test renders a real PDF, so install the native libraries.
+      # WeasyPrint (PDF renderer) needs Pango at import time; the end-to-end test
+      # renders a real PDF, so install the native libraries. This is the set the
+      # WeasyPrint 69 docs list for Debian/Ubuntu (Pango pulls HarfBuzz + fontconfig
+      # transitively); CI is verified green with exactly these.
       - name: Install WeasyPrint system libraries
         run: sudo apt-get update && sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0
 

@@ -117,6 +117,9 @@ Firestore (Native) + Artifact Registry + Secret Manager (runtime SA gets **only*
 ```bash
 # 1. Build & push a container image to Artifact Registry, then reference it in tfvars.
 #    (A Dockerfile / Cloud Build config is an operator-provided step — tracked follow-up.)
+#    The image should COPY the whole source tree and run from source (editable),
+#    so runtime data like templates/classic_resume.html is present — a non-editable
+#    wheel would omit it.
 
 # 2. Configure the target project and deploy dev:
 cp infrastructure/envs/dev/terraform.tfvars.example infrastructure/envs/dev/terraform.tfvars

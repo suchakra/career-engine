@@ -56,6 +56,11 @@ dev = [
 # Flat layout: explicit package/module declaration so `pip install -e .` works on
 # a clean environment (setuptools auto-discovery errors on multiple top-level
 # packages + loose modules — this replaces the non-standard legacy backend hack).
+# NOTE: install is editable / from-source (the container image COPYs the whole
+# tree). `templates/classic_resume.html` is loaded by path relative to the source
+# tree (tools/pdf_renderer.py), so a NON-editable wheel (`pip install .`) is not a
+# supported distribution path — it would omit that data file. We don't publish
+# wheels; deployment is container-based.
 [tool.setuptools]
 py-modules = ["config", "schema", "main"]
 
