@@ -29,6 +29,9 @@ import click
 @click.group()
 def cli() -> None:
     """CareerEngine — convert raw career history into quantified STAR resumes."""
+    from workflows.observability import configure_logging
+
+    configure_logging()
 
 
 @cli.command()

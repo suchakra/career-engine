@@ -252,6 +252,7 @@ class DiscoverySession:
             session_service=session_service,
             app_name=app_name,
         )
+        self._turn_index = 0  # in-memory turn ordinal for observability spans
         # Inject model client into the workflow nodes.
         _install_model_client(model_client)
 
@@ -431,13 +432,27 @@ class DiscoverySession:
     # ── Private helpers ───────────────────────────────────────────────────────
 
     async def _run_turn(self) -> None:
-        """Execute one Runner turn, draining all events."""
-        async for _ in self._runner.run_async(
-            user_id=self._user_id,
+        """Execute one Runner turn, draining all events (timed + logged).
+
+        Uses an in-memory turn ordinal for the span (no extra state read); the
+        callers read state after the turn, so a pre-flight read would be a
+        redundant Firestore round-trip in production.
+        """
+        from workflows.observability import get_logger, log_operation
+
+        self._turn_index += 1
+        with log_operation(
+            "graph.turn",
+            logger=get_logger("session"),
+            turn=self._turn_index,
             session_id=self._session_id,
-            state_delta={},
         ):
-            pass
+            async for _ in self._runner.run_async(
+                user_id=self._user_id,
+                session_id=self._session_id,
+                state_delta={},
+            ):
+                pass
 
     async def _read_turn_result(self) -> TurnResult:
         """Read state after a grill turn and build a TurnResult.
