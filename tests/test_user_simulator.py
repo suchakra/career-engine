@@ -72,6 +72,12 @@ class TestCheckpointBrake:
         assert result.checkpoint_fired is True
         assert result.checkpoint_question_count == 5
 
+    def test_persistent_vague_is_truncated_and_validates_nothing(self) -> None:
+        """A never-specific applicant hits max_turns (surfaced) with no validated story."""
+        result = run_simulation(_scenario("persistent_vague"))
+        assert result.truncated is True
+        assert result.validated_stories == []
+
 
 class TestProEscalationRate:
     """The Pro-escalation rate is recorded — 0 on happy path, >0 when reasoning refused."""

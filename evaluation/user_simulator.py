@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
@@ -86,6 +87,7 @@ class SimulationResult:
     checkpoint_question_count: int | None = None  # question_count when the brake fired
     grill_turns: int = 0
     escalations: int = 0
+    truncated: bool = False  # True if the run hit max_turns without completing/escalating
 
     @property
     def pro_escalation_rate(self) -> float:
@@ -219,6 +221,15 @@ async def _simulate_async(scenario: Scenario, *, max_turns: int) -> SimulationRe
             result.escalations += 1
             break  # cannot proceed without escalating to a paid model
         question = turn.next_question
+    else:
+        # Loop exhausted max_turns without a natural break (complete/escalate) —
+        # surface it so callers don't misread an incomplete run as "no results".
+        result.truncated = True
+        print(
+            f"[user_simulator] scenario '{scenario.name}' hit max_turns={max_turns} "
+            "without completing.",
+            file=sys.stderr,
+        )
 
     final = await session.current_state()
     result.validated_stories = [
@@ -261,7 +272,8 @@ def _format_report(results: list[SimulationResult]) -> str:
         lines.append(
             f"[{r.scenario}] grills={r.grill_turns} validated={len(r.validated_stories)} "
             f"checkpoint@qc={r.checkpoint_question_count} "
-            f"pro_escalation_rate={r.pro_escalation_rate:.2f}"
+            f"pro_escalation_rate={r.pro_escalation_rate:.2f} "
+            f"truncated={r.truncated}"
         )
     return "\n".join(lines)
 
