@@ -22,8 +22,6 @@
      the user's latest discovery `CareerEngineState` for the meter, wired into `streamlit_app`);
      `jobs/sweep_endpoint.py` (framework-agnostic OIDC-audience-verified handler running `run_sweep`);
      `terraform` feature added to `.devcontainer/devcontainer.json` (takes effect on rebuild).
-  4. **Phase 2 deferred wiring** — Streamlit discovery-session load for the meter; sweep Cloud Run HTTP
-     endpoint + IdP frontend token exchange. Also add `terraform` to the devcontainer (see memory).
   5. **Capstone dry-run** — execute [CAPSTONE_RUNBOOK.md](CAPSTONE_RUNBOOK.md) end-to-end; capture evidence.
 - **State:** tags `contract-v1.0.0…v2.2.0`; gates `make check` (389) + `make tf-check`. Phase 2 deferred
   thin wiring (item 4 above) is logic-built+tested, only outer glue remains.

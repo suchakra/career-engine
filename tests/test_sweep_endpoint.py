@@ -43,7 +43,13 @@ def _call(authorization: str | None, **kw: Any) -> SweepHttpResponse:
         "store": _FakeStore(),
         "today": "2026-07-02",
         "expected_audiences": {_AUD},
-        "verifier": _verifier({"aud": _AUD, "email": "sched@proj.iam.gserviceaccount.com"}),
+        "verifier": _verifier(
+            {
+                "aud": _AUD,
+                "iss": "https://accounts.google.com",
+                "email": "sched@proj.iam.gserviceaccount.com",
+            }
+        ),
         "log": lambda _m: None,
     }
     defaults.update(kw)
@@ -71,10 +77,23 @@ class TestAuthGuards:
         resp = _call("Bearer x", expected_audiences=set())
         assert resp.status == 403
 
+    def test_untrusted_issuer_is_403(self) -> None:
+        resp = _call(
+            "Bearer x",
+            verifier=_verifier({"aud": _AUD, "iss": "https://evil.example.com"}),
+        )
+        assert resp.status == 403
+
     def test_wrong_service_account_is_403(self) -> None:
         resp = _call(
             "Bearer x",
-            verifier=_verifier({"aud": _AUD, "email": "attacker@evil.iam.gserviceaccount.com"}),
+            verifier=_verifier(
+                {
+                    "aud": _AUD,
+                    "iss": "https://accounts.google.com",
+                    "email": "attacker@evil.iam.gserviceaccount.com",
+                }
+            ),
             allowed_service_accounts={"sched@proj.iam.gserviceaccount.com"},
         )
         assert resp.status == 403

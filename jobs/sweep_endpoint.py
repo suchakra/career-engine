@@ -27,8 +27,14 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
 
-from auth.firebase_auth import _google_tokeninfo_verifier
+from auth.firebase_auth import google_tokeninfo_verifier
 from jobs.pending_action_sweep import DEFAULT_THRESHOLD_DAYS, WorkspaceStore, run_sweep
+
+# Issuers Google mints Cloud Scheduler OIDC tokens under (defense-in-depth,
+# consistent with FirebaseAuthProvider — the aud pin is the load-bearing guard).
+_ALLOWED_ISSUERS: frozenset[str] = frozenset(
+    {"https://accounts.google.com", "accounts.google.com"}
+)
 
 
 @dataclass(frozen=True)
@@ -84,7 +90,7 @@ def handle_sweep_request(
     if token is None:
         return SweepHttpResponse(401, {"error": "missing or malformed Authorization bearer token"})
 
-    verify = verifier if verifier is not None else _google_tokeninfo_verifier
+    verify = verifier if verifier is not None else google_tokeninfo_verifier
     try:
         claims = verify(token)
     except Exception:
@@ -93,6 +99,9 @@ def handle_sweep_request(
     audiences = frozenset(expected_audiences)
     if not audiences or claims.get("aud", "") not in audiences:
         return SweepHttpResponse(403, {"error": "token audience not accepted"})
+
+    if claims.get("iss", "") not in _ALLOWED_ISSUERS:
+        return SweepHttpResponse(403, {"error": "token issuer not accepted"})
 
     if allowed_service_accounts is not None:
         if claims.get("email", "") not in frozenset(allowed_service_accounts):

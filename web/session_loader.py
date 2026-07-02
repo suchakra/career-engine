@@ -47,6 +47,11 @@ async def _aload_latest_discovery_state(
     )
     if full is None or not full.state:
         return empty
+    # CareerEngineState fields live FLAT at the top level of session.state (see
+    # discovery_graph._write_state and cli.session.read_state). Validate the whole
+    # state dict — do NOT reach into a nested "career_engine_state" key: after a
+    # FirestoreSessionService round-trip that sub-key holds an EMPTY default while
+    # the real fields remain flat at the top level.
     return CareerEngineState.model_validate(full.state)
 
 

@@ -18,7 +18,20 @@ _UID = "user-1"
 
 
 def _session(sid: str, *, updated: float, state: dict[str, Any] | None) -> SimpleNamespace:
-    return SimpleNamespace(id=sid, last_update_time=updated, state=state)
+    """Build a fake session whose .state mirrors FirestoreSessionService's layout.
+
+    The real service returns the CareerEngineState fields FLAT at the top level
+    PLUS a nested ``career_engine_state`` sub-key that (after a round-trip) holds
+    an EMPTY default. Mirroring that here ensures the loader reads the flat fields
+    — a regression to reading the nested key would make these tests fail.
+    """
+    if state is None:
+        return SimpleNamespace(id=sid, last_update_time=updated, state=None)
+    wrapped = {
+        **state,  # flat CareerEngineState fields (the real values)
+        "career_engine_state": CareerEngineState().model_dump(mode="json"),  # nested empty default
+    }
+    return SimpleNamespace(id=sid, last_update_time=updated, state=wrapped)
 
 
 class _FakeSessionService:
