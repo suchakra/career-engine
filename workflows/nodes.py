@@ -69,21 +69,27 @@ ModelClient = Any  # Protocol: .generate(model_id: str, system: str, user: str) 
 def _default_client_factory() -> ModelClient:
     """Return the default genai-backed model client."""
     import google.genai as genai
+    from google.genai import types as gtypes
 
     settings = get_settings()
     api_key = settings.gemini_api_key or settings.dev_gemini_key or None
+    # A per-request timeout (ms) so a network stall raises instead of hanging the
+    # graph. See workflows/observability.py for the visibility half.
+    http_options = gtypes.HttpOptions(timeout=int(settings.model_timeout_seconds * 1000))
 
     class _GenaiClient:
         """Thin wrapper around google.genai for generate() calls."""
 
         def __init__(self, key: str | None) -> None:
-            """Initialise with optional API key."""
-            self._client = genai.Client(api_key=key) if key else genai.Client()
+            """Initialise with optional API key + a request timeout."""
+            self._client = (
+                genai.Client(api_key=key, http_options=http_options)
+                if key
+                else genai.Client(http_options=http_options)
+            )
 
         def generate(self, model_id: str, system: str, user: str) -> str:
             """Call generate_content and return the text response."""
-            from google.genai import types as gtypes
-
             response = self._client.models.generate_content(
                 model=model_id,
                 contents=user,
@@ -97,6 +103,29 @@ def _default_client_factory() -> ModelClient:
 _client_factory: Callable[[], ModelClient] = _default_client_factory
 
 
+class _MonitoredModelClient:
+    """Wraps any ModelClient to log + time every ``generate`` call.
+
+    Delegates to the wrapped client unchanged (so injected test mocks behave
+    identically); it only adds a :func:`~workflows.observability.log_operation`
+    bracket around the call, surfacing slow/failed model calls in the logs.
+    """
+
+    def __init__(self, delegate: ModelClient) -> None:
+        """Wrap a delegate model client."""
+        self._delegate = delegate
+
+    def generate(self, model_id: str, system: str, user: str) -> str:
+        """Time + log the delegate's generate call."""
+        from workflows.observability import get_logger, log_operation
+
+        with log_operation(
+            "model.generate", logger=get_logger("nodes"), model_id=model_id
+        ):
+            result: str = self._delegate.generate(model_id, system, user)
+        return result
+
+
 def set_model_client_factory(factory: Callable[[], ModelClient]) -> None:
     """Replace the model client factory (for testing).
 
@@ -108,8 +137,8 @@ def set_model_client_factory(factory: Callable[[], ModelClient]) -> None:
 
 
 def _get_model_client() -> ModelClient:
-    """Return the current model client (real or injected mock)."""
-    return _client_factory()
+    """Return the current model client (real or injected mock), monitored."""
+    return _MonitoredModelClient(_client_factory())
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────

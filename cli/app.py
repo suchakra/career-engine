@@ -431,13 +431,22 @@ class DiscoverySession:
     # ── Private helpers ───────────────────────────────────────────────────────
 
     async def _run_turn(self) -> None:
-        """Execute one Runner turn, draining all events."""
-        async for _ in self._runner.run_async(
-            user_id=self._user_id,
-            session_id=self._session_id,
-            state_delta={},
+        """Execute one Runner turn, draining all events (timed + logged)."""
+        from workflows.observability import get_logger, log_operation
+
+        before = await self.current_state()
+        with log_operation(
+            "graph.turn",
+            logger=get_logger("session"),
+            phase=before.current_phase.value,
+            question_count=before.question_count,
         ):
-            pass
+            async for _ in self._runner.run_async(
+                user_id=self._user_id,
+                session_id=self._session_id,
+                state_delta={},
+            ):
+                pass
 
     async def _read_turn_result(self) -> TurnResult:
         """Read state after a grill turn and build a TurnResult.

@@ -35,6 +35,9 @@ def _read_id_token() -> str | None:
 
 def main() -> None:
     """Authenticate, load the workspace, and render the dashboard (or a sign-in prompt)."""
+    from workflows.observability import configure_logging
+
+    configure_logging()
     today = date.today().isoformat()  # the one wall-clock read, at the boundary
 
     session = try_bootstrap_web_session(

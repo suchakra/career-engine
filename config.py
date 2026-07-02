@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     # Application
     app_name: str = Field(default="career-engine", description="ADK app name / Firestore namespace")
 
+    # Observability — a per-request model timeout so a network stall surfaces as a
+    # loud error instead of hanging the discovery graph indefinitely.
+    model_timeout_seconds: float = Field(
+        default=60.0, description="Per-request timeout for real model calls (seconds)."
+    )
+
     # Developer escape hatch — local dev only; never used in production
     dev_user_id: str = Field(
         default="",
