@@ -15,7 +15,10 @@
   2. **Monitoring/logging** for graph hangs ✅ DONE — merged via **PR #3** (405 tests):
      `workflows/observability.py` + monitored model client + per-request model timeout
      (`settings.model_timeout_seconds`) + `graph.turn` span.
-  3. **CoT tuning** — measure & reduce the Pro-escalation rate (eval harness now measures it). ⬅ NEXT
+  3. **CoT tuning** — measure & reduce the Pro-escalation rate. ⬅ IN REVIEW (PR #4):
+     Free-Mode Pro-escalation gate in `execute_grill_turn_node` (per-entry `grill_attempts`,
+     escalates after 6 failed attempts, above the checkpoint boundary) + CoT tuning;
+     **contract v2.3.0** (additive `grill_attempts`) — tag `contract-v2.3.0` on merge.
   4. **Phase 2 deferred wiring** — Streamlit discovery-session load for the meter; sweep Cloud Run HTTP
      endpoint + IdP frontend token exchange. Also add `terraform` to the devcontainer (see memory).
   5. **Capstone dry-run** — execute [CAPSTONE_RUNBOOK.md](CAPSTONE_RUNBOOK.md) end-to-end; capture evidence.

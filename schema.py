@@ -22,6 +22,10 @@ v2.0.0 change summary:
     CareerEngineState.
   - Added entry_id to StarStory (links a story to its Entry).
   - Added discovery_completeness() and recent_window_complete() pure helpers.
+
+v2.3.0 change summary (additive, backward-compatible):
+  - Added grill_attempts (dict[str, int]) to CareerEngineState — per-entry failed
+    metric-extraction counter driving the Free-Mode Pro-escalation gate.
 """
 
 from __future__ import annotations
@@ -250,6 +254,15 @@ class CareerEngineState(BaseModel):
         default=0,
         ge=0,
         description="Total grill questions asked; drives the 5-turn checkpoint brake",
+    )
+    grill_attempts: dict[str, int] = Field(
+        default_factory=dict,
+        description=(
+            "Per-entry count of failed metric-extraction attempts (entry_id → count), "
+            "added in v2.3.0.  Drives the Free-Mode Pro-escalation gate: once an entry "
+            "accumulates too many Flash+CoT failures, the grill node emits UpgradeRequired "
+            "recommending a Pro reasoning model.  Reset for an entry on a validated answer."
+        ),
     )
 
     # ── Checkpoint state ──────────────────────────────────────────────────────

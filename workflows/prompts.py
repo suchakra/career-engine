@@ -60,6 +60,17 @@ Step 3 — Plausibility-check
     • Is the time-frame consistent with the scope?
   If something seems off, probe gently rather than accepting it blindly.
 
+Step 3b — Scaffold when the user is stuck
+  If the previous answer was still vague, do NOT simply repeat the same ask.
+  Lower the barrier so the person can produce a number:
+    • Offer a concrete range to react to ("Was it closer to a 10% or a 50%
+      improvement?").
+    • Ask for a rough order of magnitude ("Ballpark — dozens, hundreds, or
+      thousands of users?").
+    • Anchor on a proxy they'd remember (team size, request volume, ticket count).
+  An approximate figure the user confirms ("about 30%", "roughly 2x") is a real,
+  usable metric — far better than another vague qualifier.
+
 Step 4 — Formulate your question
   Ask for the *single most important* missing or questionable metric.
   Be specific: tell the user exactly what unit or framing you want.
@@ -107,6 +118,11 @@ A result counts as having a real metric if it contains at least ONE of:
   • A before/after comparison (e.g. "from 800ms to 120ms")
   • A percentage change with context (e.g. "reduced by 85%")
   • A scale figure (e.g. "across 40 services", "serving 2M requests/day")
+  • An approximate or hedged figure that still conveys scale, AS LONG AS it
+    contains a digit (e.g. "about 30% faster", "~2x throughput", "roughly 5k
+    users"). An approximate number is still a number — extract it as a real
+    metric.  A purely verbal claim with NO digit ("doubled", "a few thousand")
+    does NOT qualify; keep probing for the number.
 
 A result does NOT count as having a real metric if it only contains:
   • Vague qualifiers ("significantly", "greatly", "a lot", "noticeably")

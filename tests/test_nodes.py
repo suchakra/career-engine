@@ -289,6 +289,120 @@ class TestGrillVagueAnswerRejected:
         assert result.current_question != ""
 
 
+# ── execute_grill_turn_node — Free-Mode Pro-escalation gate ───────────────────
+
+
+class TestGrillProEscalationGate:
+    """After too many failed Flash+CoT attempts on an entry, Free Mode escalates."""
+
+    _VAGUE_EXTRACTION = json.dumps(
+        {
+            "situation": "s",
+            "task": "t",
+            "action": "a",
+            "result": "we improved things a lot",
+            "metrics_found": False,
+            "metric_summary": "",
+        }
+    )
+
+    def _vague_client(self) -> ScriptedClient:
+        return ScriptedClient(
+            responses={
+                "data extraction assistant": self._VAGUE_EXTRACTION,
+                "senior engineering colleague": "Can you put a concrete number on that?",
+            }
+        )
+
+    def test_escalates_after_threshold_failed_attempts_in_free_mode(self) -> None:
+        """The failed attempt that reaches the threshold returns UpgradeRequired."""
+        entry = _entry()
+        _install_client(self._vague_client())
+        # Pre-seed one below the threshold; this vague answer trips it.
+        state = CareerEngineState(
+            current_phase=PhaseStatus.GRILLING,
+            work_timeline=[entry],
+            grill_frontier=str(entry.entry_id),
+            pending_user_answer="we improved things a lot",
+            grill_attempts={str(entry.entry_id): nodes._MAX_FLASH_GRILL_ATTEMPTS - 1},
+        )
+        result = execute_grill_turn_node(state)
+
+        assert isinstance(result, UpgradeRequired)
+        assert result.required_capability == Capability.REASONING_HIGH
+        assert result.node_name == "execute_grill_turn_node"
+
+    def test_below_threshold_keeps_probing_and_increments_counter(self) -> None:
+        """Under the threshold: a follow-up is asked and the counter increments."""
+        entry = _entry()
+        _install_client(self._vague_client())
+        state = CareerEngineState(
+            current_phase=PhaseStatus.GRILLING,
+            work_timeline=[entry],
+            grill_frontier=str(entry.entry_id),
+            pending_user_answer="we improved things a lot",
+            grill_attempts={str(entry.entry_id): 2},
+        )
+        result = execute_grill_turn_node(state)
+
+        assert isinstance(result, CareerEngineState)
+        assert result.grill_attempts[str(entry.entry_id)] == 3
+        assert result.current_question != ""
+
+    def test_byok_mode_does_not_escalate(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """In BYOK mode REASONING_HIGH is already Pro — never escalate, keep probing."""
+        from config import Settings
+
+        monkeypatch.setattr(
+            nodes, "get_settings", lambda: Settings(access_mode=AccessMode.BYOK)
+        )
+        entry = _entry()
+        _install_client(self._vague_client())
+        state = CareerEngineState(
+            current_phase=PhaseStatus.GRILLING,
+            work_timeline=[entry],
+            grill_frontier=str(entry.entry_id),
+            pending_user_answer="we improved things a lot",
+            grill_attempts={str(entry.entry_id): nodes._MAX_FLASH_GRILL_ATTEMPTS + 3},
+        )
+        result = execute_grill_turn_node(state)
+
+        assert isinstance(result, CareerEngineState)  # no escalation despite high count
+        assert result.current_question != ""
+
+    def test_validated_answer_resets_entry_counter(self) -> None:
+        """A validated metric clears that entry's failed-attempt counter."""
+        entry = _entry()
+        client = ScriptedClient(
+            responses={
+                "data extraction assistant": json.dumps(
+                    {
+                        "situation": "s",
+                        "task": "t",
+                        "action": "a",
+                        "result": "cut p99 from 800ms to 120ms across 40 services",
+                        "metrics_found": True,
+                        "metric_summary": "p99 800->120ms",
+                    }
+                ),
+            }
+        )
+        _install_client(client)
+        state = CareerEngineState(
+            current_phase=PhaseStatus.GRILLING,
+            work_timeline=[entry],
+            grill_frontier=str(entry.entry_id),
+            pending_user_answer="cut p99 from 800ms to 120ms across 40 services",
+            grill_attempts={str(entry.entry_id): 3},
+        )
+        result = execute_grill_turn_node(state)
+
+        assert isinstance(result, CareerEngineState)
+        assert len(result.extracted_star_stories) == 1
+        # The pre-seeded counter (3) for this entry is cleared entirely.
+        assert result.grill_attempts == {}
+
+
 # ── execute_grill_turn_node — specific answer accepted ────────────────────────
 
 
