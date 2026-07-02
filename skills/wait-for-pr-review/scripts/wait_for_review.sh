@@ -46,6 +46,11 @@ done
 [[ "$TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo "--timeout must be a positive integer" >&2; exit 64; }
 [[ "$INTERVAL" =~ ^[1-9][0-9]*$ ]] || { echo "--interval must be a positive integer" >&2; exit 64; }
 
+if ! command -v jq >/dev/null 2>&1; then
+  echo "prerequisite missing: 'jq' is required to filter reviews. Install jq, then retry." >&2
+  exit 69
+fi
+
 if ! gh auth status >/dev/null 2>&1; then
   echo "gh is not authenticated. Run 'gh auth login' or set GH_TOKEN, then retry." >&2
   exit 69

@@ -115,5 +115,12 @@ class TestDeterminism:
     def test_repeated_runs_match(self) -> None:
         r1 = run_simulation(_scenario("eventually_specific"))
         r2 = run_simulation(_scenario("eventually_specific"))
+        # Eval-relevant outputs are identical across runs. (StarStory.story_id /
+        # extracted_at are incidental schema nondeterminism and are excluded.)
         assert len(r1.validated_stories) == len(r2.validated_stories)
         assert [t.answer for t in r1.transcript] == [t.answer for t in r2.transcript]
+        assert [t.question for t in r1.transcript] == [t.question for t in r2.transcript]
+        assert [s.result for s in r1.validated_stories] == [s.result for s in r2.validated_stories]
+        assert r1.checkpoint_question_count == r2.checkpoint_question_count
+        assert r1.grill_turns == r2.grill_turns
+        assert r1.pro_escalation_rate == r2.pro_escalation_rate

@@ -16,7 +16,10 @@ this to wait for the review to be submitted, then read its comments and address 
 
 ## Prerequisites
 
-- `gh` authenticated (`gh auth login` or `GH_TOKEN`). The script exits 69 if not.
+- `gh` authenticated (`gh auth login` or `GH_TOKEN`).
+- `jq` installed (used to filter `gh pr view --json reviews`).
+
+The script exits **69** if either prerequisite is missing (gh unauthenticated or jq absent).
 
 ## Request a Copilot review first (separate step)
 
@@ -46,7 +49,8 @@ time you requested the review to ignore earlier ones).
 - `0` — a matching review was found; its JSON (author, state, body, submittedAt)
   is printed to stdout.
 - `2` — timeout (no matching review yet); re-invoke to keep waiting.
-- `64` — bad arguments · `69` — gh not authenticated.
+- `64` — bad arguments (missing/invalid flag values) · `69` — prerequisite
+  missing (`gh` not authenticated, or `jq` not installed).
 
 ## After it returns
 

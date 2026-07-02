@@ -79,7 +79,16 @@ class SimulatedTurn:
 
 @dataclass
 class SimulationResult:
-    """Outcome of a simulation run (for assertions + reporting)."""
+    """Outcome of a simulation run (for assertions + reporting).
+
+    Determinism scope: the eval-relevant outputs are stable across repeated runs
+    — the transcript, the number of validated stories and their ``result`` text,
+    ``checkpoint_question_count``, ``grill_turns``, ``escalations``, and
+    ``truncated``. The retained ``StarStory`` objects still carry incidental
+    schema-level nondeterminism (``story_id`` via ``uuid4``, ``extracted_at`` via
+    the clock); those fields are NOT normalized here and must not be used for
+    cross-run equality.
+    """
 
     scenario: str
     transcript: list[SimulatedTurn] = field(default_factory=list)
