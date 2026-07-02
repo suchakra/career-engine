@@ -16,6 +16,20 @@ import pytest
 from auth.firebase_auth import FirebaseAuthProvider
 from auth.provider import AuthenticationError
 
+
+@pytest.fixture(autouse=True)
+def _pin_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin settings to an empty project so the audience check does not depend on a
+    developer's local ``.env`` (deterministic: aud enforced only when a test opts
+    in via ``expected_audiences``; issuer is always enforced against Google)."""
+    import config
+    from config import Settings
+
+    monkeypatch.setattr(
+        config, "get_settings", lambda: Settings(firebase_project_id="", gcp_project_id="")
+    )
+
+
 # ── Fake verifier ─────────────────────────────────────────────────────────────
 
 
@@ -118,7 +132,11 @@ class TestTokenRotation:
             nonlocal call_count
             uid = uids[min(call_count, len(uids) - 1)]
             call_count += 1
-            return {"sub": uid, "email": f"{uid}@example.com"}
+            return {
+                "sub": uid,
+                "email": f"{uid}@example.com",
+                "iss": "https://accounts.google.com",
+            }
 
         provider = FirebaseAuthProvider(verifier=_rotating_verifier)
         provider.set_token("token-1")
@@ -207,6 +225,65 @@ class TestClaimsAccess:
         provider.set_token("tok")
         # The user_id must be the sub claim only
         assert provider.get_user_id() == "uid"
+
+
+# ── Audience / issuer pinning (token-substitution defence) ────────────────────
+
+
+class TestAudienceAndIssuerPinning:
+    """A genuinely-signed token minted for another relying party must be rejected."""
+
+    def test_rejects_token_with_unexpected_audience(self) -> None:
+        """aud not in expected_audiences → AuthenticationError (confused deputy)."""
+        provider = FirebaseAuthProvider(
+            verifier=_make_fake_verifier(sub="attacker", extra_claims={"aud": "some-other-app"}),
+            expected_audiences={"my-project"},
+        )
+        with pytest.raises(AuthenticationError, match="audience"):
+            provider.set_token("token-for-another-app")
+        assert provider.is_authenticated() is False
+
+    def test_accepts_token_with_expected_audience(self) -> None:
+        """aud in expected_audiences → accepted."""
+        provider = FirebaseAuthProvider(
+            verifier=_make_fake_verifier(sub="uid-ok", extra_claims={"aud": "my-project"}),
+            expected_audiences={"my-project"},
+        )
+        provider.set_token("valid-token")
+        assert provider.get_user_id() == "uid-ok"
+
+    def test_accepts_securetoken_issuer_when_project_configured(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When a project id is set, a Firebase securetoken issuer + aud is accepted."""
+        import config
+        from config import Settings
+
+        monkeypatch.setattr(
+            config, "get_settings", lambda: Settings(firebase_project_id="my-project")
+        )
+        provider = FirebaseAuthProvider(
+            verifier=_make_fake_verifier(
+                sub="uid-fb",
+                extra_claims={
+                    "aud": "my-project",
+                    "iss": "https://securetoken.google.com/my-project",
+                },
+            ),
+        )
+        provider.set_token("firebase-token")
+        assert provider.get_user_id() == "uid-fb"
+
+    def test_rejects_token_with_untrusted_issuer(self) -> None:
+        """iss not in allowed_issuers → AuthenticationError."""
+        provider = FirebaseAuthProvider(
+            verifier=_make_fake_verifier(
+                sub="attacker", extra_claims={"iss": "https://evil.example.com"}
+            ),
+        )
+        with pytest.raises(AuthenticationError, match="issuer"):
+            provider.set_token("token-from-evil-issuer")
+        assert provider.is_authenticated() is False
 
 
 # ── No hardcoded model name check ─────────────────────────────────────────────

@@ -18,7 +18,11 @@ Design rules (enforced):
 
 from __future__ import annotations
 
+import ipaddress
+import socket
+from collections.abc import Callable
 from typing import Any, Protocol
+from urllib.parse import urljoin, urlparse
 
 import httpx
 
@@ -28,6 +32,14 @@ from schema import Capability
 # ── Constants ─────────────────────────────────────────────────────────────────
 
 _FETCH_TIMEOUT_SECONDS: float = 20.0
+_ALLOWED_SCHEMES: frozenset[str] = frozenset({"http", "https"})
+_MAX_REDIRECTS: int = 5
+# Hostnames that resolve to (or alias) the cloud metadata service — blocked even
+# before DNS resolution as a belt-and-braces guard.
+_BLOCKED_HOSTNAMES: frozenset[str] = frozenset({"metadata", "metadata.google.internal"})
+# RFC 6598 shared address space (CGNAT). Python's ipaddress does NOT classify
+# this as private/reserved, so block it explicitly for completeness.
+_CGNAT_NET = ipaddress.ip_network("100.64.0.0/10")
 
 _CLEAN_JD_SYSTEM_PROMPT = """\
 You are a job-description parser.  Your task is to extract only the
@@ -135,35 +147,121 @@ def _get_default_client() -> _GenAIClientProtocol:
 # ── Public functions ──────────────────────────────────────────────────────────
 
 
-def fetch_raw_html(url: str) -> str:
-    """Fetch the raw HTML content of a job description URL.
+def _resolve_addresses(host: str) -> list[str]:
+    """Resolve a hostname to its IP address strings (injectable for tests)."""
+    infos = socket.getaddrinfo(host, None)
+    return [str(info[4][0]) for info in infos]
 
-    Uses httpx with a fixed timeout; follows redirects up to 5 hops.
+
+def _is_blocked_ip(ip_str: str) -> bool:
+    """Return True if an IP is private/loopback/link-local/reserved (SSRF target)."""
+    try:
+        ip = ipaddress.ip_address(ip_str)
+    except ValueError:
+        return True  # unparseable → treat as unsafe
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
+        or ip in _CGNAT_NET
+    )
+
+
+def _assert_safe_url(url: str, *, resolver: Callable[[str], list[str]]) -> None:
+    """Reject non-HTTP(S) URLs and any host resolving to a non-public address.
+
+    Guards against SSRF: the JD URL is fully user-controlled, and the fetched
+    body is returned to the caller. Without this, a user could point the scraper
+    at the cloud metadata service or an internal VPC endpoint and exfiltrate the
+    response (ARCHITECTURE §5 — the runtime SA can read Secret Manager).
+
+    Raises:
+        ScraperError: if the scheme is not http/https or the host resolves to a
+            private, loopback, link-local, reserved, or metadata address.
+    """
+    parsed = urlparse(url)
+    scheme = parsed.scheme.lower()
+    if scheme not in _ALLOWED_SCHEMES:
+        raise ScraperError(
+            f"Refusing to fetch non-HTTP(S) URL scheme {scheme or '(none)'!r}: {url!r}"
+        )
+    host = parsed.hostname
+    if not host:
+        raise ScraperError(f"URL has no host: {url!r}")
+    if host.lower() in _BLOCKED_HOSTNAMES:
+        raise ScraperError("Refusing to fetch the cloud metadata endpoint.")
+    try:
+        addresses = resolver(host)
+    except OSError as exc:
+        raise ScraperError(f"Network error resolving {host!r}: {exc}") from exc
+    if not addresses:
+        raise ScraperError(f"Could not resolve host {host!r}.")
+    for addr in addresses:
+        if _is_blocked_ip(addr):
+            raise ScraperError(
+                "Refusing to fetch a URL that resolves to a private, loopback, or "
+                f"link-local address ({addr}). Only public job-posting URLs are allowed."
+            )
+
+
+def fetch_raw_html(
+    url: str,
+    *,
+    resolver: Callable[[str], list[str]] = _resolve_addresses,
+) -> str:
+    """Fetch the raw HTML content of a *public* job description URL.
+
+    SSRF-hardened: the scheme must be http/https and the host (revalidated on
+    every redirect hop) must resolve to a public address; redirects are followed
+    manually up to :data:`_MAX_REDIRECTS` so an internal-address redirect cannot
+    slip past the check.
 
     Args:
         url: The public URL of the job description page.
+        resolver: Hostname→IP resolver (injectable for tests).
 
     Returns:
         Raw HTML string (decoded from the response).
 
     Raises:
-        ScraperError: if the URL cannot be fetched, returns a non-2xx status,
-            or times out.
+        ScraperError: if the URL is unsafe (non-HTTP(S) / private address), can
+            not be fetched, returns a non-2xx status, times out, or redirects too
+            many times.
     """
-    try:
-        with httpx.Client(follow_redirects=True, timeout=_FETCH_TIMEOUT_SECONDS) as client:
-            response = client.get(url)
-    except httpx.TimeoutException as exc:
-        raise ScraperError(f"Request timed out fetching {url!r}: {exc}") from exc
-    except httpx.RequestError as exc:
-        raise ScraperError(f"Network error fetching {url!r}: {exc}") from exc
+    # NOTE (residual risk): _assert_safe_url resolves + validates the host, but
+    # httpx re-resolves at connect time, leaving a DNS-rebinding TOCTOU window
+    # (docs/SECURITY.md "Residual risks"). It is compensated by the Cloud Run
+    # egress posture (no route to RFC1918 / the metadata service by default, and
+    # metadata reads additionally require a Metadata-Flavor header we never send).
+    current = url
+    redirects = 0
+    while True:
+        _assert_safe_url(current, resolver=resolver)
+        try:
+            with httpx.Client(follow_redirects=False, timeout=_FETCH_TIMEOUT_SECONDS) as client:
+                response = client.get(current)
+        except httpx.TimeoutException as exc:
+            raise ScraperError(f"Request timed out fetching {current!r}: {exc}") from exc
+        except httpx.RequestError as exc:
+            raise ScraperError(f"Network error fetching {current!r}: {exc}") from exc
 
-    if response.status_code < 200 or response.status_code >= 300:
-        raise ScraperError(
-            f"Non-2xx response fetching {url!r}: HTTP {response.status_code}"
-        )
-
-    return response.text
+        if 300 <= response.status_code < 400:
+            if redirects >= _MAX_REDIRECTS:
+                raise ScraperError(f"Too many redirects (> {_MAX_REDIRECTS}) fetching {url!r}.")
+            location = response.headers.get("location")
+            if not location:
+                raise ScraperError(f"Redirect without a Location header from {current!r}.")
+            redirects += 1
+            current = urljoin(current, location)
+            continue
+        if response.status_code < 200 or response.status_code >= 300:
+            raise ScraperError(
+                f"Non-2xx response fetching {current!r}: HTTP {response.status_code}"
+            )
+        return response.text
 
 
 def clean_jd_html(

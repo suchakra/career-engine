@@ -52,6 +52,17 @@ def _mock_client(response_text: str) -> Any:
     return mock
 
 
+def _public_resolver(_host: str) -> list[str]:
+    """A stand-in resolver returning a public IP (keeps fetch tests offline).
+
+    93.184.216.34 is a genuine public IP (example.com); it is deliberately NOT a
+    private/loopback/reserved address, so it passes the SSRF guard. (A documentation
+    range like 192.0.2.0/24 can't be used here — Python 3.12+ classifies it as
+    private, which the guard would reject.)
+    """
+    return ["93.184.216.34"]
+
+
 # ── AC1: Content filtering correctness ───────────────────────────────────────
 
 
@@ -278,7 +289,7 @@ class TestScraperErrorPaths:
             from tools.web_scraper import fetch_raw_html
 
             with pytest.raises(ScraperError, match="Non-2xx response"):
-                fetch_raw_html("https://example.com/job/123")
+                fetch_raw_html("https://example.com/job/123", resolver=_public_resolver)
 
     def test_fetch_raw_html_timeout_raises(self) -> None:
         """ScraperError is raised on httpx.TimeoutException."""
@@ -292,7 +303,7 @@ class TestScraperErrorPaths:
             from tools.web_scraper import fetch_raw_html
 
             with pytest.raises(ScraperError, match="timed out"):
-                fetch_raw_html("https://example.com/job/slow")
+                fetch_raw_html("https://example.com/job/slow", resolver=_public_resolver)
 
     def test_fetch_raw_html_network_error_raises(self) -> None:
         """ScraperError is raised on httpx.RequestError (e.g. DNS failure)."""
@@ -306,7 +317,7 @@ class TestScraperErrorPaths:
             from tools.web_scraper import fetch_raw_html
 
             with pytest.raises(ScraperError, match="Network error"):
-                fetch_raw_html("https://badhost.invalid/job/123")
+                fetch_raw_html("https://badhost.invalid/job/123", resolver=_public_resolver)
 
     def test_clean_jd_empty_model_response_raises(self) -> None:
         """ScraperError is raised if the model returns an empty response."""
@@ -350,3 +361,67 @@ class TestScraperErrorPaths:
 
         mock_fetch.assert_called_once_with("https://example.com/job")
         assert result == expected
+
+
+# ── SSRF hardening ────────────────────────────────────────────────────────────
+
+
+class TestScraperSsrfGuards:
+    """fetch_raw_html refuses non-HTTP(S) schemes and non-public hosts."""
+
+    def test_rejects_non_http_scheme(self) -> None:
+        """A file:// (or other non-HTTP) URL is refused before any request."""
+        from tools.web_scraper import fetch_raw_html
+
+        with pytest.raises(ScraperError, match="non-HTTP"):
+            fetch_raw_html("file:///etc/passwd")
+
+    def test_rejects_link_local_metadata_ip(self) -> None:
+        """A URL resolving to the link-local metadata address is refused."""
+        from tools.web_scraper import fetch_raw_html
+
+        with pytest.raises(ScraperError, match="private, loopback, or link-local"):
+            fetch_raw_html(
+                "http://169.254.169.254/computeMetadata/v1/",
+                resolver=lambda _h: ["169.254.169.254"],
+            )
+
+    def test_rejects_host_resolving_to_private_address(self) -> None:
+        """A public-looking hostname that resolves to a private IP is refused."""
+        from tools.web_scraper import fetch_raw_html
+
+        with pytest.raises(ScraperError, match="private, loopback, or link-local"):
+            fetch_raw_html(
+                "https://internal.jobs.example.com/role",
+                resolver=lambda _h: ["10.0.0.5"],
+            )
+
+    def test_rejects_metadata_hostname_before_resolution(self) -> None:
+        """The metadata hostname is blocked even if DNS would resolve it publicly."""
+        from tools.web_scraper import fetch_raw_html
+
+        with pytest.raises(ScraperError, match="metadata"):
+            fetch_raw_html(
+                "http://metadata.google.internal/token",
+                resolver=lambda _h: ["93.184.216.34"],
+            )
+
+    def test_rejects_redirect_to_internal_address(self) -> None:
+        """A public URL that 302-redirects to an internal address is refused."""
+        from tools.web_scraper import fetch_raw_html
+
+        def _resolver(host: str) -> list[str]:
+            return {"jobs.example.com": ["93.184.216.34"]}.get(host, ["169.254.169.254"])
+
+        with patch("httpx.Client") as mock_httpx_cls:
+            redirect = MagicMock()
+            redirect.status_code = 302
+            redirect.headers = {"location": "http://169.254.169.254/latest/meta-data/"}
+            instance = MagicMock()
+            instance.__enter__ = MagicMock(return_value=instance)
+            instance.__exit__ = MagicMock(return_value=False)
+            instance.get.return_value = redirect
+            mock_httpx_cls.return_value = instance
+
+            with pytest.raises(ScraperError, match="private, loopback, or link-local"):
+                fetch_raw_html("https://jobs.example.com/role", resolver=_resolver)
