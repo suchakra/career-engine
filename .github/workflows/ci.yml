@@ -56,3 +56,24 @@ jobs:
       # fmt + validate for both env roots — no GCP credentials required.
       - name: make tf-check
         run: make tf-check
+
+  docker-build:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Validate the Dockerfile builds (no push, no registry/credentials needed).
+      - name: docker build
+        run: docker build -t career-engine:ci .
+
+      # A green build can still fail at runtime (missing shared libs / bad
+      # entrypoint). Smoke-test the built image: import the native-dep-backed
+      # renderer (WeasyPrint → Pango) + core app modules, and confirm the
+      # Streamlit entrypoint resolves. (Avoids importing web.streamlit_app, which
+      # auto-runs the app on import.)
+      - name: Smoke test the image (runtime imports)
+        run: |
+          docker run --rm career-engine:ci \
+            python -c "import weasyprint, tools.pdf_renderer, config, main; print('image runtime imports OK', weasyprint.__version__)"
+          docker run --rm career-engine:ci streamlit --version

@@ -57,9 +57,13 @@ TF_DEV  := terraform -chdir=infrastructure/envs/dev
 TF_PROD := terraform -chdir=infrastructure/envs/prod
 
 .PHONY: build
-build:  ## Build + push the container image via Google Cloud Build
-	@echo "Will run: gcloud builds submit --config=cloudbuild.yaml"
-	@exit 0
+build:  ## Build the container image locally (docker build)
+	docker build -t career-engine:local .
+
+.PHONY: cloud-build
+cloud-build:  ## Build + push the image via Cloud Build (set IMAGE=<AR path:tag>)
+	@test -n "$(IMAGE)" || { echo "Set IMAGE=<region>-docker.pkg.dev/<project>/<prefix>-images/app:tag"; exit 64; }
+	gcloud builds submit --config=cloudbuild.yaml --substitutions=_IMAGE=$(IMAGE)
 
 .PHONY: tf-fmt
 tf-fmt:  ## Check Terraform formatting (no credentials needed)

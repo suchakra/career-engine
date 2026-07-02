@@ -1,0 +1,22 @@
+# Cloud Build: build the CareerEngine image and push it to Artifact Registry.
+#
+#   gcloud builds submit --config=cloudbuild.yaml \
+#     --substitutions=_IMAGE=<region>-docker.pkg.dev/<project>/<name_prefix>-images/app:latest
+#
+# The Artifact Registry repo (`<name_prefix>-images`) is created by the Terraform
+# `artifact_registry` module. Reference the pushed _IMAGE as the `image` variable
+# in your terraform.tfvars, then `make deploy`.
+substitutions:
+  _IMAGE: "REGION-docker.pkg.dev/PROJECT_ID/PREFIX-images/app:latest" # override on submit
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-t", "${_IMAGE}", "."]
+  - name: gcr.io/cloud-builders/docker
+    args: ["push", "${_IMAGE}"]
+
+images:
+  - "${_IMAGE}"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
