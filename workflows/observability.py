@@ -43,13 +43,12 @@ def configure_logging(*, level: int | str | None = None) -> None:
             consulted, falling back to INFO.
     """
     global _configured
+    if _configured:
+        return
     logger = logging.getLogger(_ROOT_LOGGER_NAME)
 
     resolved = level if level is not None else os.environ.get("CE_LOG_LEVEL", "INFO")
     logger.setLevel(resolved)
-
-    if _configured:
-        return
 
     handler = logging.StreamHandler()
     handler.setFormatter(

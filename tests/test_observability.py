@@ -67,12 +67,14 @@ class TestConfigureLogging:
         root = logging.getLogger("career_engine")
         before_handlers = list(root.handlers)
         before_propagate = root.propagate
+        before_level = root.level
         before_flag = obs._configured
         yield None
-        # Restore: drop any handlers we added, reset propagate + module flag.
+        # Restore: drop any handlers we added, reset level/propagate + module flag.
         for h in list(root.handlers):
             if h not in before_handlers:
                 root.removeHandler(h)
+        root.setLevel(before_level)
         root.propagate = before_propagate
         obs._configured = before_flag
 
