@@ -94,7 +94,7 @@ Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.
 - ⬜ Interview preparedness (mock interviews from researched company+role question shapes) — [ARCHITECTURE.md §13](ARCHITECTURE.md)
 
 ## Phase 3 — Hardening & Eval
-- ⬜ `evaluation/user_simulator.py` + `test_config.json` (vague-applicant scenarios)
+- 🟡 **`evaluation/user_simulator.py` + `test_config.json` (vague-applicant scenarios) — BUILT** (branch `feat/phase-3-eval`, 388 tests). Deterministic simulator drives the REAL Runner: vague answers pushed back → specific yields validated metric StarStory; 5-turn brake fires (qc=5); records Pro-escalation rate (0 happy / >0 when REASONING_HIGH refused). `evaluation/` now in gates (ruff+mypy+pytest). Under Sonnet+Copilot PR review.
 - ⬜ Monitoring/logging for graph hangs
 - ⬜ Security review (key handling, IAM least-privilege, scraper/PDF injection)
 - ⬜ CoT tuning; measure & reduce Pro-escalation rate

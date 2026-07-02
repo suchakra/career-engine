@@ -18,7 +18,7 @@ VENV_PYTHON  = $(VENV_DIR)/bin/python
 VENV_PIP     = $(VENV_DIR)/bin/pip
 
 # Source roots that ruff and mypy should check
-SRC_DIRS    = config.py schema.py main.py models/ auth/ database/ tools/ workflows/ integration/ cli/ jobs/ web/ tests/
+SRC_DIRS    = config.py schema.py main.py models/ auth/ database/ tools/ workflows/ integration/ cli/ jobs/ web/ evaluation/ tests/
 
 # ── Environment setup ─────────────────────────────────────────────────────────
 
