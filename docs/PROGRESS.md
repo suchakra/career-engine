@@ -106,7 +106,7 @@ Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.
 
 ## Post-queue hardening (from real usage)
 - ✅ **Repo public-ready** — root README + GitHub Actions CI/CD (PR #7) + proprietary LICENSE; real Dockerfile + Cloud Build, CI builds & smoke-tests the image (PR #8).
-- 🔧 **Grill hardening** (`feat/grill-hardening`, **contract v2.4.0**, 434 tests) — three fixes surfaced by a live résumé run: (A) graceful `ModelAPIError` handling (quota/`429` → friendly resumable message, no crash); (B) `grill_answers` per-entry memory (extraction sees all answers; follow-up never re-asks); (C) frontier prioritization (current/substantive roles first via `end_date` present-first + experience-type weight). ARCHITECTURE §6.3.1.
+- ✅ **Grill hardening** — merged via **PR #9** (tag `contract-v2.4.0`, 434 tests) — three fixes surfaced by a live résumé run: (A) graceful `ModelAPIError` handling (quota/`429` → friendly resumable message, no crash); (B) `grill_answers` per-entry memory (extraction sees all answers; follow-up never re-asks); (C) frontier prioritization (current/substantive roles first via `end_date` present-first + experience-type weight). ARCHITECTURE §6.3.1.
 
 ---
 
