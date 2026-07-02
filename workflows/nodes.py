@@ -683,7 +683,10 @@ def execute_grill_turn_node(
         )
         extracted = _parse_json_response(extraction_text)
         metrics_found: bool = bool(extracted.get("metrics_found", False))
-        result_text: str = extracted.get("result", "")
+        # A live model may emit JSON `null` for STAR fields it can't fill; `.get(k, "")`
+        # returns None in that case (the key IS present), so use `or ""` to coerce
+        # null/absent alike to a valid string (StarStory fields are non-nullable str).
+        result_text: str = extracted.get("result") or ""
 
         # Double-check with our own regex (defensive layer)
         if metrics_found and not _contains_real_metric(result_text):
@@ -693,10 +696,10 @@ def execute_grill_turn_node(
             # ── Commit a validated StarStory ──────────────────────────────
             story = StarStory(
                 entry_id=frontier_id,
-                pillar=extracted.get("pillar", frontier_entry.type.value),
-                situation=extracted.get("situation", ""),
-                task=extracted.get("task", ""),
-                action=extracted.get("action", ""),
+                pillar=extracted.get("pillar") or frontier_entry.type.value,
+                situation=extracted.get("situation") or "",
+                task=extracted.get("task") or "",
+                action=extracted.get("action") or "",
                 result=result_text,
                 metrics_validated=True,
             )

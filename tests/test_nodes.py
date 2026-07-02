@@ -289,6 +289,50 @@ class TestGrillVagueAnswerRejected:
         assert result.current_question != ""
 
 
+# ── execute_grill_turn_node — null STAR fields from a live model ──────────────
+
+
+class TestGrillNullStarFields:
+    """A live model may return JSON null for STAR fields; the node must not crash."""
+
+    def test_null_situation_task_still_commits_story(self) -> None:
+        """metrics_found=true with null situation/task → coerced to '' , story committed."""
+        entry = _entry()
+        client = ScriptedClient(
+            responses={
+                # result carries a real metric; situation/task/action/pillar are null.
+                "data extraction assistant": json.dumps(
+                    {
+                        "situation": None,
+                        "task": None,
+                        "action": None,
+                        "pillar": None,
+                        "result": "cut p99 from 800ms to 120ms across 40 services",
+                        "metrics_found": True,
+                        "metric_summary": "p99 800->120ms",
+                    }
+                ),
+            }
+        )
+        _install_client(client)
+        state = CareerEngineState(
+            current_phase=PhaseStatus.GRILLING,
+            work_timeline=[entry],
+            grill_frontier=str(entry.entry_id),
+            pending_user_answer="cut p99 from 800ms to 120ms across 40 services",
+        )
+        result = execute_grill_turn_node(state)
+
+        assert isinstance(result, CareerEngineState)
+        assert len(result.extracted_star_stories) == 1
+        story = result.extracted_star_stories[0]
+        assert story.situation == ""  # null coerced, not a crash
+        assert story.task == ""
+        assert story.action == ""
+        assert story.pillar == entry.type.value  # null pillar → entry type default
+        assert story.metrics_validated is True
+
+
 # ── execute_grill_turn_node — Free-Mode Pro-escalation gate ───────────────────
 
 
