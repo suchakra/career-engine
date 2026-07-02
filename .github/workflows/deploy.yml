@@ -1,0 +1,57 @@
+name: Deploy (manual)
+
+# Continuous *delivery* is opt-in and manual: it never runs automatically, so a
+# repo without cloud credentials never sees a red deploy. Enable it by adding the
+# repository configuration below, then run it from the Actions tab.
+#
+# Required repository settings (Settings → Secrets and variables → Actions):
+#   Secrets:
+#     GCP_WIF_PROVIDER  Workload Identity Federation provider resource name
+#                       (projects/…/locations/global/workloadIdentityPools/…/providers/…)
+#     GCP_DEPLOY_SA     Deployer service account email (impersonated via WIF; no JSON keys)
+#   Variables:
+#     GCP_PROJECT_ID    Target GCP project id
+#     CE_IMAGE          Fully-qualified container image (Artifact Registry path:tag)
+#
+# Keyless auth via Workload Identity Federation is used deliberately — no
+# long-lived service-account keys are stored in the repo (privacy/least-privilege,
+# consistent with ARCHITECTURE §5 and docs/SECURITY.md).
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [dev, prod]
+        default: dev
+
+permissions:
+  contents: read
+  id-token: write # required to mint the WIF OIDC token
+
+jobs:
+  deploy:
+    name: terraform apply (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }} # add required reviewers here for a prod gate
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SA }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: terraform init + apply
+        working-directory: infrastructure/envs/${{ inputs.environment }}
+        env:
+          TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+          TF_VAR_image: ${{ vars.CE_IMAGE }}
+        run: |
+          terraform init -input=false
+          terraform apply -auto-approve -input=false

@@ -1,0 +1,33 @@
+CareerEngine — Proprietary License
+Copyright (c) 2026 Sumanta Chakraborty. All rights reserved.
+
+This repository is SOURCE-AVAILABLE, NOT open source.
+
+The source code in this repository is made publicly viewable for demonstration,
+evaluation, portfolio, and reference purposes only. Being able to view or clone
+this code does not grant any license to use it beyond those purposes.
+
+Permitted, without prior written permission:
+  - Viewing and reading the source code.
+  - Cloning the repository solely to read, evaluate, or run it locally for
+    personal, non-commercial evaluation.
+
+NOT permitted without the prior written permission of the copyright holder:
+  - Use in production or for any commercial purpose.
+  - Copying, reproducing, or redistributing the code or any substantial portion
+    of it.
+  - Modifying the code or creating derivative works, or distributing such works.
+  - Sublicensing, selling, renting, or hosting the software as a service.
+  - Removing or altering this notice.
+
+To request a license for any use beyond the permissions above, contact the
+copyright holder at chakraborty.sumanta@gmail.com.
+
+Third-party dependencies remain under their own respective licenses.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT
+HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
