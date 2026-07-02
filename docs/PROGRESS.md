@@ -3,7 +3,7 @@
 > Single source of truth for **what's done vs. pending**. Update this at the end of every work
 > session / sub-agent run. Keep entries terse. Legend: ✅ done · 🟡 in progress · ⬜ not started · 🚫 blocked.
 
-Last updated: **2026-07-02** — *Phase 2 COMPLETE (contract v2.2.0). **Phase 3 started:** eval harness merged via **PR #1** (squash, **389 tests**) + `wait-for-pr-review` skill. **Copilot budget reset → PR-based workflow** (branch → Sonnet review → PR → Copilot review via `wait-for-pr-review` → squash-merge). **Ordered queue:** (1) security review → (2) monitoring/logging → (3) CoT tuning → then Phase 2 deferred wiring → capstone dry-run.*
+Last updated: **2026-07-02** — *Phase 2 COMPLETE (contract v2.2.0). **Phase 3 started:** eval harness merged via **PR #1** (squash, **389 tests**) + `wait-for-pr-review` skill. **Copilot budget reset → PR-based workflow** (branch → Sonnet review → PR → Copilot review via `wait-for-pr-review` → squash-merge). **Ordered queue:** (1) security review ✅ (PR #2, 398 tests) → (2) monitoring/logging ⬅ NEXT → (3) CoT tuning → then Phase 2 deferred wiring → capstone dry-run.*
 
 ---
 
@@ -95,8 +95,8 @@ Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.
 
 ## Phase 3 — Hardening & Eval  *(PR-based workflow: branch → Sonnet review → PR → Copilot review → squash-merge)*
 - ✅ **`evaluation/user_simulator.py` + `test_config.json`** — merged via **PR #1** (squash, 389 tests). Deterministic simulator drives the REAL Runner: vague answers pushed back → specific yields validated metric StarStory; 5-turn brake fires (qc=5); records Pro-escalation rate (0 happy / >0 when REASONING_HIGH refused); `truncated` surfaces max_turns. `evaluation/` now in gates. Also landed the `wait-for-pr-review` skill. Sonnet PASS + Copilot addressed (both found the same 2 wait-skill must-fixes).
-- ⬜ **Security review** (key handling, IAM least-privilege, scraper/PDF injection) — **NEXT branch** (`/security-review` + fixes).
-- ⬜ Monitoring/logging for graph hangs (observability).
+- ✅ **Security review** (key handling, IAM least-privilege, scraper/PDF injection) — merged via **PR #2** (squash, 398 tests). Fixed 2 exploitable findings: (1) HIGH — `FirebaseAuthProvider` never checked `aud`/`iss` (token substitution → cross-tenant impersonation); (2) MED–HIGH — `fetch_raw_html` SSRF (user-controlled URL → metadata/internal on Cloud Run). Added `docs/SECURITY.md` (threat model + review ledger + DNS-rebinding residual). Sonnet PASS (0 must-fix) + all 5 Copilot comments addressed. Confirmed NOT vulnerable: dev-hatch is CLI-only, PDF render autoescaped, keys use issuer-controlled `sub`.
+- ⬜ **Monitoring/logging** for graph hangs (observability) — **NEXT branch**.
 - ⬜ CoT tuning; measure & reduce Pro-escalation rate (eval harness now measures it).
 
 ---

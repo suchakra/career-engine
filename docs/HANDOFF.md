@@ -1,7 +1,7 @@
 # CareerEngine — Session Handoff / Resume Point
 
 ## 👉 YOU ARE HERE (updated 2026-07-02)
-**`master`, Phase 2 COMPLETE (contract v2.2.0). Phase 3 STARTED — eval harness merged via PR #1 (389 tests). Working the ordered Phase-3 queue via a PR-based workflow.**
+**`master` (clean, synced at `5b047e7`), Phase 2 COMPLETE (contract v2.2.0). Phase 3 in progress — eval harness (PR #1) + security review (PR #2) merged; 398 tests green. Working the ordered Phase-3 queue via a PR-based workflow.**
 - **Workflow (Copilot budget reset):** each chunk = **new branch → build → `make check` green → Sonnet
   review (subagent) + fix → push → `gh pr create` → request Copilot (`gh api --method POST
   repos/{owner}/{repo}/pulls/N/requested_reviewers -f 'reviewers[]=copilot-pull-request-reviewer[bot]'`,
@@ -9,9 +9,10 @@
   (`gh api repos/{owner}/{repo}/pulls/N/comments`) → address → squash-merge (`gh pr merge N --squash
   --delete-branch`)**. `gh` authed as `suchakra`; jq + terraform + gh all present.
 - **ORDERED QUEUE (one PR each, in order):**
-  1. **Security review** ⬅ NEXT — run `/security-review` on the branch; fix key-handling / IAM
-     least-privilege / scraper+PDF-injection findings.
-  2. **Monitoring/logging** for graph hangs (observability).
+  1. **Security review** ✅ DONE — merged via **PR #2** (squash, 398 tests). Fixed HIGH auth
+     `aud`/`iss` gap + MED–HIGH scraper SSRF; added [SECURITY.md](SECURITY.md). Sonnet PASS +
+     Copilot addressed.
+  2. **Monitoring/logging** for graph hangs (observability). ⬅ NEXT
   3. **CoT tuning** — measure & reduce the Pro-escalation rate (eval harness now measures it).
   4. **Phase 2 deferred wiring** — Streamlit discovery-session load for the meter; sweep Cloud Run HTTP
      endpoint + IdP frontend token exchange. Also add `terraform` to the devcontainer (see memory).
