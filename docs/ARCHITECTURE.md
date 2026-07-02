@@ -234,6 +234,22 @@ Two concrete triggers in `execute_grill_turn_node`:
    often it fires as the **Pro-escalation rate** (`evaluation/user_simulator.py`); CoT-prompt
    tuning aims to keep it low by helping users produce a metric before the threshold.
 
+### 6.3.1 Grill loop quality (v2.4.0, from live-run feedback)
+Three behaviours were hardened after a real résumé run:
+- **Frontier prioritization** — `_frontier_sort_key` ranks entries-needing-work by
+  `(recency, substance, start-year)`: a **current role** (empty `end_date` → "present")
+  outranks any dated one, and experience-type weight (`full_time`/`leadership` >
+  `internship`/`education`/`other`) breaks recency ties. This is robust to the messy
+  dates a résumé parser emits and stops the loop from grilling a recent trivial entry
+  (e.g. a one-day volunteer gig) before your current senior roles.
+- **Grill memory** — `CareerEngineState.grill_answers` accumulates the user's answers
+  per entry; metric extraction sees **all** of them (so a number given across turns
+  assembles) and the follow-up question is told not to re-ask for anything already
+  provided. Cleared for an entry on a validated metric.
+- **Graceful model errors** — `integration.model_client` wraps provider failures in a
+  typed `ModelAPIError` (with `is_rate_limited` + `retry_after_seconds`); the CLI turns
+  a quota/`429` into a friendly, resumable message instead of a crash.
+
 ### 6.4 The Flash-Lite pivot (prompt engineering > model size)
 Baseline is **Flash-Lite**. We close the gap to "Pro" with **Chain-of-Thought system prompts**, not
 bigger models: force the reasoning steps (decompose the claim → demand a metric → check plausibility →

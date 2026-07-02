@@ -26,6 +26,11 @@ v2.0.0 change summary:
 v2.3.0 change summary (additive, backward-compatible):
   - Added grill_attempts (dict[str, int]) to CareerEngineState — per-entry failed
     metric-extraction counter driving the Free-Mode Pro-escalation gate.
+
+v2.4.0 change summary (additive, backward-compatible):
+  - Added grill_answers (dict[str, list[str]]) to CareerEngineState — per-entry
+    running list of the user's answers, giving the grill loop memory (accumulated
+    extraction + no re-asking).
 """
 
 from __future__ import annotations
@@ -262,6 +267,16 @@ class CareerEngineState(BaseModel):
             "added in v2.3.0.  Drives the Free-Mode Pro-escalation gate: once an entry "
             "accumulates too many Flash+CoT failures, the grill node emits UpgradeRequired "
             "recommending a Pro reasoning model.  Reset for an entry on a validated answer."
+        ),
+    )
+    grill_answers: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description=(
+            "Per-entry running list of the user's answers for the entry being grilled "
+            "(entry_id → [answer, ...]), added in v2.4.0.  Gives the grill loop memory: "
+            "metric extraction sees ALL answers for an entry (so a number given across "
+            "turns assembles), and the follow-up question avoids re-asking for something "
+            "already provided.  Cleared for an entry once it yields a validated metric."
         ),
     )
 

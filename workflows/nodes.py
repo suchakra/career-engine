@@ -271,19 +271,49 @@ def _find_entry_by_id(timeline: list[Entry], entry_id: str) -> Entry | None:
     return None
 
 
-def _next_frontier(timeline: list[Entry], current_frontier_id: str) -> str:
-    """Return the next entry_id to grill (backward-chronological, newest first).
+# Relative substance of an experience type — used to break recency ties so a
+# recent SUBSTANTIVE role (a job) is grilled before a recent trivial one (a
+# one-day volunteer gig / a course). Higher = grill sooner.
+_TYPE_WEIGHT: dict[ExperienceType, int] = {
+    ExperienceType.FULL_TIME: 5,
+    ExperienceType.LEADERSHIP: 5,
+    ExperienceType.RESEARCH: 4,
+    ExperienceType.OPEN_SOURCE: 4,
+    ExperienceType.PART_TIME: 3,
+    ExperienceType.PROJECT: 3,
+    ExperienceType.INTERNSHIP: 2,
+    ExperienceType.EDUCATION: 1,
+    ExperienceType.OTHER: 1,
+}
+# A current role (empty end_date = "present") is newer than any dated one.
+_PRESENT_SENTINEL_YEAR = 10_000
 
-    Strategy: find the most-recent entry in work_timeline that still needs work
-    (NEEDS_QUANTIFYING or DOCUMENTED without a metric bullet), skipping the
-    currently-being-grilled entry.
 
-    Entries are sorted newest-to-oldest (by start_date year, falling back to
-    insertion order as tiebreaker).
+def _frontier_sort_key(entry: Entry) -> tuple[int, int, int]:
+    """Ranking key for grilling: (recency, substance, start-year), newest/most first.
 
-    Returns "" if no more entries need grilling.
+    Recency is driven by ``end_date`` — a CURRENT role (empty end_date) ranks above
+    any dated one, which is what a reviewer expects (grill the roles you're in / just
+    left first). Substance (experience type) breaks recency ties so a recent job
+    outranks a recent trivial entry. This is robust to the messy dates a résumé
+    parser emits: only the current role needs an empty end_date to float to the top.
     """
-    # Collect entries that still need work
+    if not entry.end_date:
+        end_year = _PRESENT_SENTINEL_YEAR
+    else:
+        end_year = _parse_year_from_date(entry.end_date) or -1
+    start_year = _parse_year_from_date(entry.start_date) or -1
+    return (end_year, _TYPE_WEIGHT.get(entry.type, 1), start_year)
+
+
+def _next_frontier(timeline: list[Entry], current_frontier_id: str) -> str:
+    """Return the next entry_id to grill (most-recent + most-substantive first).
+
+    Strategy: among entries that still need work (NEEDS_QUANTIFYING or DOCUMENTED),
+    skipping the currently-grilled one, pick the highest-ranked by
+    :func:`_frontier_sort_key` — current/recent substantive roles before older or
+    trivial ones. Returns "" if no more entries need grilling.
+    """
     needs_work = [
         e for e in timeline
         if e.status in (EntryStatus.NEEDS_QUANTIFYING, EntryStatus.DOCUMENTED)
@@ -291,14 +321,7 @@ def _next_frontier(timeline: list[Entry], current_frontier_id: str) -> str:
     ]
     if not needs_work:
         return ""
-
-    # Sort newest-to-oldest (we drill backward chronologically)
-    def _sort_key(e: Entry) -> int:
-        # Larger year = newer = higher sort priority
-        y = _parse_year_from_date(e.start_date) or 0
-        return y
-
-    needs_work.sort(key=_sort_key, reverse=True)
+    needs_work.sort(key=_frontier_sort_key, reverse=True)
     return str(needs_work[0].entry_id)
 
 
@@ -316,18 +339,14 @@ def _get_frontier_entry(state: CareerEngineState) -> Entry | None:
             if entry.status in (EntryStatus.NEEDS_QUANTIFYING, EntryStatus.DOCUMENTED):
                 return entry
 
-    # Auto-pick: most-recent entry that needs work
+    # Auto-pick: highest-ranked entry that needs work (recent + substantive first).
     needs_work = [
         e for e in state.work_timeline
         if e.status in (EntryStatus.NEEDS_QUANTIFYING, EntryStatus.DOCUMENTED)
     ]
     if not needs_work:
         return None
-
-    def _sort_key(e: Entry) -> int:
-        return _parse_year_from_date(e.start_date) or 0
-
-    needs_work.sort(key=_sort_key, reverse=True)
+    needs_work.sort(key=_frontier_sort_key, reverse=True)
     return needs_work[0]
 
 
@@ -672,9 +691,14 @@ def execute_grill_turn_node(
             f"Entry: {frontier_entry.title} at {frontier_entry.org}\n"
             f"Type: {frontier_entry.type.value}\n"
         )
+        # Grill memory: accumulate ALL answers for this entry so extraction can
+        # assemble a metric given across multiple turns, and the follow-up never
+        # re-asks for something already provided.
+        accumulated_answers = [*state.grill_answers.get(frontier_id, []), user_answer]
+        answers_block = "\n".join(f"- {a}" for a in accumulated_answers)
         extraction_context = (
             f"{entry_context}\n"
-            f"User's answer:\n{user_answer}"
+            f"User's answers so far (consider ALL of them together):\n{answers_block}"
         )
         extraction_text = client.generate(
             model_id=model_id,
@@ -722,9 +746,12 @@ def execute_grill_turn_node(
             # Advance frontier to next entry needing work (backward-chronological)
             next_fid = _next_frontier(new_timeline, frontier_id)
 
-            # Clear this entry's failed-attempt counter on a validated answer.
+            # Clear this entry's failed-attempt counter + answer memory on success.
             cleared_attempts = {
                 k: v for k, v in state.grill_attempts.items() if k != frontier_id
+            }
+            cleared_answers = {
+                k: v for k, v in state.grill_answers.items() if k != frontier_id
             }
 
             return state.model_copy(
@@ -736,6 +763,7 @@ def execute_grill_turn_node(
                     "pending_user_answer": "",
                     "current_question": "",
                     "grill_attempts": cleared_attempts,
+                    "grill_answers": cleared_answers,
                 }
             )
         else:
@@ -764,18 +792,22 @@ def execute_grill_turn_node(
                     ),
                 )
 
-            # Otherwise ask one sharp probing follow-up question.
+            # Otherwise ask one sharp probing follow-up — with memory of what was
+            # already said, so it never re-asks for a number already provided.
             probe_context = (
                 f"Entry: {frontier_entry.title} at {frontier_entry.org}\n\n"
-                f"What the person said:\n{user_answer}\n\n"
-                f"The answer lacked a concrete metric.  "
-                f"Generate one sharp follow-up question to elicit a specific number."
+                f"What the person has ALREADY told you (do NOT re-ask for any of this):\n"
+                f"{answers_block}\n\n"
+                f"None of it yet contains a concrete metric.  Ask ONE sharp follow-up for "
+                f"a specific NEW number they have not already given.  If they've clearly "
+                f"said there is no number to give, acknowledge that and ask whether to move on."
             )
             question_text = client.generate(
                 model_id=model_id,
                 system=GRILL_SYSTEM_PROMPT,
                 user=probe_context,
             )
+            new_answers = {**state.grill_answers, frontier_id: accumulated_answers}
             return state.model_copy(
                 update={
                     "question_count": new_question_count,
@@ -783,6 +815,7 @@ def execute_grill_turn_node(
                     "pending_user_answer": "",
                     "grill_frontier": frontier_id,
                     "grill_attempts": new_attempts,
+                    "grill_answers": new_answers,
                 }
             )
     else:

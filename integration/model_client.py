@@ -31,11 +31,61 @@ in by the caller (resolved via ``models.registry.get_registry().get_model_id()``
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from config import AccessMode, get_settings
+
+
+class ModelAPIError(Exception):
+    """A model API call failed (transport / quota / server error).
+
+    Wraps the underlying provider exception so callers (nodes, CLI) can surface a
+    friendly message and decide on retry WITHOUT importing google.genai internals.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        retry_after_seconds: float | None = None,
+        is_rate_limited: bool = False,
+    ) -> None:
+        """Initialise with optional status/retry metadata."""
+        super().__init__(message)
+        self.status_code = status_code
+        self.retry_after_seconds = retry_after_seconds
+        self.is_rate_limited = is_rate_limited
+
+
+def _as_model_api_error(exc: Exception) -> ModelAPIError:
+    """Translate a provider exception into a typed :class:`ModelAPIError`."""
+    code = getattr(exc, "code", None)
+    status: int | None = code if isinstance(code, int) else None
+    if status is None:
+        sc = getattr(exc, "status_code", None)
+        status = sc if isinstance(sc, int) else None
+
+    msg = str(exc)
+    is_rl = status == 429 or "RESOURCE_EXHAUSTED" in msg or "quota" in msg.lower()
+
+    retry: float | None = None
+    match = re.search(r"retry in ([0-9]+(?:\.[0-9]+)?)s", msg) or re.search(
+        r"retryDelay['\"]?\s*[:=]\s*['\"]?([0-9]+(?:\.[0-9]+)?)s", msg
+    )
+    if match:
+        try:
+            retry = float(match.group(1))
+        except ValueError:
+            retry = None
+
+    friendly = "Gemini quota / rate limit exceeded" if is_rl else f"Model API call failed: {msg}"
+    return ModelAPIError(
+        friendly, status_code=status, retry_after_seconds=retry, is_rate_limited=is_rl
+    )
 
 
 @dataclass(frozen=True)
@@ -92,19 +142,21 @@ class GeminiModelClient:
             genuinely returns no text).
 
         Raises:
-            Exception: transport / API errors propagate to the caller rather
-                than being swallowed into ``""`` (REVIEW.md #4).  A hard failure
-                masquerading as weak model output hides real outages and makes
-                the discovery loop undebuggable; the node/runner layer is the
-                right place to decide how to surface it.
+            ModelAPIError: transport / API errors (quota, 429, server) are wrapped
+                and propagated rather than swallowed into ``""`` (REVIEW.md #4).  A
+                hard failure masquerading as weak model output hides real outages;
+                the node/runner/CLI layer decides how to surface it.
         """
         from google.genai import types as gtypes
 
-        response = self._client.models.generate_content(
-            model=model_id,
-            contents=user,
-            config=gtypes.GenerateContentConfig(system_instruction=system),
-        )
+        try:
+            response = self._client.models.generate_content(
+                model=model_id,
+                contents=user,
+                config=gtypes.GenerateContentConfig(system_instruction=system),
+            )
+        except Exception as exc:
+            raise _as_model_api_error(exc) from exc
         return response.text or ""
 
     # ── Multimodal entry point (Phase 1.5 / vision ingest) ────────────────────
@@ -135,8 +187,8 @@ class GeminiModelClient:
             genuinely returns no text).
 
         Raises:
-            Exception: transport / API errors propagate to the caller rather
-                than being swallowed (mirrors :meth:`generate`).
+            ModelAPIError: transport / API errors are wrapped and propagated
+                rather than swallowed (mirrors :meth:`generate`).
         """
         from google.genai import types as gtypes
 
@@ -144,11 +196,14 @@ class GeminiModelClient:
             gtypes.Part.from_bytes(data=m.data, mime_type=m.mime_type) for m in media
         ]
         parts.append(gtypes.Part.from_text(text=prompt))
-        response = self._client.models.generate_content(
-            model=model_id,
-            contents=parts,
-            config=gtypes.GenerateContentConfig(system_instruction=system),
-        )
+        try:
+            response = self._client.models.generate_content(
+                model=model_id,
+                contents=parts,
+                config=gtypes.GenerateContentConfig(system_instruction=system),
+            )
+        except Exception as exc:
+            raise _as_model_api_error(exc) from exc
         return response.text or ""
 
     # ── Interface 2: web_scraper.py convention ────────────────────────────────

@@ -1252,3 +1252,120 @@ class TestNoHardcodedModels:
         assert isinstance(expected_model, str)
         assert client.calls, "model client was never called"
         assert all(c["model_id"] == expected_model for c in client.calls)
+
+
+# ── execute_grill_turn_node — grill memory (v2.4.0) ───────────────────────────
+
+
+class TestGrillMemory:
+    """The grill loop remembers prior answers for the current entry (v2.4.0)."""
+
+    def test_accumulates_answers_into_extraction_and_probe(self) -> None:
+        """A second answer is appended; extraction + probe see ALL answers."""
+        entry = _entry()
+        calls: list[tuple[str, str]] = []
+
+        class _Cap:
+            def generate(self, model_id: str, system: str, user: str) -> str:
+                calls.append((system, user))
+                if "data extraction assistant" in system:
+                    return json.dumps({"result": "", "metrics_found": False})
+                return "Can you give a specific number?"
+
+        set_model_client_factory(lambda: _Cap())
+        state = CareerEngineState(
+            current_phase=PhaseStatus.GRILLING,
+            work_timeline=[entry],
+            grill_frontier=str(entry.entry_id),
+            pending_user_answer="answer two",
+            grill_answers={str(entry.entry_id): ["answer one"]},
+        )
+        result = execute_grill_turn_node(state)
+
+        assert isinstance(result, CareerEngineState)
+        assert result.grill_answers[str(entry.entry_id)] == ["answer one", "answer two"]
+        extraction_user = next(u for s, u in calls if "data extraction assistant" in s)
+        assert "answer one" in extraction_user and "answer two" in extraction_user
+        probe_user = next(u for s, u in calls if "senior engineering colleague" in s)
+        assert "answer one" in probe_user and "answer two" in probe_user
+
+    def test_validated_answer_clears_answer_memory(self) -> None:
+        """A validated metric clears that entry's accumulated answers."""
+        entry = _entry()
+        client = ScriptedClient(
+            responses={
+                "data extraction assistant": json.dumps(
+                    {
+                        "result": "cut p99 from 800ms to 120ms across 40 services",
+                        "metrics_found": True,
+                    }
+                ),
+            }
+        )
+        _install_client(client)
+        state = CareerEngineState(
+            current_phase=PhaseStatus.GRILLING,
+            work_timeline=[entry],
+            grill_frontier=str(entry.entry_id),
+            pending_user_answer="cut p99 from 800ms to 120ms across 40 services",
+            grill_answers={str(entry.entry_id): ["earlier vague answer"]},
+        )
+        result = execute_grill_turn_node(state)
+
+        assert isinstance(result, CareerEngineState)
+        assert len(result.extracted_star_stories) == 1
+        assert str(entry.entry_id) not in result.grill_answers
+
+
+# ── frontier prioritization (recency + substance) ─────────────────────────────
+
+
+class TestFrontierPrioritization:
+    """Grilling starts with the most recent, most substantive roles."""
+
+    def _mk(
+        self,
+        *,
+        title: str,
+        type_: ExperienceType,
+        start: str,
+        end: str,
+    ) -> Entry:
+        return Entry(
+            type=type_,
+            title=title,
+            org="Org",
+            start_date=start,
+            end_date=end,
+            status=EntryStatus.NEEDS_QUANTIFYING,
+        )
+
+    def test_current_role_outranks_recent_ended_trivial_entry(self) -> None:
+        """A current role (empty end_date) beats a recent but ended volunteer gig."""
+        current_job = self._mk(
+            title="Staff Engineer", type_=ExperienceType.FULL_TIME, start="2021", end=""
+        )
+        recent_volunteer = self._mk(
+            title="Pi Jam Volunteer", type_=ExperienceType.OTHER, start="2024", end="2024"
+        )
+        state = CareerEngineState(work_timeline=[recent_volunteer, current_job], grill_frontier="")
+        picked = nodes._get_frontier_entry(state)
+        assert picked is not None and picked.title == "Staff Engineer"
+
+    def test_substance_breaks_a_recency_tie(self) -> None:
+        """Same dates → the substantive job beats a course."""
+        job = self._mk(title="Engineer", type_=ExperienceType.FULL_TIME, start="2020", end="2022")
+        course = self._mk(
+            title="Online Course", type_=ExperienceType.EDUCATION, start="2020", end="2022"
+        )
+        state = CareerEngineState(work_timeline=[course, job], grill_frontier="")
+        picked = nodes._get_frontier_entry(state)
+        assert picked is not None and picked.title == "Engineer"
+
+    def test_next_frontier_after_current_picks_substantive_over_trivial(self) -> None:
+        """After the current role, the previous JOB is next — not an older volunteer gig."""
+        current = self._mk(title="Current", type_=ExperienceType.FULL_TIME, start="2022", end="")
+        prev_job = self._mk(title="Prev Job", type_=ExperienceType.FULL_TIME, start="2018", end="2021")
+        volunteer = self._mk(title="Volunteer", type_=ExperienceType.OTHER, start="2019", end="2019")
+        nxt = nodes._next_frontier([current, prev_job, volunteer], str(current.entry_id))
+        assert nxt == str(prev_job.entry_id)
