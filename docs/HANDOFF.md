@@ -18,10 +18,10 @@
   3. **CoT tuning** ✅ DONE — merged via **PR #4** (409 tests, **contract v2.3.0**, tag
      `contract-v2.3.0`): Free-Mode Pro-escalation gate in `execute_grill_turn_node` (per-entry
      `grill_attempts`, escalates after 6 failed attempts, above the checkpoint boundary) + CoT tuning.
-  4. **Phase 2 deferred wiring** ⬅ NEXT — Streamlit discovery-session load for the meter; sweep
-     Cloud Run HTTP endpoint + IdP frontend token exchange; add `terraform` to the devcontainer.
-  4. **Phase 2 deferred wiring** — Streamlit discovery-session load for the meter; sweep Cloud Run HTTP
-     endpoint + IdP frontend token exchange. Also add `terraform` to the devcontainer (see memory).
+  4. **Phase 2 deferred wiring** ⬅ IN REVIEW (PR #5) — `web/session_loader.py` (best-effort load of
+     the user's latest discovery `CareerEngineState` for the meter, wired into `streamlit_app`);
+     `jobs/sweep_endpoint.py` (framework-agnostic OIDC-audience-verified handler running `run_sweep`);
+     `terraform` feature added to `.devcontainer/devcontainer.json` (takes effect on rebuild).
   5. **Capstone dry-run** — execute [CAPSTONE_RUNBOOK.md](CAPSTONE_RUNBOOK.md) end-to-end; capture evidence.
 - **State:** tags `contract-v1.0.0…v2.2.0`; gates `make check` (389) + `make tf-check`. Phase 2 deferred
   thin wiring (item 4 above) is logic-built+tested, only outer glue remains.

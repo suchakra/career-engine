@@ -40,7 +40,7 @@ _DEFAULT_GOOGLE_ISSUERS: frozenset[str] = frozenset(
 # ── Default verifier (network) ────────────────────────────────────────────────
 
 
-def _google_tokeninfo_verifier(id_token: str) -> dict[str, Any]:
+def google_tokeninfo_verifier(id_token: str) -> dict[str, Any]:
     """Verify an ID token via Google's tokeninfo REST endpoint.
 
     Returns the decoded claims dict if valid.
@@ -120,7 +120,7 @@ class FirebaseAuthProvider(AuthProvider):
     ) -> None:
         """Initialise the Firebase auth provider."""
         self._verifier: Callable[[str], dict[str, Any]] = (
-            verifier if verifier is not None else _google_tokeninfo_verifier
+            verifier if verifier is not None else google_tokeninfo_verifier
         )
 
         # Only touch settings when we must derive a default — a fully-injected
