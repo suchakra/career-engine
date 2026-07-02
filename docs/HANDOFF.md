@@ -1,7 +1,7 @@
 # CareerEngine — Session Handoff / Resume Point
 
 ## 👉 YOU ARE HERE (updated 2026-07-02)
-**`master` (clean, synced at `d3c6276`), **contract v2.3.0** (tag `contract-v2.3.0`). **Phase 3 COMPLETE** — full ordered queue merged (PRs #2–#6). Repo also now has a root **README**, **GitHub Actions CI/CD** (PR #7), and a **proprietary LICENSE** (public-ready). 424 tests green; `make check` + `make tf-check` clean; **CI green on GitHub** (`.github/workflows/ci.yml`). No work in flight.**
+**`master` (clean, synced at `0a1ec1a`), **contract v2.3.0** (tag `contract-v2.3.0`). **Phase 3 COMPLETE** — full ordered queue merged (PRs #2–#6). Repo is public-ready: root **README**, **GitHub Actions CI/CD** (PR #7), proprietary **LICENSE**, and a real **Dockerfile + Cloud Build** (PR #8; CI builds AND smoke-tests the image). 424 tests green; `make check` + `make tf-check` clean; **CI green on GitHub** (check · tf-check · docker-build). No work in flight.**
 - **Workflow (Copilot budget reset):** each chunk = **new branch → build → `make check` green → Sonnet
   review (subagent) + fix → push → `gh pr create` → request Copilot (`gh api --method POST
   repos/{owner}/{repo}/pulls/N/requested_reviewers -f 'reviewers[]=copilot-pull-request-reviewer[bot]'`,
@@ -29,12 +29,15 @@
   (`.github/workflows/deploy.yml`); proprietary [LICENSE](../LICENSE). Fixed a build portability bug
   the local env masked (bogus setuptools backend → `setuptools.build_meta` + explicit packages).
   `.env`/`*.tfvars` git-ignored — safe to make the repo public.
+- **Deploy image DONE (PR #8):** `Dockerfile` (Streamlit on `$PORT`, non-root, WeasyPrint libs),
+  `.dockerignore` (no secrets), `cloudbuild.yaml`, `make build`/`make cloud-build`; CI builds +
+  smoke-tests the image. Deploy path is now complete end-to-end except live GCP creds.
 - **What's next (queue exhausted):** no scheduled work remains. Candidate follow-ups (unscheduled) —
-  a **Dockerfile / Cloud Build config** (so `make build` + the deploy workflow have a real image; the
-  container must copy the source tree so `templates/` is present); the outermost Phase-2 glue (mount
-  `jobs/sweep_endpoint.py` in a served app + Identity Platform *frontend* token exchange); a live PDF
-  pass with a paid/raised-quota key; or new Beyond-v1 scope from
-  [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md). Await direction before starting.
+  **GCP live setup** (create the WIF pool/provider + repo secrets, `gcloud builds submit` an image,
+  `make deploy`, run the `deploy.yml` dispatch); the outermost Phase-2 glue (mount
+  `jobs/sweep_endpoint.py` in a served app + Identity Platform *frontend* token exchange); a
+  **dev-only web view** so the Streamlit dashboard is demoable locally without an IdP token; a live
+  PDF pass with a paid/raised-quota key. Await direction before starting.
 - **State:** tags `contract-v1.0.0…v2.2.0`; gates `make check` (389) + `make tf-check`. Phase 2 deferred
   thin wiring (item 4 above) is logic-built+tested, only outer glue remains.
 Phase 1.7 DONE (tagged `contract-v2.1.0`, pushed). Phase 2 increment built this session, Opus-direct
