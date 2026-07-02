@@ -1,7 +1,7 @@
 # CareerEngine — Session Handoff / Resume Point
 
 ## 👉 YOU ARE HERE (updated 2026-07-02)
-**`master` (clean, synced at `5b047e7`), Phase 2 COMPLETE (contract v2.2.0). Phase 3 in progress — eval harness (PR #1) + security review (PR #2) merged; 398 tests green. Working the ordered Phase-3 queue via a PR-based workflow.**
+**`master` (clean, synced at `f5f4557`), Phase 2 COMPLETE (contract v2.2.0). Phase 3 in progress — eval harness (PR #1) + security review (PR #2) + observability (PR #3) merged; 405 tests green. Working the ordered Phase-3 queue via a PR-based workflow.**
 - **Workflow (Copilot budget reset):** each chunk = **new branch → build → `make check` green → Sonnet
   review (subagent) + fix → push → `gh pr create` → request Copilot (`gh api --method POST
   repos/{owner}/{repo}/pulls/N/requested_reviewers -f 'reviewers[]=copilot-pull-request-reviewer[bot]'`,
@@ -12,8 +12,10 @@
   1. **Security review** ✅ DONE — merged via **PR #2** (squash, 398 tests). Fixed HIGH auth
      `aud`/`iss` gap + MED–HIGH scraper SSRF; added [SECURITY.md](SECURITY.md). Sonnet PASS +
      Copilot addressed.
-  2. **Monitoring/logging** for graph hangs (observability). ⬅ NEXT
-  3. **CoT tuning** — measure & reduce the Pro-escalation rate (eval harness now measures it).
+  2. **Monitoring/logging** for graph hangs ✅ DONE — merged via **PR #3** (405 tests):
+     `workflows/observability.py` + monitored model client + per-request model timeout
+     (`settings.model_timeout_seconds`) + `graph.turn` span.
+  3. **CoT tuning** — measure & reduce the Pro-escalation rate (eval harness now measures it). ⬅ NEXT
   4. **Phase 2 deferred wiring** — Streamlit discovery-session load for the meter; sweep Cloud Run HTTP
      endpoint + IdP frontend token exchange. Also add `terraform` to the devcontainer (see memory).
   5. **Capstone dry-run** — execute [CAPSTONE_RUNBOOK.md](CAPSTONE_RUNBOOK.md) end-to-end; capture evidence.
