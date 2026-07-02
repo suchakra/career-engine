@@ -1,0 +1,36 @@
+# Keep the image lean and NEVER bake secrets in.
+# NOTE: do not ignore any package dir that setuptools discovers (auth, cli,
+# database, evaluation, integration, jobs, models, tools, web, workflows) or the
+# editable install breaks — and keep templates/ (loaded at runtime).
+
+# Secrets / local config
+.env
+.env.*
+*.tfvars
+*.tfvars.json
+
+# VCS / CI / dev tooling
+.git
+.github
+.gitignore
+.devcontainer
+
+# Python caches / build artifacts
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.venv
+build/
+dist/
+*.egg-info/
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Not needed at runtime
+tests/
+docs/
+infrastructure/
+skills/
+*.md

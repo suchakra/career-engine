@@ -56,3 +56,13 @@ jobs:
       # fmt + validate for both env roots — no GCP credentials required.
       - name: make tf-check
         run: make tf-check
+
+  docker-build:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Validate the Dockerfile builds (no push, no registry/credentials needed).
+      - name: docker build
+        run: docker build -t career-engine:ci .
