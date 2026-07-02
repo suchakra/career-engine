@@ -160,16 +160,25 @@ class _ScriptedAgentClient:
                 }
             )
         if "data extraction assistant" in system:  # METRIC_EXTRACTION
-            answer = user.split("User's answer:")[-1].strip()
-            found = _contains_real_metric(answer)
+            # Grill memory (v2.4.0): the node now passes ALL answers for the entry as
+            # a bulleted block. Evaluate the whole block for a metric; the result is
+            # the most recent answer that carries one (else the last answer).
+            bullets = [
+                ln[2:].strip() for ln in user.splitlines() if ln.strip().startswith("- ")
+            ]
+            answers = bullets or [user.split(":")[-1].strip()]
+            found = any(_contains_real_metric(a) for a in answers)
+            result = next(
+                (a for a in reversed(answers) if _contains_real_metric(a)), answers[-1]
+            )
             return json.dumps(
                 {
                     "situation": "Context.",
                     "task": "Task.",
                     "action": "Action.",
-                    "result": answer,
+                    "result": result,
                     "metrics_found": found,
-                    "metric_summary": answer if found else "",
+                    "metric_summary": result if found else "",
                 }
             )
         if "senior engineering colleague" in system:  # GRILL question

@@ -89,7 +89,8 @@ def grill(
         # From stdin (pipe)
         cat my_career.txt | career-engine grill --output-pdf resume.pdf
     """
-    from cli.app import run_interactive_session
+    from cli.app import format_model_api_error, run_interactive_session
+    from integration.model_client import ModelAPIError
 
     # ── Resolve raw history text ──────────────────────────────────────────────
     # A resume file is itself a history source, so text is optional when given.
@@ -111,13 +112,18 @@ def grill(
         sys.exit(1)
 
     # ── Delegate to CLI app ───────────────────────────────────────────────────
-    run_interactive_session(
-        raw_history=raw_history,
-        output_pdf=output_pdf,
-        session_id=session_id,
-        use_firestore=firestore,
-        resume_file=resume_file,
-    )
+    try:
+        run_interactive_session(
+            raw_history=raw_history,
+            output_pdf=output_pdf,
+            session_id=session_id,
+            use_firestore=firestore,
+            resume_file=resume_file,
+        )
+    except ModelAPIError as exc:
+        # A quota/transport failure should guide the user, not dump a stack trace.
+        click.echo(format_model_api_error(exc, use_firestore=firestore), err=True)
+        sys.exit(0)
 
 
 @cli.command()
@@ -155,14 +161,19 @@ def tailor(
         career-engine tailor abc-123 https://example.com/jobs/42 -o tailored.pdf
         career-engine tailor abc-123 "Python engineer with 5+ years" -o tailored.pdf
     """
-    from cli.app import run_tailor_command
+    from cli.app import format_model_api_error, run_tailor_command
+    from integration.model_client import ModelAPIError
 
-    run_tailor_command(
-        session_id=session_id,
-        jd_source=jd_source,
-        output_pdf=output_pdf,
-        use_firestore=firestore,
-    )
+    try:
+        run_tailor_command(
+            session_id=session_id,
+            jd_source=jd_source,
+            output_pdf=output_pdf,
+            use_firestore=firestore,
+        )
+    except ModelAPIError as exc:
+        click.echo(format_model_api_error(exc, use_firestore=firestore), err=True)
+        sys.exit(0)
 
 
 @cli.command()

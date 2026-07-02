@@ -58,7 +58,7 @@ from google.adk.sessions import BaseSessionService, InMemorySessionService
 import cli.prefs as prefs
 import cli.session as session_helpers
 from config import AccessMode, get_settings
-from integration.model_client import GeminiModelClient, build_model_client
+from integration.model_client import GeminiModelClient, ModelAPIError, build_model_client
 from schema import (
     CareerEngineState,
     Entry,
@@ -706,6 +706,35 @@ async def run_return_loop(session: DiscoverySession, *, accept: bool) -> bool:
 # ── Interactive CLI loop ──────────────────────────────────────────────────────
 
 
+def format_model_api_error(exc: ModelAPIError, *, use_firestore: bool) -> str:
+    """Render a friendly, non-crashing message for a model API failure.
+
+    Used by the CLI entrypoints to turn a quota/transport error into guidance
+    instead of a stack trace.
+    """
+    if exc.is_rate_limited:
+        retry = (
+            f" Try again in ~{exc.retry_after_seconds:.0f}s."
+            if exc.retry_after_seconds
+            else ""
+        )
+        resume = (
+            "Your progress is saved — re-run with --firestore and the session id shown "
+            "above to continue."
+            if use_firestore
+            else "Tip: run with --firestore (and --session-id) so progress is saved and resumable."
+        )
+        return (
+            f"\n⏳ Gemini rate limit / quota reached.{retry}\n{resume}\n"
+            "(Free tier is limited to 5 requests/min and 20/day; a paid key or higher "
+            "quota removes this.)"
+        )
+    return (
+        f"\n⚠️  Model API error: {exc}\n"
+        "(Any progress up to the last completed turn is saved if you used --firestore.)"
+    )
+
+
 def run_interactive_session(
     *,
     raw_history: str,
@@ -746,6 +775,7 @@ def run_interactive_session(
     )
 
     print(f"\nCareerEngine — discovery session ({access_mode.value} mode)")
+    print(f"Session: {session.session_id}")
     print("=" * 60)
 
     # ── Start or resume (stamp the injected clock here) ──────────────────────

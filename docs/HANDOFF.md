@@ -1,7 +1,10 @@
 # CareerEngine — Session Handoff / Resume Point
 
 ## 👉 YOU ARE HERE (updated 2026-07-02)
-**`master` (clean, synced at `0a1ec1a`), **contract v2.3.0** (tag `contract-v2.3.0`). **Phase 3 COMPLETE** — full ordered queue merged (PRs #2–#6). Repo is public-ready: root **README**, **GitHub Actions CI/CD** (PR #7), proprietary **LICENSE**, and a real **Dockerfile + Cloud Build** (PR #8; CI builds AND smoke-tests the image). 424 tests green; `make check` + `make tf-check` clean; **CI green on GitHub** (check · tf-check · docker-build). No work in flight.**
+**`master`, **contract v2.4.0** (grill-hardening from a live résumé run — in review as `feat/grill-hardening`). **Phase 3 COMPLETE** (PRs #2–#6); repo public-ready with README + CI/CD + LICENSE + Dockerfile (PRs #7–#8). 434 tests green; `make check` + `make tf-check` clean.**
+- **Grill hardening (feat/grill-hardening, contract v2.4.0):** from the user's real run — (A) graceful `ModelAPIError` handling so a `429`/quota shows a friendly resumable message, not a crash; (B) `grill_answers` per-entry memory (accumulated extraction + no re-asking); (C) frontier ranks current/substantive roles first (`end_date` present-first + experience-type weight). See ARCHITECTURE §6.3.1.
+- **Deadline:** Kaggle × Google submission **2026-07-06** — product + writeup + video.
+- **Known live-run constraint:** the Gemini **free tier is 5 req/min + 20/day**; a full live session needs a paid/raised-quota key (deterministic tests prove the pipeline without one).
 - **Workflow (Copilot budget reset):** each chunk = **new branch → build → `make check` green → Sonnet
   review (subagent) + fix → push → `gh pr create` → request Copilot (`gh api --method POST
   repos/{owner}/{repo}/pulls/N/requested_reviewers -f 'reviewers[]=copilot-pull-request-reviewer[bot]'`,
