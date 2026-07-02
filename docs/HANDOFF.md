@@ -1,16 +1,23 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-01)
-**`master`, Phase 2 COMPLETE & PUSHED — all workstreams Sonnet-reviewed PASS, `contract-v2.2.0` tagged. 381 tests green. Next: Phase 3 / deferred wiring / live runbook dry-run.**
-**Copilot is out for the month — Sonnet is the sole review gate now** (Opus builds → Sonnet reviews → merge/push).
-- **Phase 2 = feature-complete for the capstone MVP**, all pushed. 2C infra · contract v2.2.0
-  (UserWorkspace/Application/PendingAction) · 2D sweep · 2A dashboard · UserWorkspace Firestore repo ·
-  2B web-auth bootstrap · 2E capstone runbook + cloud_ops skill. Sonnet gates: 3 rounds total, all fixed.
-- **Deferred thin wiring** (logic built + tested, only outermost glue remains): streamlit discovery-session
-  load for the meter; the sweep's Cloud Run HTTP endpoint + IdP frontend token exchange; `terraform` as a
-  devcontainer dependency (see memory).
-- **NEXT:** Phase 3 (eval/hardening) per [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md), or close the
-  deferred wiring, or a live capstone dry-run of [CAPSTONE_RUNBOOK.md](CAPSTONE_RUNBOOK.md).
+## 👉 YOU ARE HERE (updated 2026-07-02)
+**`master`, Phase 2 COMPLETE (contract v2.2.0). Phase 3 STARTED — eval harness merged via PR #1 (389 tests). Working the ordered Phase-3 queue via a PR-based workflow.**
+- **Workflow (Copilot budget reset):** each chunk = **new branch → build → `make check` green → Sonnet
+  review (subagent) + fix → push → `gh pr create` → request Copilot (`gh api --method POST
+  repos/{owner}/{repo}/pulls/N/requested_reviewers -f 'reviewers[]=copilot-pull-request-reviewer[bot]'`,
+  reviewer surfaces as login `Copilot`) → wait via `skills/wait-for-pr-review` → read comments
+  (`gh api repos/{owner}/{repo}/pulls/N/comments`) → address → squash-merge (`gh pr merge N --squash
+  --delete-branch`)**. `gh` authed as `suchakra`; jq + terraform + gh all present.
+- **ORDERED QUEUE (one PR each, in order):**
+  1. **Security review** ⬅ NEXT — run `/security-review` on the branch; fix key-handling / IAM
+     least-privilege / scraper+PDF-injection findings.
+  2. **Monitoring/logging** for graph hangs (observability).
+  3. **CoT tuning** — measure & reduce the Pro-escalation rate (eval harness now measures it).
+  4. **Phase 2 deferred wiring** — Streamlit discovery-session load for the meter; sweep Cloud Run HTTP
+     endpoint + IdP frontend token exchange. Also add `terraform` to the devcontainer (see memory).
+  5. **Capstone dry-run** — execute [CAPSTONE_RUNBOOK.md](CAPSTONE_RUNBOOK.md) end-to-end; capture evidence.
+- **State:** tags `contract-v1.0.0…v2.2.0`; gates `make check` (389) + `make tf-check`. Phase 2 deferred
+  thin wiring (item 4 above) is logic-built+tested, only outer glue remains.
 Phase 1.7 DONE (tagged `contract-v2.1.0`, pushed). Phase 2 increment built this session, Opus-direct
 (unpushed):
   - **2C** Terraform infra (`infrastructure/` modules + dev/prod + README + Makefile `tf-check`/`deploy`/`destroy`).

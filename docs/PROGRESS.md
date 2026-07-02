@@ -3,7 +3,7 @@
 > Single source of truth for **what's done vs. pending**. Update this at the end of every work
 > session / sub-agent run. Keep entries terse. Legend: ✅ done · 🟡 in progress · ⬜ not started · 🚫 blocked.
 
-Last updated: **2026-07-01** — *ALL of Phase 2 built & **Sonnet-reviewed PASS** (**381 tests** green). Core (2C + contract **v2.2.0** + 2D + 2A) tagged `contract-v2.2.0`; + UserWorkspace Firestore repo + 2B web-auth bootstrap + 2E capstone runbook/skill (Sonnet gate: 1 must-fix [try_bootstrap swallows non-auth errors] + 3 nits, all fixed). Pushed. **Copilot out for the month — Sonnet is the sole gate.** Next: Phase 3, or deferred thin wiring, or a live runbook dry-run.*
+Last updated: **2026-07-02** — *Phase 2 COMPLETE (contract v2.2.0). **Phase 3 started:** eval harness merged via **PR #1** (squash, **389 tests**) + `wait-for-pr-review` skill. **Copilot budget reset → PR-based workflow** (branch → Sonnet review → PR → Copilot review via `wait-for-pr-review` → squash-merge). **Ordered queue:** (1) security review → (2) monitoring/logging → (3) CoT tuning → then Phase 2 deferred wiring → capstone dry-run.*
 
 ---
 
@@ -93,11 +93,11 @@ Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.
 ## Backlog — post-v1 (NOT scheduled)
 - ⬜ Interview preparedness (mock interviews from researched company+role question shapes) — [ARCHITECTURE.md §13](ARCHITECTURE.md)
 
-## Phase 3 — Hardening & Eval
-- 🟡 **`evaluation/user_simulator.py` + `test_config.json` (vague-applicant scenarios) — BUILT** (branch `feat/phase-3-eval`, 388 tests). Deterministic simulator drives the REAL Runner: vague answers pushed back → specific yields validated metric StarStory; 5-turn brake fires (qc=5); records Pro-escalation rate (0 happy / >0 when REASONING_HIGH refused). `evaluation/` now in gates (ruff+mypy+pytest). Under Sonnet+Copilot PR review.
-- ⬜ Monitoring/logging for graph hangs
-- ⬜ Security review (key handling, IAM least-privilege, scraper/PDF injection)
-- ⬜ CoT tuning; measure & reduce Pro-escalation rate
+## Phase 3 — Hardening & Eval  *(PR-based workflow: branch → Sonnet review → PR → Copilot review → squash-merge)*
+- ✅ **`evaluation/user_simulator.py` + `test_config.json`** — merged via **PR #1** (squash, 389 tests). Deterministic simulator drives the REAL Runner: vague answers pushed back → specific yields validated metric StarStory; 5-turn brake fires (qc=5); records Pro-escalation rate (0 happy / >0 when REASONING_HIGH refused); `truncated` surfaces max_turns. `evaluation/` now in gates. Also landed the `wait-for-pr-review` skill. Sonnet PASS + Copilot addressed (both found the same 2 wait-skill must-fixes).
+- ⬜ **Security review** (key handling, IAM least-privilege, scraper/PDF injection) — **NEXT branch** (`/security-review` + fixes).
+- ⬜ Monitoring/logging for graph hangs (observability).
+- ⬜ CoT tuning; measure & reduce Pro-escalation rate (eval harness now measures it).
 
 ---
 
