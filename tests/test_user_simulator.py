@@ -72,10 +72,19 @@ class TestCheckpointBrake:
         assert result.checkpoint_fired is True
         assert result.checkpoint_question_count == 5
 
-    def test_persistent_vague_is_truncated_and_validates_nothing(self) -> None:
-        """A never-specific applicant hits max_turns (surfaced) with no validated story."""
+    def test_persistent_vague_escalates_after_checkpoint_and_validates_nothing(self) -> None:
+        """A never-specific applicant hits the checkpoint, then the Pro-escalation gate.
+
+        The 5-turn checkpoint brake fires first (qc=5); a user who stays vague on
+        the same entry past it trips the Free-Mode escalation gate rather than
+        looping forever. No story is validated, and it is a clean escalation (not
+        a max_turns truncation).
+        """
         result = run_simulation(_scenario("persistent_vague"))
-        assert result.truncated is True
+        assert result.checkpoint_question_count == 5
+        assert result.escalations >= 1
+        assert result.pro_escalation_rate > 0.0
+        assert result.truncated is False
         assert result.validated_stories == []
 
 

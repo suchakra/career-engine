@@ -37,7 +37,7 @@ import re
 from collections.abc import Callable
 from typing import Any
 
-from config import get_settings
+from config import AccessMode, get_settings
 from models.registry import get_registry
 from schema import (
     Capability,
@@ -64,6 +64,13 @@ from workflows.prompts import (
 # interface.  Tests replace this with a mock; production uses the real genai client.
 
 ModelClient = Any  # Protocol: .generate(model_id: str, system: str, user: str) -> str
+
+# Free-Mode Pro-escalation gate: after this many failed Flash+CoT metric-extraction
+# attempts on a SINGLE entry, the grill node emits UpgradeRequired recommending a
+# Pro reasoning model. Set above the 5-turn checkpoint boundary so the checkpoint
+# brake (pause + summarize) always fires first; escalation is the considered next
+# step for a user who stays vague on the same entry past a checkpoint.
+_MAX_FLASH_GRILL_ATTEMPTS: int = 6
 
 
 def _default_client_factory() -> ModelClient:
@@ -622,8 +629,12 @@ def execute_grill_turn_node(
     user's answer is ALWAYS read from `pending_user_answer`.  No field is
     overloaded.
 
-    Returns UpgradeRequired (typed) if REASONING_HIGH resolution fails in Free Mode
-    after multiple Flash+CoT attempts — never raises.
+    Returns UpgradeRequired (typed), never raises, when either: the registry cannot
+    resolve REASONING_HIGH, OR (Free Mode) a single entry accumulates
+    ``_MAX_FLASH_GRILL_ATTEMPTS`` failed metric-extraction attempts — the
+    Pro-escalation gate, which recommends a Pro reasoning model (BYOK) instead of
+    grinding on Flash.  Per-entry failures are tracked in ``state.grill_attempts``
+    and reset when that entry yields a validated metric.
 
     Args:
         state: Current session state.
@@ -708,6 +719,11 @@ def execute_grill_turn_node(
             # Advance frontier to next entry needing work (backward-chronological)
             next_fid = _next_frontier(new_timeline, frontier_id)
 
+            # Clear this entry's failed-attempt counter on a validated answer.
+            cleared_attempts = {
+                k: v for k, v in state.grill_attempts.items() if k != frontier_id
+            }
+
             return state.model_copy(
                 update={
                     "extracted_star_stories": new_stories,
@@ -716,10 +732,36 @@ def execute_grill_turn_node(
                     "question_count": new_question_count,
                     "pending_user_answer": "",
                     "current_question": "",
+                    "grill_attempts": cleared_attempts,
                 }
             )
         else:
-            # ── Metrics not found: ask a probing follow-up question ────────
+            # ── Metrics not found ──────────────────────────────────────────
+            new_attempts = dict(state.grill_attempts)
+            new_attempts[frontier_id] = new_attempts.get(frontier_id, 0) + 1
+
+            # Pro-escalation gate (Free Mode only): once Flash+CoT has failed to
+            # surface a metric on this entry past a full checkpoint cycle, escalate
+            # rather than grinding indefinitely on Flash.  In BYOK mode
+            # REASONING_HIGH already resolves to Pro, so there is nothing to escalate
+            # to and we simply keep probing.
+            settings = get_settings()
+            if (
+                settings.access_mode == AccessMode.FREE
+                and new_attempts[frontier_id] >= _MAX_FLASH_GRILL_ATTEMPTS
+            ):
+                return UpgradeRequired(
+                    required_capability=Capability.REASONING_HIGH,
+                    node_name="execute_grill_turn_node",
+                    reason=(
+                        f"Flash+CoT could not surface a concrete metric for "
+                        f"{frontier_entry.title!r} after {new_attempts[frontier_id]} "
+                        "attempts; a Pro reasoning model (BYOK) is recommended to probe "
+                        "more deeply."
+                    ),
+                )
+
+            # Otherwise ask one sharp probing follow-up question.
             probe_context = (
                 f"Entry: {frontier_entry.title} at {frontier_entry.org}\n\n"
                 f"What the person said:\n{user_answer}\n\n"
@@ -737,6 +779,7 @@ def execute_grill_turn_node(
                     "current_question": question_text.strip(),
                     "pending_user_answer": "",
                     "grill_frontier": frontier_id,
+                    "grill_attempts": new_attempts,
                 }
             )
     else:

@@ -217,12 +217,22 @@ Feature → capability map:
 - **BYOK Mode:** the user's key (Secret Manager). Unlocks paid models when their key has billing.
 
 ### 6.3 Graceful escalation (the upgrade prompt)
-When a `REASONING_HIGH` task in Free Mode fails its validation gate or the resolver has no
-sufficiently-capable free model, the node returns a typed `UpgradeRequired` signal and the UI shows:
+When a `REASONING_HIGH` task in Free Mode cannot succeed, the node returns a typed
+`UpgradeRequired` signal (never a crash, never silent degradation) and the UI shows:
 
 > *"This task requires advanced reasoning. Please provide your API key or upgrade to continue."*
 
-No silent quality degradation, no crash — an explicit, typed branch.
+Two concrete triggers in `execute_grill_turn_node`:
+1. **Resolver shortfall** — the registry has no sufficiently-capable free model for `REASONING_HIGH`.
+2. **Pro-escalation gate** (v2.3.0) — a single entry accumulates `_MAX_FLASH_GRILL_ATTEMPTS`
+   (=6) failed metric-extraction attempts. Per-entry failures are tracked in
+   `CareerEngineState.grill_attempts` and reset when the entry yields a validated metric. The
+   threshold sits **above** the 5-turn checkpoint boundary, so the checkpoint brake (pause +
+   summarize) always fires first; escalation is the considered next step for a user who stays
+   vague on the same entry *past* a checkpoint. BYOK mode never trips this gate — `REASONING_HIGH`
+   already resolves to Pro, so there is nothing to escalate to. The eval harness measures how
+   often it fires as the **Pro-escalation rate** (`evaluation/user_simulator.py`); CoT-prompt
+   tuning aims to keep it low by helping users produce a metric before the threshold.
 
 ### 6.4 The Flash-Lite pivot (prompt engineering > model size)
 Baseline is **Flash-Lite**. We close the gap to "Pro" with **Chain-of-Thought system prompts**, not

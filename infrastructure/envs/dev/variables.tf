@@ -34,7 +34,7 @@ variable "image" {
 variable "contract_version" {
   type        = string
   description = "CONTRACT_VERSION stamped into the runtime — MUST track config.py:CONTRACT_VERSION."
-  default     = "2.2.0"
+  default     = "2.3.0"
 }
 
 variable "sweep_schedule" {
