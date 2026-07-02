@@ -231,8 +231,14 @@ def fetch_raw_html(
             not be fetched, returns a non-2xx status, times out, or redirects too
             many times.
     """
+    # NOTE (residual risk): _assert_safe_url resolves + validates the host, but
+    # httpx re-resolves at connect time, leaving a DNS-rebinding TOCTOU window
+    # (docs/SECURITY.md "Residual risks"). It is compensated by the Cloud Run
+    # egress posture (no route to RFC1918 / the metadata service by default, and
+    # metadata reads additionally require a Metadata-Flavor header we never send).
     current = url
-    for _ in range(_MAX_REDIRECTS + 1):
+    redirects = 0
+    while True:
         _assert_safe_url(current, resolver=resolver)
         try:
             with httpx.Client(follow_redirects=False, timeout=_FETCH_TIMEOUT_SECONDS) as client:
@@ -243,9 +249,12 @@ def fetch_raw_html(
             raise ScraperError(f"Network error fetching {current!r}: {exc}") from exc
 
         if 300 <= response.status_code < 400:
+            if redirects >= _MAX_REDIRECTS:
+                raise ScraperError(f"Too many redirects (> {_MAX_REDIRECTS}) fetching {url!r}.")
             location = response.headers.get("location")
             if not location:
                 raise ScraperError(f"Redirect without a Location header from {current!r}.")
+            redirects += 1
             current = urljoin(current, location)
             continue
         if response.status_code < 200 or response.status_code >= 300:
@@ -253,8 +262,6 @@ def fetch_raw_html(
                 f"Non-2xx response fetching {current!r}: HTTP {response.status_code}"
             )
         return response.text
-
-    raise ScraperError(f"Too many redirects (> {_MAX_REDIRECTS}) fetching {url!r}.")
 
 
 def clean_jd_html(

@@ -16,6 +16,20 @@ import pytest
 from auth.firebase_auth import FirebaseAuthProvider
 from auth.provider import AuthenticationError
 
+
+@pytest.fixture(autouse=True)
+def _pin_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin settings to an empty project so the audience check does not depend on a
+    developer's local ``.env`` (deterministic: aud enforced only when a test opts
+    in via ``expected_audiences``; issuer is always enforced against Google)."""
+    import config
+    from config import Settings
+
+    monkeypatch.setattr(
+        config, "get_settings", lambda: Settings(firebase_project_id="", gcp_project_id="")
+    )
+
+
 # ── Fake verifier ─────────────────────────────────────────────────────────────
 
 

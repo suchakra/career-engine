@@ -46,6 +46,18 @@ ingest surfaces. Two exploitable findings, both fixed on this branch:
    revalidated per hop. Regression tests in
    `tests/test_web_scraper.py::TestScraperSsrfGuards`.
 
+**Residual risks (accepted, with compensating controls):**
+- **DNS rebinding in the scraper (low).** `_assert_safe_url` resolves and validates
+  the host, but httpx re-resolves at connect time, so an attacker-controlled domain
+  with a low-TTL record could pass validation (public IP) then resolve to an internal
+  address at connect. A complete app-layer fix requires an IP-pinning transport or an
+  egress proxy (out of scope here). Compensating controls: (a) the JD fetch is a
+  single-user-scoped action returning low-value content; (b) on Cloud Run the default
+  egress has no route to RFC1918 / the metadata service; (c) metadata reads
+  additionally require a `Metadata-Flavor: Google` header the scraper never sends.
+  **Production control of record:** restrict Cloud Run egress (VPC egress firewall)
+  so internal ranges and `169.254.169.254` are unreachable.
+
 **Confirmed NOT vulnerable (checked this pass):**
 - Dev escape hatch (`dev_user_id` / `dev_gemini_key`) is honored only in the CLI
   auth path (`auth/cli_auth.py`, `cli/app.py`) — the deployed web path uses

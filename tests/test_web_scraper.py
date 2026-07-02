@@ -53,8 +53,14 @@ def _mock_client(response_text: str) -> Any:
 
 
 def _public_resolver(_host: str) -> list[str]:
-    """A stand-in resolver returning a public IP (keeps fetch tests offline)."""
-    return ["93.184.216.34"]  # example.com's documentation-range public IP
+    """A stand-in resolver returning a public IP (keeps fetch tests offline).
+
+    93.184.216.34 is a genuine public IP (example.com); it is deliberately NOT a
+    private/loopback/reserved address, so it passes the SSRF guard. (A documentation
+    range like 192.0.2.0/24 can't be used here — Python 3.12+ classifies it as
+    private, which the guard would reject.)
+    """
+    return ["93.184.216.34"]
 
 
 # ── AC1: Content filtering correctness ───────────────────────────────────────

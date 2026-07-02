@@ -119,14 +119,19 @@ class FirebaseAuthProvider(AuthProvider):
         allowed_issuers: Iterable[str] | None = None,
     ) -> None:
         """Initialise the Firebase auth provider."""
-        from config import get_settings
-
         self._verifier: Callable[[str], dict[str, Any]] = (
             verifier if verifier is not None else _google_tokeninfo_verifier
         )
 
-        settings = get_settings()
-        project = settings.firebase_project_id or settings.gcp_project_id
+        # Only touch settings when we must derive a default — a fully-injected
+        # provider (both audiences + issuers supplied) stays decoupled from config
+        # and its dotenv side effects.
+        project = ""
+        if expected_audiences is None or allowed_issuers is None:
+            from config import get_settings
+
+            settings = get_settings()
+            project = settings.firebase_project_id or settings.gcp_project_id
 
         if expected_audiences is None:
             self._expected_audiences: frozenset[str] = (
