@@ -1,7 +1,7 @@
 # CareerEngine — Session Handoff / Resume Point
 
 ## 👉 YOU ARE HERE (updated 2026-07-02)
-**`master` (clean, synced at `ee24ec1`), **contract v2.3.0** (tag `contract-v2.3.0`). Phase 3 in progress — eval harness (PR #1) + security review (PR #2) + observability (PR #3) + CoT escalation gate (PR #4) + Phase 2 deferred wiring (PR #5) merged; 423 tests green. One queue item left: the capstone runbook dry-run.**
+**`master` (clean, synced at `c648fd1`), **contract v2.3.0** (tag `contract-v2.3.0`). **Phase 3 COMPLETE** — the full ordered queue is merged: eval harness (PR #1), security review (PR #2), observability (PR #3), CoT escalation gate (PR #4), Phase 2 deferred wiring (PR #5), capstone dry-run (PR #6). 424 tests green; `make check` + `make tf-check` both clean. No queue item is in flight.**
 - **Workflow (Copilot budget reset):** each chunk = **new branch → build → `make check` green → Sonnet
   review (subagent) + fix → push → `gh pr create` → request Copilot (`gh api --method POST
   repos/{owner}/{repo}/pulls/N/requested_reviewers -f 'reviewers[]=copilot-pull-request-reviewer[bot]'`,
@@ -21,7 +21,13 @@
   4. **Phase 2 deferred wiring** ✅ DONE — merged via **PR #5** (423 tests): `web/session_loader.py`
      (meter discovery-state load, wired into `streamlit_app`); `jobs/sweep_endpoint.py` (OIDC
      aud/iss-verified sweep handler); `terraform` in `.devcontainer` (rebuild to take effect).
-  5. **Capstone dry-run** ⬅ NEXT — execute [CAPSTONE_RUNBOOK.md](CAPSTONE_RUNBOOK.md) end-to-end; capture evidence.
+  5. **Capstone dry-run** ✅ DONE — merged via **PR #6** (424 tests). Executed end-to-end; the live
+     run found + fixed a real null-STAR-field crash; free-tier 5-req/min ceiling documented (live PDF
+     needs a paid key). Evidence captured in [CAPSTONE_RUNBOOK.md](CAPSTONE_RUNBOOK.md).
+- **What's next (queue exhausted):** no scheduled work remains. Candidate follow-ups (unscheduled) —
+  the outermost Phase-2 glue (mount `jobs/sweep_endpoint.py` in a served app + Identity Platform
+  *frontend* token exchange), a live PDF pass with a paid/raised-quota key, or new Beyond-v1 scope
+  from [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md). Await direction before starting.
 - **State:** tags `contract-v1.0.0…v2.2.0`; gates `make check` (389) + `make tf-check`. Phase 2 deferred
   thin wiring (item 4 above) is logic-built+tested, only outer glue remains.
 Phase 1.7 DONE (tagged `contract-v2.1.0`, pushed). Phase 2 increment built this session, Opus-direct

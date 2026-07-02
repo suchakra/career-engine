@@ -3,7 +3,7 @@
 > Single source of truth for **what's done vs. pending**. Update this at the end of every work
 > session / sub-agent run. Keep entries terse. Legend: ✅ done · 🟡 in progress · ⬜ not started · 🚫 blocked.
 
-Last updated: **2026-07-02** — *Phase 2 COMPLETE; contract now **v2.3.0** (tag `contract-v2.3.0`). **Phase 3 started:** eval harness merged via **PR #1** (squash, **389 tests**) + `wait-for-pr-review` skill. **Copilot budget reset → PR-based workflow** (branch → Sonnet review → PR → Copilot review via `wait-for-pr-review` → squash-merge). **Ordered queue:** (1) security review ✅ (PR #2) → (2) monitoring/logging ✅ (PR #3, 405 tests) → (3) CoT tuning ✅ (PR #4, **contract v2.3.0**, tag `contract-v2.3.0`, 409 tests) → (4) Phase 2 deferred wiring ✅ (PR #5, 423 tests) → (5) capstone runbook dry-run ⬅ NEXT.*
+Last updated: **2026-07-02** — *Phase 2 COMPLETE; contract now **v2.3.0** (tag `contract-v2.3.0`). **Phase 3 started:** eval harness merged via **PR #1** (squash, **389 tests**) + `wait-for-pr-review` skill. **Copilot budget reset → PR-based workflow** (branch → Sonnet review → PR → Copilot review via `wait-for-pr-review` → squash-merge). **Ordered queue:** (1) security review ✅ (PR #2) → (2) monitoring/logging ✅ (PR #3, 405 tests) → (3) CoT tuning ✅ (PR #4, **contract v2.3.0**, tag `contract-v2.3.0`, 409 tests) → (4) Phase 2 deferred wiring ✅ (PR #5) → (5) capstone runbook dry-run ✅ (PR #6, 424 tests). **Phase 3 queue COMPLETE.***
 
 ---
 
@@ -100,7 +100,9 @@ Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.
 - ✅ **CoT tuning**; measure & reduce Pro-escalation rate — merged via **PR #4** (squash, 409 tests, **contract v2.3.0**, tag `contract-v2.3.0`). Implemented the **Free-Mode Pro-escalation gate**: `execute_grill_turn_node` emits typed `UpgradeRequired` once an entry hits `_MAX_FLASH_GRILL_ATTEMPTS` (=6) failed metric extractions (tracked in additive `CareerEngineState.grill_attempts`, reset on a validated metric); threshold sits above the 5-turn checkpoint so the brake fires first; BYOK never escalates. Tuned CoT prompts (accept digit-bearing approximate metrics; scaffold stuck users) to keep the rate low. Eval `persistent_vague` now escalates after the checkpoint. Sonnet PASS (1 nit) + 2 Copilot comments addressed. ARCHITECTURE §6.3 specifies the gate.
 
 - ✅ **Phase 2 deferred wiring** — merged via **PR #5** (squash, 423 tests). (a) `web/session_loader.py` best-effort loads the user's latest discovery `CareerEngineState` for the progress meter (flat-state read matching `read_state`; applies today's date so the meter is a "now" view; empty on any failure), wired into `streamlit_app`. (b) `jobs/sweep_endpoint.py` — framework-agnostic `handle_sweep_request` verifying the Cloud Scheduler OIDC token (aud pinned to the service URL secure-by-default + iss + optional invoker-SA allowlist) then running `run_sweep`. (c) `terraform` feature added to `.devcontainer` (rebuild to take effect). Sonnet CHANGES-REQUESTED (1 false positive verified + 2 real must-fix) + 2 Copilot comments addressed.
-- ⬜ **Capstone runbook dry-run** — execute [CAPSTONE_RUNBOOK.md](CAPSTONE_RUNBOOK.md) end-to-end; capture evidence. **NEXT** (final queue item).
+- ✅ **Capstone runbook dry-run** — executed end-to-end via **PR #6** (424 tests). Deterministic evidence all green (`make check`, real-Runner→`%PDF` e2e, sweep, `tf-check`, no hardcoded model IDs). The **live** dry-run found + fixed a real bug: the Gemini model returns JSON `null` for STAR fields while `metrics_found=true`, crashing `StarStory` via `get(k, "")` → coerced with `get(k) or ""` + regression test. Documented the free-tier 5-req/min ceiling (a full live PDF needs a paid key; the deterministic e2e test is the reproducible PDF proof). Runbook drift reconciled (381→424, deferred-scope, terraform-in-devcontainer).
+
+**Phase 3 queue COMPLETE** (all 5 items merged, PRs #2–#6). See [HANDOFF.md](HANDOFF.md) for what's next.
 
 ---
 
