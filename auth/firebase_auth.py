@@ -21,13 +21,20 @@ import json
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import Any
 
 from auth.provider import AuthenticationError, AuthProvider
 
 # Google tokeninfo endpoint — validates and decodes an ID token server-side.
 _TOKENINFO_URL = "https://www.googleapis.com/oauth2/v3/tokeninfo"
+
+# Issuers Google mints ID tokens under. The tokeninfo endpoint verifies the
+# signature but NOT that the token was issued for THIS relying party, so we must
+# pin issuer + audience ourselves (see docs/SECURITY.md / set_token).
+_DEFAULT_GOOGLE_ISSUERS: frozenset[str] = frozenset(
+    {"https://accounts.google.com", "accounts.google.com"}
+)
 
 
 # ── Default verifier (network) ────────────────────────────────────────────────
@@ -93,16 +100,49 @@ class FirebaseAuthProvider(AuthProvider):
         verifier: Optional callable ``(id_token: str) -> dict[str, Any]`` that
             returns decoded JWT claims.  Defaults to the Google tokeninfo REST
             endpoint.  Supply a fake in tests to avoid network calls.
+        expected_audiences: The ``aud`` values this application accepts (its
+            Identity Platform / Firebase project id, or OAuth client id). When
+            ``None`` (the default), it is derived from
+            ``settings.firebase_project_id`` (falling back to
+            ``settings.gcp_project_id``); if that is also unset, the audience
+            check is skipped (dev/test only — production sets a project id).
+        allowed_issuers: The ``iss`` values accepted. When ``None`` (default),
+            the Google issuers plus ``securetoken.google.com/{project}`` (when a
+            project id is known) are used; issuer is ALWAYS enforced.
     """
 
     def __init__(
         self,
         verifier: Callable[[str], dict[str, Any]] | None = None,
+        *,
+        expected_audiences: Iterable[str] | None = None,
+        allowed_issuers: Iterable[str] | None = None,
     ) -> None:
         """Initialise the Firebase auth provider."""
+        from config import get_settings
+
         self._verifier: Callable[[str], dict[str, Any]] = (
             verifier if verifier is not None else _google_tokeninfo_verifier
         )
+
+        settings = get_settings()
+        project = settings.firebase_project_id or settings.gcp_project_id
+
+        if expected_audiences is None:
+            self._expected_audiences: frozenset[str] = (
+                frozenset({project}) if project else frozenset()
+            )
+        else:
+            self._expected_audiences = frozenset(expected_audiences)
+
+        if allowed_issuers is None:
+            issuers = set(_DEFAULT_GOOGLE_ISSUERS)
+            if project:
+                issuers.add(f"https://securetoken.google.com/{project}")
+            self._allowed_issuers: frozenset[str] = frozenset(issuers)
+        else:
+            self._allowed_issuers = frozenset(allowed_issuers)
+
         self._user_id: str = ""
         self._claims: dict[str, Any] = {}
         self._authenticated: bool = False
@@ -130,6 +170,22 @@ class FirebaseAuthProvider(AuthProvider):
             raise AuthenticationError(
                 "Verified token does not contain a 'sub' claim; cannot resolve user_id."
             )
+
+        # The tokeninfo endpoint proves the token is genuinely Google-signed and
+        # unexpired, but NOT that it was minted for THIS application. Without an
+        # audience/issuer check any valid Google/Firebase ID token — including one
+        # issued for an unrelated project or OAuth client — would be accepted and
+        # its `sub` trusted as our user_id (confused-deputy / token substitution).
+        if self._expected_audiences:
+            aud = claims.get("aud", "")
+            if aud not in self._expected_audiences:
+                raise AuthenticationError(
+                    "ID token audience is not accepted by this application."
+                )
+
+        iss = claims.get("iss", "")
+        if iss not in self._allowed_issuers:
+            raise AuthenticationError("ID token issuer is not trusted.")
 
         self._user_id = sub
         self._claims = claims
