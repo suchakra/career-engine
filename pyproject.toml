@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=74.0.0"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "career-engine"
@@ -51,6 +51,26 @@ dev = [
     "pytest-asyncio==1.4.0",
     # Type stubs for cloud libs (mypy strict)
     "types-requests==2.32.4.20250611",
+]
+
+# Flat layout: explicit package/module declaration so `pip install -e .` works on
+# a clean environment (setuptools auto-discovery errors on multiple top-level
+# packages + loose modules — this replaces the non-standard legacy backend hack).
+[tool.setuptools]
+py-modules = ["config", "schema", "main"]
+
+[tool.setuptools.packages.find]
+include = [
+    "auth*",
+    "cli*",
+    "database*",
+    "evaluation*",
+    "integration*",
+    "jobs*",
+    "models*",
+    "tools*",
+    "web*",
+    "workflows*",
 ]
 
 [tool.ruff]

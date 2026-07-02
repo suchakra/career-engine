@@ -170,11 +170,13 @@ independent review → PR (CI must pass) → squash-merge. See
 
 ```
 main.py             CLI entrypoint (Click)
+cli/                interactive grill/tailor loop + ADK session helpers
 config.py           settings + CONTRACT_VERSION + client factories
 schema.py           strict Pydantic v2 contracts (every boundary payload)
 models/             capability-first model registry (no hardcoded model IDs)
 workflows/          discovery graph, nodes, prompts, observability
 tools/              résumé parser (vision), JD scraper (SSRF-guarded), PDF renderer
+templates/          Jinja2 résumé template (classic_resume.html) for the PDF
 auth/               CLI + Firebase/Identity-Platform auth, Secret Manager key vault
 database/           Firestore session + workspace stores
 web/                Streamlit dashboard (pure view-model + injectable renderer)
