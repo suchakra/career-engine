@@ -1,7 +1,7 @@
 # CareerEngine — Session Handoff / Resume Point
 
 ## 👉 YOU ARE HERE (updated 2026-07-02)
-**`master` (clean, synced at `4d99ade`), **contract v2.3.0** (tag `contract-v2.3.0`). Phase 3 in progress — eval harness (PR #1) + security review (PR #2) + observability (PR #3) + CoT escalation gate (PR #4) merged; 409 tests green. Working the ordered Phase-3 queue via a PR-based workflow.**
+**`master` (clean, synced at `ee24ec1`), **contract v2.3.0** (tag `contract-v2.3.0`). Phase 3 in progress — eval harness (PR #1) + security review (PR #2) + observability (PR #3) + CoT escalation gate (PR #4) + Phase 2 deferred wiring (PR #5) merged; 423 tests green. One queue item left: the capstone runbook dry-run.**
 - **Workflow (Copilot budget reset):** each chunk = **new branch → build → `make check` green → Sonnet
   review (subagent) + fix → push → `gh pr create` → request Copilot (`gh api --method POST
   repos/{owner}/{repo}/pulls/N/requested_reviewers -f 'reviewers[]=copilot-pull-request-reviewer[bot]'`,
@@ -18,11 +18,10 @@
   3. **CoT tuning** ✅ DONE — merged via **PR #4** (409 tests, **contract v2.3.0**, tag
      `contract-v2.3.0`): Free-Mode Pro-escalation gate in `execute_grill_turn_node` (per-entry
      `grill_attempts`, escalates after 6 failed attempts, above the checkpoint boundary) + CoT tuning.
-  4. **Phase 2 deferred wiring** ⬅ IN REVIEW (PR #5) — `web/session_loader.py` (best-effort load of
-     the user's latest discovery `CareerEngineState` for the meter, wired into `streamlit_app`);
-     `jobs/sweep_endpoint.py` (framework-agnostic OIDC-audience-verified handler running `run_sweep`);
-     `terraform` feature added to `.devcontainer/devcontainer.json` (takes effect on rebuild).
-  5. **Capstone dry-run** — execute [CAPSTONE_RUNBOOK.md](CAPSTONE_RUNBOOK.md) end-to-end; capture evidence.
+  4. **Phase 2 deferred wiring** ✅ DONE — merged via **PR #5** (423 tests): `web/session_loader.py`
+     (meter discovery-state load, wired into `streamlit_app`); `jobs/sweep_endpoint.py` (OIDC
+     aud/iss-verified sweep handler); `terraform` in `.devcontainer` (rebuild to take effect).
+  5. **Capstone dry-run** ⬅ NEXT — execute [CAPSTONE_RUNBOOK.md](CAPSTONE_RUNBOOK.md) end-to-end; capture evidence.
 - **State:** tags `contract-v1.0.0…v2.2.0`; gates `make check` (389) + `make tf-check`. Phase 2 deferred
   thin wiring (item 4 above) is logic-built+tested, only outer glue remains.
 Phase 1.7 DONE (tagged `contract-v2.1.0`, pushed). Phase 2 increment built this session, Opus-direct
