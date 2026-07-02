@@ -31,3 +31,6 @@ htmlcov/
 # OS / editor
 .DS_Store
 *.swp
+
+# Local demo artifacts (not tracked)
+demo_output/
