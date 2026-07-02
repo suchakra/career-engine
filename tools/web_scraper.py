@@ -37,6 +37,9 @@ _MAX_REDIRECTS: int = 5
 # Hostnames that resolve to (or alias) the cloud metadata service — blocked even
 # before DNS resolution as a belt-and-braces guard.
 _BLOCKED_HOSTNAMES: frozenset[str] = frozenset({"metadata", "metadata.google.internal"})
+# RFC 6598 shared address space (CGNAT). Python's ipaddress does NOT classify
+# this as private/reserved, so block it explicitly for completeness.
+_CGNAT_NET = ipaddress.ip_network("100.64.0.0/10")
 
 _CLEAN_JD_SYSTEM_PROMPT = """\
 You are a job-description parser.  Your task is to extract only the
@@ -163,6 +166,7 @@ def _is_blocked_ip(ip_str: str) -> bool:
         or ip.is_reserved
         or ip.is_multicast
         or ip.is_unspecified
+        or ip in _CGNAT_NET
     )
 
 

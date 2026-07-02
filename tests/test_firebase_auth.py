@@ -238,6 +238,28 @@ class TestAudienceAndIssuerPinning:
         provider.set_token("valid-token")
         assert provider.get_user_id() == "uid-ok"
 
+    def test_accepts_securetoken_issuer_when_project_configured(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When a project id is set, a Firebase securetoken issuer + aud is accepted."""
+        import config
+        from config import Settings
+
+        monkeypatch.setattr(
+            config, "get_settings", lambda: Settings(firebase_project_id="my-project")
+        )
+        provider = FirebaseAuthProvider(
+            verifier=_make_fake_verifier(
+                sub="uid-fb",
+                extra_claims={
+                    "aud": "my-project",
+                    "iss": "https://securetoken.google.com/my-project",
+                },
+            ),
+        )
+        provider.set_token("firebase-token")
+        assert provider.get_user_id() == "uid-fb"
+
     def test_rejects_token_with_untrusted_issuer(self) -> None:
         """iss not in allowed_issuers → AuthenticationError."""
         provider = FirebaseAuthProvider(
