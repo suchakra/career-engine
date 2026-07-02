@@ -328,6 +328,7 @@ class TestGrillNullStarFields:
         story = result.extracted_star_stories[0]
         assert story.situation == ""  # null coerced, not a crash
         assert story.task == ""
+        assert story.action == ""
         assert story.pillar == entry.type.value  # null pillar → entry type default
         assert story.metrics_validated is True
 
