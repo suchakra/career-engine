@@ -1,7 +1,7 @@
 # CareerEngine — Session Handoff / Resume Point
 
 ## 👉 YOU ARE HERE (updated 2026-07-02)
-**`master` (clean, synced at `f5f4557`), Phase 2 COMPLETE (contract v2.2.0). Phase 3 in progress — eval harness (PR #1) + security review (PR #2) + observability (PR #3) merged; 405 tests green. Working the ordered Phase-3 queue via a PR-based workflow.**
+**`master` (clean, synced at `4d99ade`), **contract v2.3.0** (tag `contract-v2.3.0`). Phase 3 in progress — eval harness (PR #1) + security review (PR #2) + observability (PR #3) + CoT escalation gate (PR #4) merged; 409 tests green. Working the ordered Phase-3 queue via a PR-based workflow.**
 - **Workflow (Copilot budget reset):** each chunk = **new branch → build → `make check` green → Sonnet
   review (subagent) + fix → push → `gh pr create` → request Copilot (`gh api --method POST
   repos/{owner}/{repo}/pulls/N/requested_reviewers -f 'reviewers[]=copilot-pull-request-reviewer[bot]'`,
@@ -15,10 +15,11 @@
   2. **Monitoring/logging** for graph hangs ✅ DONE — merged via **PR #3** (405 tests):
      `workflows/observability.py` + monitored model client + per-request model timeout
      (`settings.model_timeout_seconds`) + `graph.turn` span.
-  3. **CoT tuning** — measure & reduce the Pro-escalation rate. ⬅ IN REVIEW (PR #4):
-     Free-Mode Pro-escalation gate in `execute_grill_turn_node` (per-entry `grill_attempts`,
-     escalates after 6 failed attempts, above the checkpoint boundary) + CoT tuning;
-     **contract v2.3.0** (additive `grill_attempts`) — tag `contract-v2.3.0` on merge.
+  3. **CoT tuning** ✅ DONE — merged via **PR #4** (409 tests, **contract v2.3.0**, tag
+     `contract-v2.3.0`): Free-Mode Pro-escalation gate in `execute_grill_turn_node` (per-entry
+     `grill_attempts`, escalates after 6 failed attempts, above the checkpoint boundary) + CoT tuning.
+  4. **Phase 2 deferred wiring** ⬅ NEXT — Streamlit discovery-session load for the meter; sweep
+     Cloud Run HTTP endpoint + IdP frontend token exchange; add `terraform` to the devcontainer.
   4. **Phase 2 deferred wiring** — Streamlit discovery-session load for the meter; sweep Cloud Run HTTP
      endpoint + IdP frontend token exchange. Also add `terraform` to the devcontainer (see memory).
   5. **Capstone dry-run** — execute [CAPSTONE_RUNBOOK.md](CAPSTONE_RUNBOOK.md) end-to-end; capture evidence.
