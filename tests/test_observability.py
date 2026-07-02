@@ -87,6 +87,12 @@ class TestConfigureLogging:
         # Exactly one handler was added despite two calls.
         assert len(root.handlers) == start + 1
 
+    def test_lowercase_string_level_does_not_crash(self, _restore_logging: None) -> None:
+        """A lowercase level (e.g. CE_LOG_LEVEL=debug) is normalized, not fatal."""
+        obs._configured = False
+        configure_logging(level="debug")
+        assert logging.getLogger("career_engine").level == logging.DEBUG
+
 
 class TestMonitoredModelClient:
     """_get_model_client wraps the (possibly mocked) client with logging."""

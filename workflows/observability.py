@@ -48,6 +48,10 @@ def configure_logging(*, level: int | str | None = None) -> None:
     logger = logging.getLogger(_ROOT_LOGGER_NAME)
 
     resolved = level if level is not None else os.environ.get("CE_LOG_LEVEL", "INFO")
+    # setLevel's string names are case-sensitive (uppercase); normalize so a
+    # common lowercase env value like CE_LOG_LEVEL=info doesn't crash startup.
+    if isinstance(resolved, str):
+        resolved = resolved.strip().upper()
     logger.setLevel(resolved)
 
     handler = logging.StreamHandler()
