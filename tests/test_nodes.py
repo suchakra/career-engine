@@ -399,7 +399,8 @@ class TestGrillProEscalationGate:
 
         assert isinstance(result, CareerEngineState)
         assert len(result.extracted_star_stories) == 1
-        assert str(entry.entry_id) not in result.grill_attempts
+        # The pre-seeded counter (3) for this entry is cleared entirely.
+        assert result.grill_attempts == {}
 
 
 # ── execute_grill_turn_node — specific answer accepted ────────────────────────
