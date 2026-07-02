@@ -123,7 +123,7 @@ def grill(
     except ModelAPIError as exc:
         # A quota/transport failure should guide the user, not dump a stack trace.
         click.echo(format_model_api_error(exc, use_firestore=firestore), err=True)
-        sys.exit(0)
+        sys.exit(1)
 
 
 @cli.command()
@@ -173,7 +173,7 @@ def tailor(
         )
     except ModelAPIError as exc:
         click.echo(format_model_api_error(exc, use_firestore=firestore), err=True)
-        sys.exit(0)
+        sys.exit(1)
 
 
 @cli.command()

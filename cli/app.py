@@ -719,8 +719,7 @@ def format_model_api_error(exc: ModelAPIError, *, use_firestore: bool) -> str:
             else ""
         )
         resume = (
-            "Your progress is saved — re-run with --firestore and the session id shown "
-            "above to continue."
+            "Your progress is saved — re-run with --firestore and your session id to continue."
             if use_firestore
             else "Tip: run with --firestore (and --session-id) so progress is saved and resumable."
         )
