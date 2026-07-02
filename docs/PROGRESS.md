@@ -3,7 +3,7 @@
 > Single source of truth for **what's done vs. pending**. Update this at the end of every work
 > session / sub-agent run. Keep entries terse. Legend: ✅ done · 🟡 in progress · ⬜ not started · 🚫 blocked.
 
-Last updated: **2026-07-02** — *Phase 2 COMPLETE; contract now **v2.3.0** (tag `contract-v2.3.0`). **Phase 3 started:** eval harness merged via **PR #1** (squash, **389 tests**) + `wait-for-pr-review` skill. **Copilot budget reset → PR-based workflow** (branch → Sonnet review → PR → Copilot review via `wait-for-pr-review` → squash-merge). **Ordered queue:** (1) security review ✅ (PR #2) → (2) monitoring/logging ✅ (PR #3, 405 tests) → (3) CoT tuning ✅ (PR #4, **contract v2.3.0**, tag `contract-v2.3.0`, 409 tests) → (4) Phase 2 deferred wiring ⬅ IN REVIEW (PR #5: Streamlit discovery-state loader + sweep OIDC HTTP handler + terraform in devcontainer, 422 tests) → capstone dry-run.*
+Last updated: **2026-07-02** — *Phase 2 COMPLETE; contract now **v2.3.0** (tag `contract-v2.3.0`). **Phase 3 started:** eval harness merged via **PR #1** (squash, **389 tests**) + `wait-for-pr-review` skill. **Copilot budget reset → PR-based workflow** (branch → Sonnet review → PR → Copilot review via `wait-for-pr-review` → squash-merge). **Ordered queue:** (1) security review ✅ (PR #2) → (2) monitoring/logging ✅ (PR #3, 405 tests) → (3) CoT tuning ✅ (PR #4, **contract v2.3.0**, tag `contract-v2.3.0`, 409 tests) → (4) Phase 2 deferred wiring ⬅ IN REVIEW (PR #5: Streamlit discovery-state loader + sweep OIDC HTTP handler + terraform in devcontainer, 423 tests) → capstone dry-run.*
 
 ---
 

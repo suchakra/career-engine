@@ -52,7 +52,10 @@ async def _aload_latest_discovery_state(
     # state dict — do NOT reach into a nested "career_engine_state" key: after a
     # FirestoreSessionService round-trip that sub-key holds an EMPTY default while
     # the real fields remain flat at the top level.
-    return CareerEngineState.model_validate(full.state)
+    loaded = CareerEngineState.model_validate(full.state)
+    # The meter is a "today" view: recompute completeness relative to the injected
+    # date, not the (possibly stale or empty) date persisted with the session.
+    return loaded.model_copy(update={"reference_date": reference_date})
 
 
 def load_latest_discovery_state(

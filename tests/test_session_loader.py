@@ -78,6 +78,8 @@ class TestLoadLatestDiscoveryState:
             _svc(svc), app_name=_APP, user_id=_UID, reference_date="2026-07-02"
         )
         assert state.question_count == 4  # the newer session won
+        # The meter view uses TODAY, not the persisted (older) reference_date.
+        assert state.reference_date == "2026-07-02"
 
     def test_no_sessions_returns_empty_state(self) -> None:
         state = load_latest_discovery_state(
