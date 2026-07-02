@@ -51,11 +51,31 @@ def main() -> None:
         st.info("Please sign in to view your workspace.")
         return
 
-    # TODO(discovery-state load): load this user's active discovery session for
-    # the progress meter; empty session for now.
-    state = CareerEngineState(reference_date=today)
+    # Load this user's latest discovery-session state for the progress meter.
+    # Best-effort: an empty state (no progress) is rendered if the backend is
+    # unreachable or the user has no session yet — never crash the dashboard.
+    state = _load_discovery_state(user_id=session.user_id, today=today)
     view = build_dashboard_view(state, session.workspace, today=today)
     render_dashboard(view, st=st)
+
+
+def _load_discovery_state(*, user_id: str, today: str) -> CareerEngineState:
+    """Resolve the user's latest discovery state, or an empty state on any failure."""
+    from config import get_settings
+    from database.firestore_session import FirestoreSessionService
+    from web.session_loader import try_load_latest_discovery_state
+
+    settings = get_settings()
+    try:
+        session_service = FirestoreSessionService()
+    except Exception:
+        return CareerEngineState(reference_date=today)
+    return try_load_latest_discovery_state(
+        session_service,
+        app_name=settings.app_name,
+        user_id=user_id,
+        reference_date=today,
+    )
 
 
 main()
