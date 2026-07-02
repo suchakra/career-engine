@@ -1,7 +1,7 @@
 # CareerEngine — Session Handoff / Resume Point
 
 ## 👉 YOU ARE HERE (updated 2026-07-02)
-**`master` (clean, synced at `c648fd1`), **contract v2.3.0** (tag `contract-v2.3.0`). **Phase 3 COMPLETE** — the full ordered queue is merged: eval harness (PR #1), security review (PR #2), observability (PR #3), CoT escalation gate (PR #4), Phase 2 deferred wiring (PR #5), capstone dry-run (PR #6). 424 tests green; `make check` + `make tf-check` both clean. No queue item is in flight.**
+**`master` (clean, synced at `d3c6276`), **contract v2.3.0** (tag `contract-v2.3.0`). **Phase 3 COMPLETE** — full ordered queue merged (PRs #2–#6). Repo also now has a root **README**, **GitHub Actions CI/CD** (PR #7), and a **proprietary LICENSE** (public-ready). 424 tests green; `make check` + `make tf-check` clean; **CI green on GitHub** (`.github/workflows/ci.yml`). No work in flight.**
 - **Workflow (Copilot budget reset):** each chunk = **new branch → build → `make check` green → Sonnet
   review (subagent) + fix → push → `gh pr create` → request Copilot (`gh api --method POST
   repos/{owner}/{repo}/pulls/N/requested_reviewers -f 'reviewers[]=copilot-pull-request-reviewer[bot]'`,
@@ -24,10 +24,17 @@
   5. **Capstone dry-run** ✅ DONE — merged via **PR #6** (424 tests). Executed end-to-end; the live
      run found + fixed a real null-STAR-field crash; free-tier 5-req/min ceiling documented (live PDF
      needs a paid key). Evidence captured in [CAPSTONE_RUNBOOK.md](CAPSTONE_RUNBOOK.md).
+- **Infra/repo hygiene DONE (PR #7):** root [README.md](../README.md); CI (`.github/workflows/ci.yml`
+  — `make check` + `make tf-check` on push/PR, credential-free, green on GitHub) + manual WIF deploy
+  (`.github/workflows/deploy.yml`); proprietary [LICENSE](../LICENSE). Fixed a build portability bug
+  the local env masked (bogus setuptools backend → `setuptools.build_meta` + explicit packages).
+  `.env`/`*.tfvars` git-ignored — safe to make the repo public.
 - **What's next (queue exhausted):** no scheduled work remains. Candidate follow-ups (unscheduled) —
-  the outermost Phase-2 glue (mount `jobs/sweep_endpoint.py` in a served app + Identity Platform
-  *frontend* token exchange), a live PDF pass with a paid/raised-quota key, or new Beyond-v1 scope
-  from [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md). Await direction before starting.
+  a **Dockerfile / Cloud Build config** (so `make build` + the deploy workflow have a real image; the
+  container must copy the source tree so `templates/` is present); the outermost Phase-2 glue (mount
+  `jobs/sweep_endpoint.py` in a served app + Identity Platform *frontend* token exchange); a live PDF
+  pass with a paid/raised-quota key; or new Beyond-v1 scope from
+  [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md). Await direction before starting.
 - **State:** tags `contract-v1.0.0…v2.2.0`; gates `make check` (389) + `make tf-check`. Phase 2 deferred
   thin wiring (item 4 above) is logic-built+tested, only outer glue remains.
 Phase 1.7 DONE (tagged `contract-v2.1.0`, pushed). Phase 2 increment built this session, Opus-direct
