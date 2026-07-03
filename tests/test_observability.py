@@ -69,11 +69,17 @@ class TestConfigureLogging:
         before_propagate = root.propagate
         before_level = root.level
         before_flag = obs._configured
+        adk_loggers = [logging.getLogger(n) for n in obs._ADK_ERROR_LOGGERS]
+        before_adk_filters = {lg.name: list(lg.filters) for lg in adk_loggers}
         yield None
-        # Restore: drop any handlers we added, reset level/propagate + module flag.
+        # Restore: drop any handlers/filters we added, reset level/propagate + flag.
         for h in list(root.handlers):
             if h not in before_handlers:
                 root.removeHandler(h)
+        for lg in adk_loggers:
+            for f in list(lg.filters):
+                if f not in before_adk_filters[lg.name]:
+                    lg.removeFilter(f)
         root.setLevel(before_level)
         root.propagate = before_propagate
         obs._configured = before_flag
@@ -92,6 +98,30 @@ class TestConfigureLogging:
         obs._configured = False
         configure_logging(level="debug")
         assert logging.getLogger("career_engine").level == logging.DEBUG
+
+
+class TestDropHandledModelErrors:
+    """The ADK-traceback filter drops only handled ModelAPIError records."""
+
+    def _record(self, exc: BaseException | None) -> logging.LogRecord:
+        exc_info = (type(exc), exc, None) if exc is not None else None
+        return logging.LogRecord(
+            "google_adk.x", logging.ERROR, "f", 1, "boom", None, exc_info
+        )
+
+    def test_drops_model_api_error(self) -> None:
+        from integration.model_client import ModelAPIError
+
+        filt = obs._DropHandledModelErrors()
+        assert filt.filter(self._record(ModelAPIError("quota"))) is False
+
+    def test_keeps_other_errors(self) -> None:
+        filt = obs._DropHandledModelErrors()
+        assert filt.filter(self._record(ValueError("real bug"))) is True
+
+    def test_keeps_records_without_exception(self) -> None:
+        filt = obs._DropHandledModelErrors()
+        assert filt.filter(self._record(None)) is True
 
 
 class TestMonitoredModelClient:
