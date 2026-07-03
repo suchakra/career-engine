@@ -90,10 +90,34 @@ def main() -> None:
         st.caption(f"Signed in as {st.user.get('email') or user_id}")
         st.button("Sign out", on_click=st.logout)
 
+    # View routing — the dashboard buttons set st.session_state["view"].
+    view_name = st.session_state.get("view", "dashboard")
+    if view_name == "grill":
+        from web.grill_ui import render_grill
+
+        render_grill(user_id=user_id)
+        return
+    if view_name == "tailor":
+        _render_tailor(user_id=user_id)
+        return
+
     workspace = _load_workspace(user_id)
     state = _load_discovery_state(user_id=user_id, today=today)
     view = build_dashboard_view(state, workspace, today=today)
     render_dashboard(view, st=st)
+
+
+def _render_tailor(*, user_id: str) -> None:
+    """Placeholder tailor view — web tailor is a follow-up; the CLI works today."""
+    if st.button("← Dashboard"):
+        st.session_state["view"] = "dashboard"
+        st.rerun()
+    st.title("Tailor a résumé")
+    st.info(
+        "Tailoring a completed résumé to a job description is available via the CLI today "
+        "(`career-engine tailor <session-id> <jd>`); the in-app tailor flow is a follow-up. "
+        "Finish a **Grill Me** session first to build your master résumé."
+    )
 
 
 main()

@@ -67,3 +67,28 @@ ingest surfaces. Two exploitable findings, both fixed on this branch:
   or drive WeasyPrint into local-file/SSRF fetches.
 - Secret IDs / Firestore doc paths are keyed by the token `sub` (issuer-controlled,
   charset-restricted), not free-form user input → no path traversal.
+
+## Required next review — web auth + BYOK key storage (flagged 2026-07-03)
+
+Status: **REVIEW REQUIRED before GA / real users.** New attack surfaces since the
+2026-07-02 review that a dedicated `/security-review` pass must cover:
+
+- **Web OIDC login** (`web/streamlit_app.py`, Streamlit `st.login`) — session/cookie
+  handling, the OAuth consent scope, redirect-URI pinning, and the `st.user` →
+  `user_id` trust boundary.
+- **Storing users' (paid) BYOK Gemini keys** in Secret Manager (`web/grill_ui.py` →
+  `SecretManagerKeyVault`). Encryption at rest (Secret Manager AES-256) + in transit
+  (TLS) are covered by GCP defaults, but the operational controls need hardening:
+  - **IAM scope** — the Cloud Run runtime SA currently has project-level
+    `secretAccessor` and needs write to store keys. Scope this: read-only where
+    possible, and name-conditioned write limited to `ce-key-*` (custom role / IAM
+    condition) so a compromised instance can't read/rotate *all* secrets (incl. the
+    OAuth client + cookie secrets).
+  - **Consent + audit** — explicit user consent to storage (a line is shown in the
+    UI); enable Cloud Audit Logs on Secret Manager access.
+  - **Revoke/replace** — implemented (`KeyVault.delete_key` + the "Remove key" UI);
+    verify it fully deletes and that no copy lingers in logs/session.
+  - Consider CMEK / envelope encryption and key TTL/rotation reminders.
+- **Public Cloud Run ingress** (`allow_unauthenticated`) — fine for the web app, but
+  the OIDC-protected sweep endpoint must NOT share a public service (keep it a
+  separate/private service if ever mounted).

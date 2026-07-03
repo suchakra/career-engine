@@ -163,3 +163,21 @@ class SecretManagerKeyVault(KeyVault):
             # Treat any non-NotFound error as "unknown" to be safe; callers
             # that need strict failure propagation should use fetch_key.
             return False
+
+    def delete_key(self, user_id: str) -> None:
+        """Delete the user's stored key (revoke). Idempotent — no error if absent.
+
+        Args:
+            user_id: The platform-issued user identifier.
+
+        Raises:
+            KeyVaultError: if the delete fails for a reason other than "not found".
+        """
+        try:
+            self._client.delete_secret(name=self._secret_path(user_id))
+        except gcp_exceptions.NotFound:
+            return  # already gone — revoke is idempotent
+        except gcp_exceptions.GoogleAPICallError as exc:
+            raise KeyVaultError(
+                f"Failed to delete key for user {user_id!r}: {exc}"
+            ) from exc
