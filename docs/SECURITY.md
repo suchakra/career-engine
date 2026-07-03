@@ -92,3 +92,9 @@ Status: **REVIEW REQUIRED before GA / real users.** New attack surfaces since th
 - **Public Cloud Run ingress** (`allow_unauthenticated`) — fine for the web app, but
   the OIDC-protected sweep endpoint must NOT share a public service (keep it a
   separate/private service if ever mounted).
+- **CI/CD deployer** — GitHub Actions deploys keyless via Workload Identity
+  Federation (no stored keys; the `github-pool` provider is attribute-conditioned
+  to `suchakra/career-engine`). The `career-engine-deployer` SA currently holds
+  broad admin roles (run/artifactregistry/secretmanager/datastore/iam/…) to run a
+  full `terraform apply`; a review should curate this down to the minimum and
+  consider a separate plan-only identity for PRs.

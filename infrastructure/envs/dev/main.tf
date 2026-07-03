@@ -7,6 +7,11 @@
 
 terraform {
   required_version = ">= 1.5"
+
+  # Remote state in GCS (shared by CI + local). Configured at init via
+  # -backend-config (bucket/prefix) so the code stays project-agnostic.
+  backend "gcs" {}
+
   required_providers {
     google = {
       source  = "hashicorp/google"
