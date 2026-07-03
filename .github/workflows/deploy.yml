@@ -42,11 +42,13 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Build + push image
+      - name: Build + push image (docker on the runner → Artifact Registry)
         id: build
         run: |
           IMAGE="${{ vars.AR_LOCATION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/career-engine-${{ inputs.environment }}-images/app:${GITHUB_SHA::12}"
-          gcloud builds submit --tag="$IMAGE" --project "${{ vars.GCP_PROJECT_ID }}" .
+          gcloud auth configure-docker "${{ vars.AR_LOCATION }}-docker.pkg.dev" --quiet
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
       - uses: hashicorp/setup-terraform@v3
