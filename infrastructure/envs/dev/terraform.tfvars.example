@@ -1,8 +1,14 @@
-# Copy to terraform.tfvars (gitignored) and fill in. No secrets belong here —
-# per-user BYOK keys live in Secret Manager, created at runtime by the app.
+# Copy to terraform.tfvars (gitignored) and fill in. No SECRETS belong here —
+# per-user BYOK keys + the OAuth client/cookie secret values live in Secret
+# Manager (set out-of-band). This file holds only non-secret config.
 
 project_id = "your-dev-project-id"
 region     = "us-central1"
 
 # After the first image build/push, set the real image:
-# image = "us-central1-docker.pkg.dev/your-dev-project-id/career-engine-dev-images/app:latest"
+image = "us-central1-docker.pkg.dev/your-dev-project-id/career-engine-dev-images/app:latest"
+
+# Web OIDC login (Streamlit st.login). Create a Google OAuth 2.0 Web client in the
+# Console; put its client ID here. The redirect URI is the public app URL + path.
+auth_client_id    = "your-oauth-client-id.apps.googleusercontent.com"
+auth_redirect_uri = "https://careerengine.bitcrafty.cloud/oauth2callback"

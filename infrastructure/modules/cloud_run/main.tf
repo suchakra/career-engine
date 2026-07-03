@@ -68,6 +68,24 @@ variable "memory" {
   default     = "512Mi"
 }
 
+variable "env" {
+  type        = map(string)
+  description = "Plain (non-secret) environment variables for the container."
+  default     = {}
+}
+
+variable "secret_env" {
+  type        = map(string)
+  description = "Env vars sourced from Secret Manager (ENV_NAME => secret id, latest version). Secret VALUES are set out-of-band, never in Terraform state."
+  default     = {}
+}
+
+variable "allow_unauthenticated" {
+  type        = bool
+  description = "Grant allUsers roles/run.invoker (a PUBLIC web app). Never enable for a service that also serves the OIDC-protected sweep endpoint."
+  default     = false
+}
+
 resource "google_service_account" "runtime" {
   project      = var.project_id
   account_id   = var.service_account_id
@@ -96,6 +114,29 @@ resource "google_cloud_run_v2_service" "app" {
         value = var.contract_version
       }
 
+      # Plain (non-secret) env vars.
+      dynamic "env" {
+        for_each = var.env
+        content {
+          name  = env.key
+          value = env.value
+        }
+      }
+
+      # Env vars sourced from Secret Manager (values never in TF state).
+      dynamic "env" {
+        for_each = var.secret_env
+        content {
+          name = env.key
+          value_source {
+            secret_key_ref {
+              secret  = env.value
+              version = "latest"
+            }
+          }
+        }
+      }
+
       resources {
         limits = {
           cpu    = var.cpu
@@ -104,6 +145,18 @@ resource "google_cloud_run_v2_service" "app" {
       }
     }
   }
+}
+
+# Public web app: allow unauthenticated ingress (sign-in happens at the app layer
+# via Streamlit OIDC). Gated by a variable so the same module can back a private
+# service. See ARCHITECTURE §5 / docs/SECURITY.md.
+resource "google_cloud_run_v2_service_iam_member" "public_invoker" {
+  count    = var.allow_unauthenticated ? 1 : 0
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_service.app.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
 }
 
 output "service_account_email" {

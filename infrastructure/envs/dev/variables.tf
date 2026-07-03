@@ -42,3 +42,15 @@ variable "sweep_schedule" {
   description = "Cron schedule for the pending-action sweep."
   default     = "0 3 * * *"
 }
+
+variable "auth_client_id" {
+  type        = string
+  description = "Google OAuth 2.0 Web client ID for Streamlit login (created in the Console)."
+  default     = ""
+}
+
+variable "auth_redirect_uri" {
+  type        = string
+  description = "OIDC redirect URI (public app URL + /oauth2callback), e.g. https://<domain>/oauth2callback."
+  default     = ""
+}

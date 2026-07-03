@@ -20,6 +20,24 @@ provider "google" {
   region  = var.region
 }
 
+# Enable the APIs the stack needs (idempotent — adopts already-enabled ones).
+# Kept in Terraform so a fresh project is reproducible from code (IaC all the way).
+resource "google_project_service" "apis" {
+  for_each = toset([
+    "run.googleapis.com",
+    "artifactregistry.googleapis.com",
+    "cloudbuild.googleapis.com",
+    "firestore.googleapis.com",
+    "secretmanager.googleapis.com",
+    "cloudscheduler.googleapis.com",
+    "iam.googleapis.com",
+    "iamcredentials.googleapis.com",
+  ])
+  project            = var.project_id
+  service            = each.key
+  disable_on_destroy = false
+}
+
 module "artifact_registry" {
   source        = "../../modules/artifact_registry"
   project_id    = var.project_id
@@ -34,6 +52,11 @@ module "firestore" {
   deletion_policy = "DELETE" # dev: allow teardown
 }
 
+module "auth_secrets" {
+  source     = "../../modules/auth_secrets"
+  project_id = var.project_id
+}
+
 module "cloud_run" {
   source             = "../../modules/cloud_run"
   project_id         = var.project_id
@@ -44,6 +67,23 @@ module "cloud_run" {
   contract_version   = var.contract_version
   min_instances      = 0
   max_instances      = 2
+
+  # Public web app; sign-in is enforced at the app layer (Streamlit OIDC).
+  allow_unauthenticated = true
+
+  env = {
+    GCP_PROJECT_ID       = var.project_id
+    GCP_REGION           = var.region
+    CE_AUTH_CLIENT_ID    = var.auth_client_id
+    CE_AUTH_REDIRECT_URI = var.auth_redirect_uri
+    CE_AUTH_METADATA_URL = "https://accounts.google.com/.well-known/openid-configuration"
+  }
+
+  # Values are set out-of-band (never in state); resources come from auth_secrets.
+  secret_env = {
+    CE_AUTH_CLIENT_SECRET = module.auth_secrets.client_secret_id
+    CE_AUTH_COOKIE_SECRET = module.auth_secrets.cookie_secret_id
+  }
 }
 
 module "secret_manager" {
