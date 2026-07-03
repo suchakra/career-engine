@@ -31,6 +31,10 @@ from config import AccessMode
 from integration.model_client import GeminiModelClient, ModelAPIError
 
 _MAX_AUTO_TURNS = 6  # bound the non-interactive drive to finalize
+_METRIC_NUDGE = (
+    "Could you put a specific number on that — roughly how many, what percent, or how "
+    "much time or cost was saved?"
+)
 
 
 def _resolve_key(user_id: str) -> str | None:
@@ -102,7 +106,9 @@ def _apply_turn(turn: TurnResult) -> None:
         ss["grill_question"] = ""
         return
     ss["grill_checkpoint"] = ""
-    ss["grill_question"] = turn.next_question
+    # Never show a blank question — if the model returned an empty follow-up, nudge
+    # for a concrete metric rather than leaving the user staring at nothing.
+    ss["grill_question"] = turn.next_question or _METRIC_NUDGE
 
 
 def _start_session(user_id: str, history: str) -> None:
@@ -143,18 +149,25 @@ def _submit_answer(answer: str) -> None:
     ss["grill_transcript"].append(("user", answer))
     try:
         with st.spinner("Thinking…"):
+            before = asyncio.run(session.current_state())
             turn = asyncio.run(session.answer(answer))
-            # Grill is terminal-per-turn; drive finalize etc. until a question,
-            # checkpoint, or completion surfaces.
-            for _ in range(_MAX_AUTO_TURNS):
-                if (
-                    turn.upgrade_required
-                    or turn.is_complete
-                    or turn.checkpoint_summary
-                    or turn.next_question
-                ):
-                    break
-                turn = asyncio.run(session.advance())
+            after = asyncio.run(session.current_state())
+            # Only auto-advance when the answer was ACCEPTED (a story was committed
+            # → the frontier moved on to the next entry / finalize). On a vague answer
+            # nothing is committed and the turn carries a probe; advancing here would
+            # re-run the grill with no pending answer and re-ask the entry's OPENING
+            # question. Grill is terminal-per-turn, so drive finalize only post-accept.
+            accepted = len(after.extracted_star_stories) > len(before.extracted_star_stories)
+            if accepted:
+                for _ in range(_MAX_AUTO_TURNS):
+                    if (
+                        turn.upgrade_required
+                        or turn.is_complete
+                        or turn.checkpoint_summary
+                        or turn.next_question
+                    ):
+                        break
+                    turn = asyncio.run(session.advance())
     except ModelAPIError as exc:
         _show_model_error(exc)
         return
@@ -189,6 +202,7 @@ def _offer_pdf() -> None:
                 with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tf:
                     out = asyncio.run(session.render_resume_pdf(pathlib.Path(tf.name)))
                 data = out.read_bytes()
+                out.unlink(missing_ok=True)  # don't orphan the temp file
             st.download_button(
                 "⬇️ Download résumé.pdf",
                 data=data,
