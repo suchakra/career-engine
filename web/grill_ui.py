@@ -118,6 +118,9 @@ def _start_session(user_id: str, history: str) -> None:
     svc = cast(BaseSessionService, InMemorySessionService())  # type: ignore[no-untyped-call]
     session = DiscoverySession(
         user_id=user_id,
+        # Deliberate: FREE routes grilling to Flash (cheap) even though we run on the
+        # user's own key — BYOK here means "your quota", not "unlock Pro". BYOK→Pro
+        # would cost materially more; Flash+CoT is the design's baseline.
         access_mode=AccessMode.FREE,
         model_client=client,
         session_service=svc,

@@ -97,7 +97,11 @@ module "cloud_run" {
   image              = var.image
   contract_version   = var.contract_version
   min_instances      = 0
-  max_instances      = 2
+  # Single-user isolation: the grill installs the BYOK model client via a
+  # process-global factory, so one instance + one concurrent request per instance
+  # prevents any cross-user key/data bleed. (Multi-user needs contextvar isolation.)
+  max_instances   = 1
+  max_concurrency = 1
 
   # Public web app; sign-in is enforced at the app layer (Streamlit OIDC).
   allow_unauthenticated = true

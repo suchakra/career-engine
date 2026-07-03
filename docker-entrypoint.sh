@@ -10,14 +10,27 @@ set -e
 
 if [ -n "${CE_AUTH_CLIENT_ID:-}" ]; then
   mkdir -p .streamlit
-  cat > .streamlit/secrets.toml <<EOF
-[auth]
-redirect_uri = "${CE_AUTH_REDIRECT_URI}"
-cookie_secret = "${CE_AUTH_COOKIE_SECRET}"
-client_id = "${CE_AUTH_CLIENT_ID}"
-client_secret = "${CE_AUTH_CLIENT_SECRET}"
-server_metadata_url = "${CE_AUTH_METADATA_URL:-https://accounts.google.com/.well-known/openid-configuration}"
-EOF
+  # Write via Python so every value is safely escaped (json.dumps emits a valid
+  # TOML basic string) — a secret containing a quote/backslash/newline cannot
+  # corrupt the file or inject config.
+  python3 - <<'PY'
+import json, os
+
+def s(name, default=""):
+    return json.dumps(os.environ.get(name) or default)
+
+meta = "https://accounts.google.com/.well-known/openid-configuration"
+lines = [
+    "[auth]",
+    f"redirect_uri = {s('CE_AUTH_REDIRECT_URI')}",
+    f"cookie_secret = {s('CE_AUTH_COOKIE_SECRET')}",
+    f"client_id = {s('CE_AUTH_CLIENT_ID')}",
+    f"client_secret = {s('CE_AUTH_CLIENT_SECRET')}",
+    f"server_metadata_url = {s('CE_AUTH_METADATA_URL', meta)}",
+]
+with open(".streamlit/secrets.toml", "w", encoding="utf-8") as fh:
+    fh.write("\n".join(lines) + "\n")
+PY
 fi
 
 exec "$@"

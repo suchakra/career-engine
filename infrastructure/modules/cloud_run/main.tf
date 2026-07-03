@@ -56,6 +56,12 @@ variable "max_instances" {
   default     = 4
 }
 
+variable "max_concurrency" {
+  type        = number
+  description = "Max concurrent requests per instance. Set to 1 (with max_instances=1) to guarantee single-user isolation for the process-global model-client factory."
+  default     = 80
+}
+
 variable "cpu" {
   type        = string
   description = "CPU limit per instance."
@@ -105,6 +111,8 @@ resource "google_cloud_run_v2_service" "app" {
       min_instance_count = var.min_instances
       max_instance_count = var.max_instances
     }
+
+    max_instance_request_concurrency = var.max_concurrency
 
     containers {
       image = var.image

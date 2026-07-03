@@ -24,18 +24,28 @@ from web.dashboard import build_dashboard_view, render_dashboard
 
 
 def _current_user_id() -> str:
-    """Return the stable OIDC subject as the user_id (falls back to email)."""
-    sub = st.user.get("sub") or st.user.get("email")
+    """Return the stable OIDC subject as the user_id.
+
+    Uses ONLY the ``sub`` claim — never email. `user_id` keys Secret Manager
+    (`ce-key-{user_id}`) + Firestore docs; email contains `@` (invalid in secret
+    ids) and isn't the stable subject. Missing `sub` → "" (caller errors out).
+    """
+    sub = st.user.get("sub")
     return str(sub) if sub else ""
 
 
 def _load_workspace(user_id: str) -> UserWorkspace:
-    """Best-effort load of the user's workspace; empty on any backend failure."""
+    """Load the user's workspace. Empty for a new user; a schema-version mismatch
+    is surfaced (not silently shown as empty); a transient backend error warns."""
+    from database.firestore_session import ContractVersionError
     from database.workspace_store import FirestoreWorkspaceStore
 
     try:
         return FirestoreWorkspaceStore().load(user_id)
+    except ContractVersionError:
+        raise  # a schema mismatch must not masquerade as an empty (lost) workspace
     except Exception:
+        st.warning("Couldn't reach your saved workspace just now — showing an empty view.")
         return UserWorkspace()
 
 

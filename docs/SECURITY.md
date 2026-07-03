@@ -89,9 +89,15 @@ Status: **REVIEW REQUIRED before GA / real users.** New attack surfaces since th
   - **Revoke/replace** — implemented (`KeyVault.delete_key` + the "Remove key" UI);
     verify it fully deletes and that no copy lingers in logs/session.
   - Consider CMEK / envelope encryption and key TTL/rotation reminders.
-- **Public Cloud Run ingress** (`allow_unauthenticated`) — fine for the web app, but
-  the OIDC-protected sweep endpoint must NOT share a public service (keep it a
-  separate/private service if ever mounted).
+- **Public Cloud Run ingress** (`allow_unauthenticated`) — required for the web app.
+  The OIDC sweep endpoint is currently **not mounted** on the served Streamlit app
+  (no HTTP route), so it is not reachable via the public URL (the scheduler's daily
+  POST 404s). Before the sweep is mounted, split it into a **separate private**
+  (`allow_unauthenticated=false`) service so public ingress never fronts it.
+- **Single-user isolation (enforced):** the web grill installs the BYOK model client
+  via a process-global factory, so dev Cloud Run runs `max_instances=1` +
+  concurrency=1 to prevent cross-user key/data bleed. Multi-user needs
+  contextvar/thread-local client isolation (tracked).
 - **CI/CD deployer** — GitHub Actions deploys keyless via Workload Identity
   Federation (no stored keys; the `github-pool` provider is attribute-conditioned
   to `suchakra/career-engine`). The `career-engine-deployer` SA currently holds
