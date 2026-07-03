@@ -30,6 +30,14 @@ _DEFAULT_SLOW_MS = 15_000  # a single operation over 15s is flagged as slow
 
 _configured = False
 
+# The ADK loggers that emit node-failure tracebacks (google_adk.<module>):
+#   _node_runner → "Node execution failed with exception"
+#   runners      → "Root node ... failed."
+_ADK_ERROR_LOGGERS = (
+    "google_adk.google.adk.workflow._node_runner",
+    "google_adk.google.adk.runners",
+)
+
 
 class _DropHandledModelErrors(logging.Filter):
     """Suppress ADK node-failure tracebacks for model errors we handle ourselves.
@@ -81,16 +89,17 @@ def configure_logging(*, level: int | str | None = None) -> None:
     logger.propagate = False  # own handler; don't double-emit via the root logger
 
     # Quiet ADK's node-failure tracebacks for errors we handle at the CLI boundary
-    # (e.g. a Gemini quota/429 → friendly message). We give the google_adk logger
-    # its own handler (so its records don't reach the root lastResort handler) with
-    # a filter that drops only the handled-ModelAPIError tracebacks; all other ADK
-    # errors still surface.
-    adk_logger = logging.getLogger("google_adk")
-    adk_handler = logging.StreamHandler()
-    adk_handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
-    adk_handler.addFilter(_DropHandledModelErrors())
-    adk_logger.addHandler(adk_handler)
-    adk_logger.propagate = False
+    # (e.g. a Gemini quota/429 → friendly message). Attach a filter directly to the
+    # loggers ADK emits those tracebacks from — the record is dropped at its source,
+    # so this adds NO handler and changes NO propagation (host logging + other ADK
+    # logs are untouched). Filters run only on the originating logger, hence the
+    # specific child-logger names rather than the parent. Only handled
+    # ModelAPIError records are dropped; every other ADK error still surfaces.
+    _adk_filter = _DropHandledModelErrors()
+    for _adk_name in _ADK_ERROR_LOGGERS:
+        _adk_lg = logging.getLogger(_adk_name)
+        if not any(isinstance(f, _DropHandledModelErrors) for f in _adk_lg.filters):
+            _adk_lg.addFilter(_adk_filter)
 
     _configured = True
 

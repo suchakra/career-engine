@@ -65,24 +65,23 @@ class TestConfigureLogging:
     @pytest.fixture()
     def _restore_logging(self) -> Iterator[None]:
         root = logging.getLogger("career_engine")
-        adk = logging.getLogger("google_adk")
         before_handlers = list(root.handlers)
-        before_adk_handlers = list(adk.handlers)
         before_propagate = root.propagate
-        before_adk_propagate = adk.propagate
         before_level = root.level
         before_flag = obs._configured
+        adk_loggers = [logging.getLogger(n) for n in obs._ADK_ERROR_LOGGERS]
+        before_adk_filters = {lg.name: list(lg.filters) for lg in adk_loggers}
         yield None
-        # Restore: drop any handlers we added, reset level/propagate + module flag.
+        # Restore: drop any handlers/filters we added, reset level/propagate + flag.
         for h in list(root.handlers):
             if h not in before_handlers:
                 root.removeHandler(h)
-        for h in list(adk.handlers):
-            if h not in before_adk_handlers:
-                adk.removeHandler(h)
+        for lg in adk_loggers:
+            for f in list(lg.filters):
+                if f not in before_adk_filters[lg.name]:
+                    lg.removeFilter(f)
         root.setLevel(before_level)
         root.propagate = before_propagate
-        adk.propagate = before_adk_propagate
         obs._configured = before_flag
 
     def test_idempotent_single_handler(self, _restore_logging: None) -> None:
