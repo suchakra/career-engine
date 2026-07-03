@@ -26,7 +26,12 @@ import streamlit as st
 from google.adk.sessions import BaseSessionService, InMemorySessionService
 
 from auth.key_vault import SecretManagerKeyVault
-from cli.app import DiscoverySession, TurnResult, _install_model_client
+from cli.app import (
+    DiscoverySession,
+    TurnResult,
+    _install_model_client,
+    guess_resume_mime,
+)
 from config import AccessMode
 from integration.model_client import GeminiModelClient, ModelAPIError
 from schema import Entry
@@ -233,7 +238,9 @@ def _start_from_resume(user_id: str, uploaded: Any) -> None:
 
     ss = st.session_state
     data: bytes = uploaded.getvalue()
-    mime = uploaded.type or "application/pdf"
+    # Prefer the browser-supplied MIME; fall back to a filename guess (never a
+    # blind pdf default, which could mis-label an image).
+    mime = uploaded.type or guess_resume_mime(pathlib.Path(uploaded.name))
     client = GeminiModelClient(api_key=ss["grill_key"])
     try:
         with st.spinner("Reading your résumé…"):
