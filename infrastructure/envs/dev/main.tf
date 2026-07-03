@@ -38,6 +38,32 @@ resource "google_project_service" "apis" {
   disable_on_destroy = false
 }
 
+data "google_project" "current" {
+  project_id = var.project_id
+}
+
+# Runtime SA: Firestore access (per-user workspace + discovery sessions).
+resource "google_project_iam_member" "runtime_datastore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${module.cloud_run.service_account_email}"
+}
+
+# Runtime SA: manage per-user BYOK key secrets ONLY (ce-key-*), scoped via an IAM
+# condition so a compromised instance can't create/rotate other secrets (incl. the
+# OAuth client + cookie secrets). Reads are covered project-wide by the
+# secret_manager module's secretAccessor grant. (Hardening tracked in SECURITY.md.)
+resource "google_project_iam_member" "runtime_key_writer" {
+  project = var.project_id
+  role    = "roles/secretmanager.admin"
+  member  = "serviceAccount:${module.cloud_run.service_account_email}"
+  condition {
+    title       = "ce-key-secrets-only"
+    description = "Limit to per-user BYOK key secrets"
+    expression  = "resource.name.startsWith(\"projects/${data.google_project.current.number}/secrets/ce-key-\")"
+  }
+}
+
 module "artifact_registry" {
   source        = "../../modules/artifact_registry"
   project_id    = var.project_id
