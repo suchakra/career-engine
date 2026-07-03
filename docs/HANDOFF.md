@@ -1,7 +1,14 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-02)
-**`master` at **contract v2.4.0** (tag `contract-v2.4.0`, PR #9 merged) — grill hardening from a live résumé run: graceful `ModelAPIError`, `grill_answers` memory, current/substantive-first frontier (ARCHITECTURE §6.3.1). Phase 3 COMPLETE (PRs #2–#6); repo public-ready with README + CI/CD + LICENSE + Dockerfile (PRs #7–#8). 434 tests green; `make check` + `make tf-check` clean; CI green on GitHub. No work in flight.**
+## 👉 YOU ARE HERE (updated 2026-07-03)
+**`master` at contract v2.4.0. The web app is DEPLOYED & LIVE on Cloud Run (dev) with real Google login + an interactive BYOK web grill, deployed via keyless GitHub Actions CI/CD (WIF). 439 tests green; `make check` + `make tf-check` + all CI green.**
+- **Live dev URL:** https://career-engine-dev-app-ontyg6kaja-uc.a.run.app (revision 00005). Project `gen-lang-client-0513394764`, region us-central1.
+- **CI/CD (works):** `gh workflow run deploy.yml --ref master -f environment=dev` → keyless WIF → docker build+push → `terraform apply`. State in GCS bucket `gen-lang-client-0513394764-tfstate` (prefix `envs/dev`). Repo *variables* drive it (GCP_PROJECT_ID/WIF_PROVIDER/DEPLOY_SA/TF_STATE_BUCKET/AR_LOCATION/CE_AUTH_*).
+- **What shipped (PR #11 + follow-ups):** Streamlit OIDC login (`st.login`); `web/grill_ui.py` interactive grill (start→Q&A→checkpoint→finalize→PDF); BYOK key set-once in Secret Manager (revoke/replace); Terraform auth wiring + scoped `ce-key-*` IAM + `datastore.user`; single-user isolation (`max_instances=1`, concurrency=1); `docker-entrypoint.sh` writes secrets.toml (json-escaped) from env.
+- **Bootstrap done out-of-band (one-time, NOT in main state):** billing link, OAuth client (Console), `cloudresourcemanager` + `serviceusage` + others enabled, WIF pool/provider `github-pool`/`github-provider` (repo-conditioned), deployer SA `career-engine-deployer`, GCS state bucket. Secret VALUES (`ce-auth-client-secret`, `ce-auth-cookie-secret`, `ce-key-*`) set out-of-band, never in state.
+- **REQUIRED before GA:** a `/security-review` of web login + paid-key storage + broad deployer-SA roles (see [SECURITY.md](SECURITY.md) "Required next review").
+- **Remaining follow-ups:** (a) web PDF upload (`st.file_uploader`→`parse_resume`) — the résumé starting point; (b) custom domain `career-engine.bitcrafty.cloud` (hyphenated) via Cloudflare + update OAuth redirect + `CE_AUTH_REDIRECT_URI`; (c) sweep endpoint HTTP adapter (deferred; scheduler 404s until then); (d) curate deployer-SA roles down.
+- **Deadline:** Kaggle × Google submission **2026-07-06**.
 - **Grill hardening (feat/grill-hardening, contract v2.4.0):** from the user's real run — (A) graceful `ModelAPIError` handling so a `429`/quota shows a friendly resumable message, not a crash; (B) `grill_answers` per-entry memory (accumulated extraction + no re-asking); (C) frontier ranks current/substantive roles first (`end_date` present-first + experience-type weight). See ARCHITECTURE §6.3.1.
 - **Deadline:** Kaggle × Google submission **2026-07-06** — product + writeup + video.
 - **Known live-run constraint:** the Gemini **free tier is 5 req/min + 20/day**; a full live session needs a paid/raised-quota key (deterministic tests prove the pipeline without one).
