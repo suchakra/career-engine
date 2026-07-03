@@ -34,3 +34,6 @@ htmlcov/
 
 # Local demo artifacts (not tracked)
 demo_output/
+
+# Streamlit auth secrets (never commit)
+.streamlit/secrets.toml

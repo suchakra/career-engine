@@ -34,11 +34,15 @@ RUN python -m pip install --upgrade pip \
     && python -m pip install -e .
 
 # Run as a non-root user.
-RUN useradd --create-home --uid 1000 appuser \
+RUN chmod +x /app/docker-entrypoint.sh \
+    && useradd --create-home --uid 1000 appuser \
     && chown -R appuser:appuser /app
 USER appuser
 
 EXPOSE 8080
+
+# Entrypoint materializes .streamlit/secrets.toml from env (OIDC auth) then runs CMD.
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # Cloud Run routes traffic to $PORT; Streamlit must bind 0.0.0.0 and run headless.
 CMD ["sh", "-c", "streamlit run web/streamlit_app.py --server.port=${PORT} --server.address=0.0.0.0 --server.headless=true --browser.gatherUsageStats=false"]
