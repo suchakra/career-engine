@@ -31,6 +31,22 @@ _DEFAULT_SLOW_MS = 15_000  # a single operation over 15s is flagged as slow
 _configured = False
 
 
+class _DropHandledModelErrors(logging.Filter):
+    """Suppress ADK node-failure tracebacks for model errors we handle ourselves.
+
+    ADK logs every node failure with a full traceback (``google_adk`` logger). For
+    a Gemini quota/429 the CLI already catches ``ModelAPIError`` and prints a
+    friendly, resumable message, so ADK's duplicate traceback is pure noise. This
+    filter drops ONLY those records (matched by exception class name to avoid an
+    import cycle); every other ADK error still logs normally.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Return False (drop) when the record carries a ``ModelAPIError``."""
+        exc = record.exc_info[1] if record.exc_info else None
+        return exc is None or exc.__class__.__name__ != "ModelAPIError"
+
+
 def configure_logging(*, level: int | str | None = None) -> None:
     """Attach a structured handler to the ``career_engine`` logger (idempotent).
 
@@ -63,6 +79,19 @@ def configure_logging(*, level: int | str | None = None) -> None:
     )
     logger.addHandler(handler)
     logger.propagate = False  # own handler; don't double-emit via the root logger
+
+    # Quiet ADK's node-failure tracebacks for errors we handle at the CLI boundary
+    # (e.g. a Gemini quota/429 → friendly message). We give the google_adk logger
+    # its own handler (so its records don't reach the root lastResort handler) with
+    # a filter that drops only the handled-ModelAPIError tracebacks; all other ADK
+    # errors still surface.
+    adk_logger = logging.getLogger("google_adk")
+    adk_handler = logging.StreamHandler()
+    adk_handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+    adk_handler.addFilter(_DropHandledModelErrors())
+    adk_logger.addHandler(adk_handler)
+    adk_logger.propagate = False
+
     _configured = True
 
 

@@ -65,8 +65,11 @@ class TestConfigureLogging:
     @pytest.fixture()
     def _restore_logging(self) -> Iterator[None]:
         root = logging.getLogger("career_engine")
+        adk = logging.getLogger("google_adk")
         before_handlers = list(root.handlers)
+        before_adk_handlers = list(adk.handlers)
         before_propagate = root.propagate
+        before_adk_propagate = adk.propagate
         before_level = root.level
         before_flag = obs._configured
         yield None
@@ -74,8 +77,12 @@ class TestConfigureLogging:
         for h in list(root.handlers):
             if h not in before_handlers:
                 root.removeHandler(h)
+        for h in list(adk.handlers):
+            if h not in before_adk_handlers:
+                adk.removeHandler(h)
         root.setLevel(before_level)
         root.propagate = before_propagate
+        adk.propagate = before_adk_propagate
         obs._configured = before_flag
 
     def test_idempotent_single_handler(self, _restore_logging: None) -> None:
@@ -92,6 +99,30 @@ class TestConfigureLogging:
         obs._configured = False
         configure_logging(level="debug")
         assert logging.getLogger("career_engine").level == logging.DEBUG
+
+
+class TestDropHandledModelErrors:
+    """The ADK-traceback filter drops only handled ModelAPIError records."""
+
+    def _record(self, exc: BaseException | None) -> logging.LogRecord:
+        exc_info = (type(exc), exc, None) if exc is not None else None
+        return logging.LogRecord(
+            "google_adk.x", logging.ERROR, "f", 1, "boom", None, exc_info
+        )
+
+    def test_drops_model_api_error(self) -> None:
+        from integration.model_client import ModelAPIError
+
+        filt = obs._DropHandledModelErrors()
+        assert filt.filter(self._record(ModelAPIError("quota"))) is False
+
+    def test_keeps_other_errors(self) -> None:
+        filt = obs._DropHandledModelErrors()
+        assert filt.filter(self._record(ValueError("real bug"))) is True
+
+    def test_keeps_records_without_exception(self) -> None:
+        filt = obs._DropHandledModelErrors()
+        assert filt.filter(self._record(None)) is True
 
 
 class TestMonitoredModelClient:
