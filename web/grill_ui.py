@@ -29,6 +29,7 @@ from auth.key_vault import SecretManagerKeyVault
 from cli.app import DiscoverySession, TurnResult, _install_model_client
 from config import AccessMode
 from integration.model_client import GeminiModelClient, ModelAPIError
+from schema import Entry
 
 _MAX_AUTO_TURNS = 6  # bound the non-interactive drive to finalize
 _METRIC_NUDGE = (
@@ -111,8 +112,14 @@ def _apply_turn(turn: TurnResult) -> None:
     ss["grill_question"] = turn.next_question or _METRIC_NUDGE
 
 
-def _start_session(user_id: str, history: str) -> None:
-    """Create a DiscoverySession on the BYOK key and run the opening turn."""
+def _start_session(
+    user_id: str, history: str, work_timeline: list[Entry] | None = None
+) -> None:
+    """Create a DiscoverySession on the BYOK key and run the opening turn.
+
+    ``work_timeline`` seeds pre-parsed entries (résumé vision ingest) instead of
+    parsing ``history`` text.
+    """
     ss = st.session_state
     client = GeminiModelClient(api_key=ss["grill_key"])
     svc = cast(BaseSessionService, InMemorySessionService())  # type: ignore[no-untyped-call]
@@ -128,7 +135,11 @@ def _start_session(user_id: str, history: str) -> None:
     try:
         with st.spinner("Reading your history and preparing the first question…"):
             question = asyncio.run(
-                session.start(history, reference_date=date.today().isoformat())
+                session.start(
+                    history,
+                    reference_date=date.today().isoformat(),
+                    work_timeline=work_timeline,
+                )
             )
     except ModelAPIError as exc:
         _show_model_error(exc)
@@ -216,6 +227,26 @@ def _offer_pdf() -> None:
             st.error(f"Could not render the PDF: {exc}")
 
 
+def _start_from_resume(user_id: str, uploaded: Any) -> None:
+    """Vision-parse an uploaded résumé into a timeline, then start the session."""
+    from tools.resume_parser import ParseError, parse_resume
+
+    ss = st.session_state
+    data: bytes = uploaded.getvalue()
+    mime = uploaded.type or "application/pdf"
+    client = GeminiModelClient(api_key=ss["grill_key"])
+    try:
+        with st.spinner("Reading your résumé…"):
+            entries = parse_resume(data, mime, client=client)
+    except ModelAPIError as exc:
+        _show_model_error(exc)
+        return
+    except ParseError as exc:
+        st.error(f"Couldn't read that résumé: {exc}")
+        return
+    _start_session(user_id, "", work_timeline=entries)
+
+
 def _revoke_key(user_id: str) -> None:
     """Delete the user's stored key (revoke) and force a re-prompt."""
     ss = st.session_state
@@ -276,13 +307,18 @@ def render_grill(*, user_id: str) -> None:
     else:
         st.caption("🔑 Using your Gemini key (this session only — couldn't persist).")
 
-    # ── Step 2: seed the history ──────────────────────────────────────────────
+    # ── Step 2: seed from a résumé upload OR pasted history ───────────────────
     if not ss.get("grill_started"):
-        st.write(
-            "Paste your career history — roles, projects, achievements. Rough is fine; "
-            "the agent will push for the specifics."
+        st.write("**Start from your résumé** (vision-parsed), or paste your history below.")
+        resume = st.file_uploader(
+            "Résumé (PDF / PNG / JPG / WEBP)",
+            type=["pdf", "png", "jpg", "jpeg", "webp"],
         )
-        history = st.text_area("Your career history", height=220, key="grill_history_input")
+        history = st.text_area(
+            "…or paste your career history (rough is fine — the agent pushes for specifics)",
+            height=180,
+            key="grill_history_input",
+        )
         cols = st.columns([1, 1, 4])
         with cols[0]:
             start = st.button("Start grilling", type="primary")
@@ -291,8 +327,13 @@ def render_grill(*, user_id: str) -> None:
                 ss.pop("grill_key", None)
                 ss["grill_force_key_prompt"] = True
                 st.rerun()
-        if start and history.strip():
-            _start_session(user_id, history)
+        if start:
+            if resume is not None:
+                _start_from_resume(user_id, resume)
+            elif history.strip():
+                _start_session(user_id, history)
+            else:
+                st.warning("Upload a résumé or paste some history to begin.")
         return
 
     # ── Step 3: the conversation ──────────────────────────────────────────────
