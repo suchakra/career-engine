@@ -47,8 +47,14 @@ jobs:
         run: |
           IMAGE="${{ vars.AR_LOCATION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/career-engine-${{ inputs.environment }}-images/app:${GITHUB_SHA::12}"
           gcloud auth configure-docker "${{ vars.AR_LOCATION }}-docker.pkg.dev" --quiet
-          docker build -t "$IMAGE" .
-          docker push "$IMAGE"
+          # Retry to ride out transient registry/network flakes (Docker Hub 5xx,
+          # Artifact Registry 502 on manifest push). Build is cached across retries.
+          n=0
+          until docker build -t "$IMAGE" . && docker push "$IMAGE"; do
+            n=$((n + 1))
+            if [ "$n" -ge 4 ]; then echo "build/push failed after $n attempts"; exit 1; fi
+            echo "attempt $n failed (transient?) — retrying in 20s…"; sleep 20
+          done
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
       - uses: hashicorp/setup-terraform@v3
