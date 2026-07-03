@@ -84,10 +84,10 @@ class _StLike(Protocol):
     def warning(self, body: str) -> Any: ...
     def subheader(self, body: str) -> Any: ...
     def write(self, body: Any) -> Any: ...
-    def button(self, label: str) -> Any: ...
+    def button(self, label: str, **kwargs: Any) -> Any: ...
 
 
-def render_dashboard(view: DashboardView, *, st: _StLike) -> None:
+def render_dashboard(view: DashboardView, *, st: Any) -> None:
     """Render the dashboard via an injected ``st``-like module.
 
     Thin map from view-model → widgets. The tailor/grill entry points are ALWAYS
@@ -117,5 +117,12 @@ def render_dashboard(view: DashboardView, *, st: _StLike) -> None:
     # never blocked). The can_* view flags document this invariant (asserted in
     # tests); they intentionally do NOT gate rendering here.
     st.subheader("Actions")
-    st.button("Start / continue grilling")
-    st.button("Tailor a resume")
+    st.button(
+        "Start / continue grilling",
+        type="primary",
+        on_click=lambda: st.session_state.__setitem__("view", "grill"),
+    )
+    st.button(
+        "Tailor a resume",
+        on_click=lambda: st.session_state.__setitem__("view", "tailor"),
+    )

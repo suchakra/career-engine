@@ -22,6 +22,8 @@ dependencies = [
     "weasyprint==69.0",
     # Web frontend (Phase 2; installed now so the import stub type-checks)
     "streamlit==1.58.0",
+    # Streamlit native OIDC auth (st.login/st.user) needs Authlib
+    "authlib==1.7.2",
     # Google Cloud
     "google-cloud-firestore==2.28.0",
     "google-cloud-secret-manager==2.29.0",

@@ -1,57 +1,73 @@
 name: Deploy (manual)
 
-# Continuous *delivery* is opt-in and manual: it never runs automatically, so a
-# repo without cloud credentials never sees a red deploy. Enable it by adding the
-# repository configuration below, then run it from the Actions tab.
+# Push-button deploy: authenticate to Google Cloud keyless (Workload Identity
+# Federation — no stored keys), build + push the image, then `terraform apply`.
+# State lives in a shared GCS bucket. Trigger from the Actions tab.
 #
-# Required repository settings (Settings → Secrets and variables → Actions):
-#   Secrets:
-#     GCP_WIF_PROVIDER  Workload Identity Federation provider resource name
-#                       (projects/…/locations/global/workloadIdentityPools/…/providers/…)
-#     GCP_DEPLOY_SA     Deployer service account email (impersonated via WIF; no JSON keys)
-#   Variables:
-#     GCP_PROJECT_ID    Target GCP project id
-#     CE_IMAGE          Fully-qualified container image (Artifact Registry path:tag)
-#
-# Keyless auth via Workload Identity Federation is used deliberately — no
-# long-lived service-account keys are stored in the repo (privacy/least-privilege,
-# consistent with ARCHITECTURE §5 and docs/SECURITY.md).
+# Required repository VARIABLES (Settings → Secrets and variables → Actions → Variables):
+#   GCP_PROJECT_ID       target project id
+#   GCP_WIF_PROVIDER     workloadIdentityPools/…/providers/… resource name
+#   GCP_DEPLOY_SA        deployer service account email (impersonated via WIF)
+#   TF_STATE_BUCKET      GCS bucket holding Terraform state
+#   AR_LOCATION          Artifact Registry region (e.g. us-central1)
+#   CE_AUTH_CLIENT_ID    OAuth web client id
+#   CE_AUTH_REDIRECT_URI OIDC redirect (public URL + /oauth2callback)
+# No secrets are required — WIF is keyless, and secret VALUES live in Secret Manager.
 on:
   workflow_dispatch:
     inputs:
       environment:
         description: Target environment
         type: choice
-        options: [dev, prod]
+        options: [dev]
         default: dev
 
 permissions:
   contents: read
-  id-token: write # required to mint the WIF OIDC token
+  id-token: write # mint the WIF OIDC token
 
 jobs:
   deploy:
-    name: terraform apply (${{ inputs.environment }})
+    name: build + terraform apply (${{ inputs.environment }})
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }} # add required reviewers here for a prod gate
+    environment: ${{ inputs.environment }} # add required reviewers here to gate prod
     steps:
       - uses: actions/checkout@v4
 
       - name: Authenticate to Google Cloud (Workload Identity Federation)
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-          service_account: ${{ secrets.GCP_DEPLOY_SA }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build + push image
+        id: build
+        run: |
+          IMAGE="${{ vars.AR_LOCATION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/career-engine-${{ inputs.environment }}-images/app:${GITHUB_SHA::12}"
+          gcloud builds submit --tag="$IMAGE" --project "${{ vars.GCP_PROJECT_ID }}" .
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.9.8"
+          terraform_wrapper: false
 
-      - name: terraform init + apply
+      - name: Terraform init + apply
         working-directory: infrastructure/envs/${{ inputs.environment }}
         env:
           TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
-          TF_VAR_image: ${{ vars.CE_IMAGE }}
+          TF_VAR_image: ${{ steps.build.outputs.image }}
+          TF_VAR_auth_client_id: ${{ vars.CE_AUTH_CLIENT_ID }}
+          TF_VAR_auth_redirect_uri: ${{ vars.CE_AUTH_REDIRECT_URI }}
         run: |
-          terraform init -input=false
+          terraform init -input=false \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="prefix=envs/${{ inputs.environment }}"
           terraform apply -auto-approve -input=false
+
+      - name: Service URL
+        working-directory: infrastructure/envs/${{ inputs.environment }}
+        run: |
+          echo "Deployed: $(terraform output -raw service_uri)" >> "$GITHUB_STEP_SUMMARY"

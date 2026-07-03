@@ -50,7 +50,7 @@ class FakeSt:
     def write(self, body: Any) -> None:
         self.writes.append(body)
 
-    def button(self, label: str) -> None:
+    def button(self, label: str, **kwargs: Any) -> None:
         self.buttons.append(label)
 
 

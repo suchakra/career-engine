@@ -67,3 +67,40 @@ ingest surfaces. Two exploitable findings, both fixed on this branch:
   or drive WeasyPrint into local-file/SSRF fetches.
 - Secret IDs / Firestore doc paths are keyed by the token `sub` (issuer-controlled,
   charset-restricted), not free-form user input → no path traversal.
+
+## Required next review — web auth + BYOK key storage (flagged 2026-07-03)
+
+Status: **REVIEW REQUIRED before GA / real users.** New attack surfaces since the
+2026-07-02 review that a dedicated `/security-review` pass must cover:
+
+- **Web OIDC login** (`web/streamlit_app.py`, Streamlit `st.login`) — session/cookie
+  handling, the OAuth consent scope, redirect-URI pinning, and the `st.user` →
+  `user_id` trust boundary.
+- **Storing users' (paid) BYOK Gemini keys** in Secret Manager (`web/grill_ui.py` →
+  `SecretManagerKeyVault`). Encryption at rest (Secret Manager AES-256) + in transit
+  (TLS) are covered by GCP defaults, but the operational controls need hardening:
+  - **IAM scope** — the Cloud Run runtime SA currently has project-level
+    `secretAccessor` and needs write to store keys. Scope this: read-only where
+    possible, and name-conditioned write limited to `ce-key-*` (custom role / IAM
+    condition) so a compromised instance can't read/rotate *all* secrets (incl. the
+    OAuth client + cookie secrets).
+  - **Consent + audit** — explicit user consent to storage (a line is shown in the
+    UI); enable Cloud Audit Logs on Secret Manager access.
+  - **Revoke/replace** — implemented (`KeyVault.delete_key` + the "Remove key" UI);
+    verify it fully deletes and that no copy lingers in logs/session.
+  - Consider CMEK / envelope encryption and key TTL/rotation reminders.
+- **Public Cloud Run ingress** (`allow_unauthenticated`) — required for the web app.
+  The OIDC sweep endpoint is currently **not mounted** on the served Streamlit app
+  (no HTTP route), so it is not reachable via the public URL (the scheduler's daily
+  POST 404s). Before the sweep is mounted, split it into a **separate private**
+  (`allow_unauthenticated=false`) service so public ingress never fronts it.
+- **Single-user isolation (enforced):** the web grill installs the BYOK model client
+  via a process-global factory, so dev Cloud Run runs `max_instances=1` +
+  concurrency=1 to prevent cross-user key/data bleed. Multi-user needs
+  contextvar/thread-local client isolation (tracked).
+- **CI/CD deployer** — GitHub Actions deploys keyless via Workload Identity
+  Federation (no stored keys; the `github-pool` provider is attribute-conditioned
+  to `suchakra/career-engine`). The `career-engine-deployer` SA currently holds
+  broad admin roles (run/artifactregistry/secretmanager/datastore/iam/…) to run a
+  full `terraform apply`; a review should curate this down to the minimum and
+  consider a separate plan-only identity for PRs.

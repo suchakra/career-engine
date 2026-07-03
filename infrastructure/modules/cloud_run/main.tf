@@ -56,6 +56,12 @@ variable "max_instances" {
   default     = 4
 }
 
+variable "max_concurrency" {
+  type        = number
+  description = "Max concurrent requests per instance. Set to 1 (with max_instances=1) to guarantee single-user isolation for the process-global model-client factory."
+  default     = 80
+}
+
 variable "cpu" {
   type        = string
   description = "CPU limit per instance."
@@ -66,6 +72,24 @@ variable "memory" {
   type        = string
   description = "Memory limit per instance."
   default     = "512Mi"
+}
+
+variable "env" {
+  type        = map(string)
+  description = "Plain (non-secret) environment variables for the container."
+  default     = {}
+}
+
+variable "secret_env" {
+  type        = map(string)
+  description = "Env vars sourced from Secret Manager (ENV_NAME => secret id, latest version). Secret VALUES are set out-of-band, never in Terraform state."
+  default     = {}
+}
+
+variable "allow_unauthenticated" {
+  type        = bool
+  description = "Grant allUsers roles/run.invoker (a PUBLIC web app). Never enable for a service that also serves the OIDC-protected sweep endpoint."
+  default     = false
 }
 
 resource "google_service_account" "runtime" {
@@ -88,12 +112,37 @@ resource "google_cloud_run_v2_service" "app" {
       max_instance_count = var.max_instances
     }
 
+    max_instance_request_concurrency = var.max_concurrency
+
     containers {
       image = var.image
 
       env {
         name  = "CONTRACT_VERSION"
         value = var.contract_version
+      }
+
+      # Plain (non-secret) env vars.
+      dynamic "env" {
+        for_each = var.env
+        content {
+          name  = env.key
+          value = env.value
+        }
+      }
+
+      # Env vars sourced from Secret Manager (values never in TF state).
+      dynamic "env" {
+        for_each = var.secret_env
+        content {
+          name = env.key
+          value_source {
+            secret_key_ref {
+              secret  = env.value
+              version = "latest"
+            }
+          }
+        }
       }
 
       resources {
@@ -104,6 +153,18 @@ resource "google_cloud_run_v2_service" "app" {
       }
     }
   }
+}
+
+# Public web app: allow unauthenticated ingress (sign-in happens at the app layer
+# via Streamlit OIDC). Gated by a variable so the same module can back a private
+# service. See ARCHITECTURE §5 / docs/SECURITY.md.
+resource "google_cloud_run_v2_service_iam_member" "public_invoker" {
+  count    = var.allow_unauthenticated ? 1 : 0
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_service.app.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
 }
 
 output "service_account_email" {

@@ -88,6 +88,15 @@ class FakeSecretManagerClient:
             )
         return _FakeSecretVersion(self._secrets[secret_path])
 
+    def delete_secret(self, *, name: str) -> MagicMock:
+        """Delete the secret; raise NotFound if it doesn't exist."""
+        if name not in self._secrets:
+            raise gcp_exceptions.NotFound(  # type: ignore[no-untyped-call]
+                f"Secret not found: {name}"
+            )
+        del self._secrets[name]
+        return MagicMock()
+
 
 class _FailingAddVersionClient(FakeSecretManagerClient):
     """SM client that raises PermissionDenied on add_secret_version."""
@@ -431,3 +440,19 @@ class TestNoHardcodedModelNames:
         assert result.returncode != 0, (
             f"Found hardcoded model name(s) in auth/key_vault.py:\n{result.stdout}"
         )
+
+
+class TestDeleteKey:
+    """delete_key revokes a stored key and is idempotent."""
+
+    def test_delete_removes_stored_key(self) -> None:
+        client = FakeSecretManagerClient()
+        vault = SecretManagerKeyVault(client=client)
+        vault.store_key("user-1", "AIza-secret")
+        assert vault.key_exists("user-1") is True
+        vault.delete_key("user-1")
+        assert vault.key_exists("user-1") is False
+
+    def test_delete_absent_key_is_idempotent(self) -> None:
+        vault = SecretManagerKeyVault(client=FakeSecretManagerClient())
+        vault.delete_key("never-stored")  # must not raise
