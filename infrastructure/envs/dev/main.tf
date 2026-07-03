@@ -29,6 +29,10 @@ provider "google" {
 # Kept in Terraform so a fresh project is reproducible from code (IaC all the way).
 resource "google_project_service" "apis" {
   for_each = toset([
+    # cloudresourcemanager is the bootstrap API the provider itself needs to manage
+    # project services + IAM — enable it out-of-band first (chicken-and-egg), then
+    # this block adopts it.
+    "cloudresourcemanager.googleapis.com",
     "run.googleapis.com",
     "artifactregistry.googleapis.com",
     "cloudbuild.googleapis.com",
