@@ -246,6 +246,66 @@ class TestRoundTrip:
         assert restored.question_count == 9
 
 
+class TestFirestoreSafeSerialization:
+    """State written by the workflow (Python-mode dumps) must persist safely.
+
+    Regression for: TypeError('Cannot convert to a Firestore Value', UUID(...)).
+    The workflow writes state via model_dump() (not mode='json'), so a turn can
+    carry raw UUID / datetime / Enum objects that the Firestore client rejects.
+    """
+
+    async def test_raw_uuid_datetime_in_state_delta_round_trips(
+        self, service: FirestoreSessionService
+    ) -> None:
+        """A turn writing raw Entry/StarStory objects persists and reloads cleanly."""
+        import json
+        from datetime import UTC, datetime
+
+        from google.adk.events import Event, EventActions
+
+        from schema import Entry, ExperienceType, StarStory
+
+        await service.create_session(
+            app_name="career-engine",
+            user_id="user-uuid",
+            state=CareerEngineState().model_dump(mode="json"),
+            session_id="sess-uuid",
+        )
+        session = await service.get_session(
+            app_name="career-engine", user_id="user-uuid", session_id="sess-uuid"
+        )
+        assert session is not None
+
+        entry = Entry(type=ExperienceType.PROJECT, title="Billing rewrite")
+        story = StarStory(
+            entry_id=str(entry.entry_id),
+            pillar="delivery",
+            result="cut latency 40%",
+            extracted_at=datetime.now(UTC),
+        )
+        # Python-mode dump (what workflows/discovery_graph._write_state produces):
+        # entry_id is a real UUID object, extracted_at a datetime, status an Enum.
+        delta = {
+            "work_timeline": [entry.model_dump()],
+            "extracted_star_stories": [story.model_dump()],
+        }
+        assert isinstance(delta["work_timeline"][0]["entry_id"], type(entry.entry_id))
+
+        event = Event(author="user", actions=EventActions(state_delta=delta))
+        await service.append_event(session, event)  # must not raise on .set()
+
+        reloaded = await service.get_session(
+            app_name="career-engine", user_id="user-uuid", session_id="sess-uuid"
+        )
+        assert reloaded is not None
+        # The persisted document must be JSON-serialisable (no stray UUID/datetime).
+        json.dumps(reloaded.state)
+        state = CareerEngineState.model_validate(reloaded.state)
+        assert state.work_timeline[0].title == "Billing rewrite"
+        assert state.work_timeline[0].entry_id == entry.entry_id  # str → UUID on read
+        assert state.extracted_star_stories[0].result == "cut latency 40%"
+
+
 class TestAppendEventPersists:
     """append_event must WRITE the post-event state to Firestore (not just memory).
 
