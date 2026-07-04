@@ -29,6 +29,7 @@ import streamlit as st
 from google.adk.sessions import BaseSessionService, InMemorySessionService
 
 from auth.key_vault import SecretManagerKeyVault
+from cli import session as session_helpers
 from cli.app import (
     DiscoverySession,
     TurnResult,
@@ -39,7 +40,7 @@ from cli.app import (
 from config import AccessMode, get_settings
 from database.firestore_session import ContractVersionError
 from integration.model_client import GeminiModelClient, ModelAPIError
-from schema import Entry, PhaseStatus
+from schema import CareerEngineState, Entry, PhaseStatus
 from web.async_runner import run_async
 from web.session_loader import web_session_id
 
@@ -153,6 +154,43 @@ def _discovery_session(user_id: str, client: GeminiModelClient) -> DiscoverySess
     )
 
 
+def _grill_ids(user_id: str) -> dict[str, Any]:
+    """The (service, app_name, user_id, session_id) addressing the durable session."""
+    return {
+        "session_service": _grill_session_service(),
+        "app_name": get_settings().app_name,
+        "user_id": user_id,
+        "session_id": web_session_id(user_id),
+    }
+
+
+def _frontier_label(state: CareerEngineState) -> str:
+    """Human label for the experience currently being grilled (grill_frontier), or ''."""
+    fid = state.grill_frontier
+    if not fid:
+        return ""
+    entry = next((e for e in state.work_timeline if str(e.entry_id) == fid), None)
+    if entry is None:
+        return ""
+    parts = [entry.title or "this experience"]
+    if entry.org:
+        parts.append(entry.org)
+    return " · ".join(parts)
+
+
+def _persist_transcript(user_id: str) -> None:
+    """Persist the chat transcript into the durable session (best-effort).
+
+    Stored under a non-contract ADK session-state key so a returning user sees
+    prior context on resume. Never blocks a turn — a failure is swallowed.
+    """
+    transcript = st.session_state.get("grill_transcript", [])
+    try:
+        run_async(session_helpers.patch_state(**_grill_ids(user_id), _ui_transcript=transcript))
+    except Exception:
+        pass
+
+
 def _start_session(
     user_id: str, history: str, work_timeline: list[Entry] | None = None
 ) -> None:
@@ -186,6 +224,7 @@ def _start_session(
     ss["grill_checkpoint"] = ""
     ss["grill_complete"] = False
     ss["grill_started"] = True
+    ss["grill_entry_label"] = _frontier_label(run_async(session.current_state()))
     st.rerun()
 
 
@@ -203,24 +242,30 @@ def _try_resume(user_id: str) -> None:
         return
     client = GeminiModelClient(api_key=key)
     session = _discovery_session(user_id, client)
+    # One raw read gives us both the CareerEngineState (flat) AND the persisted UI
+    # transcript (a non-contract key), so a returning user sees prior context.
     try:
-        state = run_async(session.resume_state())
+        raw = run_async(session_helpers.read_raw_state(**_grill_ids(user_id)))
     except ContractVersionError:
         st.warning(
             "Your saved session was created by an incompatible version and can't be "
             "resumed. You can start a new one below."
         )
         return
+    except ValueError:
+        return  # no session persisted yet → show the seeding UI
     except Exception:
         # Backend hiccup — don't crash; make the failure visible and let it retry.
         st.warning("Couldn't load your saved session just now — you can keep going or retry.")
         return
-    if state is None or not (state.work_timeline or state.question_count):
+    state = CareerEngineState.model_validate(raw)
+    if not (state.work_timeline or state.question_count):
         return  # nothing meaningful to resume
 
     ss["grill_client"] = client
     ss["grill_session"] = session
-    ss.setdefault("grill_transcript", [])
+    ss["grill_transcript"] = [tuple(pair) for pair in (raw.get("_ui_transcript") or [])]
+    ss["grill_entry_label"] = _frontier_label(state)
     ss["grill_started"] = True
     ss["grill_resumed"] = True
     if state.current_phase == PhaseStatus.COMPLETE:
@@ -235,7 +280,7 @@ def _try_resume(user_id: str) -> None:
         ss["grill_question"] = state.current_question or _METRIC_NUDGE
 
 
-def _submit_answer(answer: str) -> None:
+def _submit_answer(answer: str, user_id: str) -> None:
     """Record an answer, run a turn, and drive any non-interactive turns."""
     ss = st.session_state
     session: DiscoverySession = ss["grill_session"]
@@ -262,14 +307,18 @@ def _submit_answer(answer: str) -> None:
                     ):
                         break
                     turn = run_async(session.advance())
+            # Refresh the "currently grilling" label from the (possibly advanced) state.
+            label_state = run_async(session.current_state()) if accepted else after
+            ss["grill_entry_label"] = _frontier_label(label_state)
     except ModelAPIError as exc:
         _show_model_error(exc)
         return
     _apply_turn(turn)
+    _persist_transcript(user_id)
     st.rerun()
 
 
-def _confirm_checkpoint() -> None:
+def _confirm_checkpoint(user_id: str) -> None:
     """Confirm the checkpoint and continue grilling."""
     ss = st.session_state
     session: DiscoverySession = ss["grill_session"]
@@ -278,11 +327,13 @@ def _confirm_checkpoint() -> None:
     try:
         with st.spinner("Continuing…"):
             question = run_async(session.confirm_checkpoint())
+            ss["grill_entry_label"] = _frontier_label(run_async(session.current_state()))
     except ModelAPIError as exc:
         _show_model_error(exc)
         return
     ss["grill_checkpoint"] = ""
     ss["grill_question"] = question
+    _persist_transcript(user_id)
     st.rerun()
 
 
@@ -447,8 +498,12 @@ def render_grill(*, user_id: str) -> None:
     # ── Step 3: the conversation ──────────────────────────────────────────────
     _install_model_client(ss["grill_client"])  # ensure nodes use this user's key
 
-    if ss.pop("grill_resumed", False) and not ss.get("grill_transcript"):
+    if ss.pop("grill_resumed", False):
         st.caption("↩︎ Picked up your saved session where you left off.")
+
+    # Which experience are we grilling right now? (grill_frontier → entry label)
+    if not ss.get("grill_complete") and ss.get("grill_entry_label"):
+        st.info(f"📌 Currently grilling: **{ss['grill_entry_label']}**")
 
     for role, text in ss.get("grill_transcript", []):
         with st.chat_message("assistant" if role == "agent" else "user"):
@@ -464,7 +519,7 @@ def render_grill(*, user_id: str) -> None:
             st.write("**Checkpoint — does this look right so far?**")
             st.write(ss["grill_checkpoint"])
         if st.button("Looks right — keep going", type="primary"):
-            _confirm_checkpoint()
+            _confirm_checkpoint(user_id)
         return
 
     question = ss.get("grill_question")
@@ -474,4 +529,4 @@ def render_grill(*, user_id: str) -> None:
 
     answer: Any = st.chat_input("Your answer…")
     if answer:
-        _submit_answer(str(answer))
+        _submit_answer(str(answer), user_id)
