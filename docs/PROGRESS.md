@@ -112,6 +112,18 @@ Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.
 ---
 
 ## Decisions log (append-only)
+- 2026-07-04 — **Web Tailor shipped** (PR #26). In-app JD → tailored résumé: `web/tailor.py`
+  reuses `finalize_master_resume_node` → `tailor_node` (assembles a master from current validated
+  stories if the grill isn't finalized; never marks the session COMPLETE, so tailoring is never
+  blocked), + pure `parse_tailored`/`tailored_to_markdown`. Streamlit view shows summary + selected
+  achievements + Markdown/JSON download. Markdown export is the first slice of the multi-format
+  exporter. Follow-ups: PDF/DOCX export, JD-by-URL scrape, save-as-tracked-application. No contract
+  change (495 tests).
+- 2026-07-04 — **Grill quality pass** (PR #24): web grill runs on **Pro** on the user's BYOK key
+  (`ACCESS_MODE=BYOK` env + `DiscoverySession access_mode=BYOK`); **Skip this experience** control;
+  education entries auto-summarized on resume (heals old sessions); entry-aware fallback question;
+  "Grill me about this" jump now runs a turn. Plus the `ship-change` + reuse of `wait-for-pr-review`
+  dev skills; process doc updated (Opus builds → Sonnet reviews → PR → Copilot reviews → merge → deploy).
 - 2026-07-04 — **Durable web sessions fix (data-loss root cause).** A user's grilling from days
   earlier wasn't reappearing. Two coupled bugs: (1) the web grill used `InMemorySessionService`
   (in-process RAM) — nothing reached Firestore, and Cloud Run `min_instances=0` + redeploys wiped it;

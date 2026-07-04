@@ -23,11 +23,17 @@
     a chosen entry (`set_grill_frontier`; jumpable frontier honored by the router).
   - Spec [ARCHITECTURE.md §14](ARCHITECTURE.md); grooming [GROOMING.md](GROOMING.md) Phase 4; D10.
 
-**▶ NEXT ACTION:** await user direction. Candidates: (a) **4E** — highlight/pin an experience for
-tailoring priority (the one item needing an additive-minor contract bump; groom fully at build time);
-(b) the still-open **web Tailor flow** (placeholder today; CLI works); (c) the pre-GA **/security-review**
-(web login + paid-key storage + deployer-SA breadth, see [SECURITY.md](SECURITY.md)); (d) custom domain
-`career-engine.bitcrafty.cloud`.
+**▶ NEXT ACTION:** await user re-test of the grill on a FRESH session (Restart) — the checkpoint loop
+could not be reproduced in isolation (regression test PR #25 proves confirm resolves over Firestore);
+likely was redeploy-churn wedging + the empty-question issue, both fixed. Then continue the **multi-format
+résumé exporter**: Markdown ships with Tailor (PR #26); **PDF** (make the renderer consume the tailored
+JSON, not just stories) and **DOCX** (`python-docx`) are next; plus **JD-by-URL** (scraper) and
+**save-as-tracked-application** for the Tailor flow. Other candidates: **4E** highlight/pin (needs an
+additive-minor contract bump); pre-GA **/security-review**; custom domain.
+
+**Web app now covers:** login → Grill (durable, Pro on BYOK, Skip, resume) → Portfolio (view/add/steer) →
+**Tailor** (paste JD → tailored résumé + Markdown/JSON export) → dashboard/meter. Ship changes with the
+[`ship-change`](../skills/ship-change/SKILL.md) skill.
 
 - **Live dev URL:** https://career-engine-dev-app-ontyg6kaja-uc.a.run.app. Project `gen-lang-client-0513394764`, region us-central1.
 - **CI/CD (works):** `gh workflow run deploy.yml --ref master -f environment=dev` → keyless WIF → docker build+push → `terraform apply`. State in GCS bucket `gen-lang-client-0513394764-tfstate` (prefix `envs/dev`). Repo *variables* drive it (GCP_PROJECT_ID/WIF_PROVIDER/DEPLOY_SA/TF_STATE_BUCKET/AR_LOCATION/CE_AUTH_*).
