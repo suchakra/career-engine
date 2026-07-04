@@ -40,7 +40,7 @@ from cli.app import (
 from config import AccessMode, get_settings
 from database.firestore_session import ContractVersionError
 from integration.model_client import GeminiModelClient, ModelAPIError
-from schema import CareerEngineState, Entry, PhaseStatus
+from schema import CareerEngineState, Entry, EntryStatus, PhaseStatus
 from web.async_runner import run_async
 from web.session_loader import web_session_id
 
@@ -139,14 +139,15 @@ def _grill_session_service() -> BaseSessionService:
 def _discovery_session(user_id: str, client: GeminiModelClient) -> DiscoverySession:
     """Build a DiscoverySession backed by durable Firestore state (stable per-user id).
 
-    FREE routes grilling to Flash (cheap) even on the user's own key — BYOK here
-    means "your quota", not "unlock Pro". The app_name + session_id match what the
-    Portfolio view / progress meter / add-experience seam read, so it's ONE
-    resumable session per user.
+    BYOK: the user brought their own key, so reasoning-heavy extraction routes to
+    Pro (via the registry, when ACCESS_MODE=BYOK) for stronger understanding — the
+    conversational/bulk steps stay on Flash/Flash-Lite for cost. The app_name +
+    session_id match what the Portfolio view / meter / add-experience seam read, so
+    it's ONE resumable session per user.
     """
     return DiscoverySession(
         user_id=user_id,
-        access_mode=AccessMode.FREE,
+        access_mode=AccessMode.BYOK,
         model_client=client,
         session_service=_grill_session_service(),
         app_name=get_settings().app_name,
@@ -239,6 +240,55 @@ def _start_session(
     st.rerun()
 
 
+def _migrate_education_on_resume(user_id: str, state: CareerEngineState) -> CareerEngineState:
+    """Retroactively apply the 'education is not job-grilled' rule to an old session.
+
+    Sessions parsed before that rule shipped still have EDUCATION entries queued as
+    NEEDS_QUANTIFYING (and possibly pinned as the frontier), so the grill demands
+    job metrics from a diploma. Re-run the status rules here (idempotent: only
+    EDUCATION → SUMMARIZED changes) and clear a frontier that now points at a
+    non-grillable entry, so the durable session self-heals without a re-upload.
+    """
+    from workflows.nodes import _apply_entry_status_rules
+
+    migrated = [e.model_copy() for e in state.work_timeline]
+    before = [e.status for e in migrated]
+    _apply_entry_status_rules(migrated, date.today().isoformat())
+    if [e.status for e in migrated] == before and not _frontier_needs_reset(state, migrated):
+        return state  # nothing to heal
+
+    frontier = state.grill_frontier
+    frontier_entry = next((e for e in migrated if str(e.entry_id) == frontier), None)
+    if frontier_entry is None or frontier_entry.status not in (
+        EntryStatus.NEEDS_QUANTIFYING,
+        EntryStatus.DOCUMENTED,
+    ):
+        frontier = ""  # pinned entry is no longer grillable → let the graph re-pick
+
+    try:
+        run_async(
+            session_helpers.patch_state(
+                **_grill_ids(user_id),
+                work_timeline=[e.model_dump(mode="json") for e in migrated],
+                grill_frontier=frontier,
+            )
+        )
+    except Exception:
+        return state  # best-effort; fall back to the unmigrated state
+    return state.model_copy(update={"work_timeline": migrated, "grill_frontier": frontier})
+
+
+def _frontier_needs_reset(state: CareerEngineState, migrated: list[Entry]) -> bool:
+    """True if grill_frontier points at an entry that is no longer grillable."""
+    if not state.grill_frontier:
+        return False
+    entry = next((e for e in migrated if str(e.entry_id) == state.grill_frontier), None)
+    return entry is None or entry.status not in (
+        EntryStatus.NEEDS_QUANTIFYING,
+        EntryStatus.DOCUMENTED,
+    )
+
+
 def _try_resume(user_id: str) -> None:
     """Rebuild the durable session from Firestore and restore the UI (if one exists).
 
@@ -272,6 +322,8 @@ def _try_resume(user_id: str) -> None:
     state = CareerEngineState.model_validate(raw)
     if not (state.work_timeline or state.question_count):
         return  # nothing meaningful to resume
+
+    state = _migrate_education_on_resume(user_id, state)
 
     ss["grill_client"] = client
     ss["grill_session"] = session
@@ -321,6 +373,88 @@ def _submit_answer(answer: str, user_id: str) -> None:
             # Refresh the "currently grilling" label from the (possibly advanced) state.
             label_state = run_async(session.current_state()) if accepted else after
             ss["grill_entry_label"] = _frontier_label(label_state)
+    except ModelAPIError as exc:
+        _show_model_error(exc)
+        return
+    _apply_turn(turn)
+    _persist_transcript(user_id)
+    st.rerun()
+
+
+def _apply_pending_jump(user_id: str) -> None:
+    """Handle a 'Grill me about this' jump from the Portfolio view.
+
+    The Portfolio button sets ``grill_jump_to`` (an entry_id) + routes here. We pin
+    the frontier to that entry and run a turn so the grill actually asks about IT —
+    otherwise a live in-browser session would keep showing the previous question.
+    Builds a session first if the jump arrived without one (e.g. straight from
+    Portfolio without having grilled in this browser session yet).
+    """
+    ss = st.session_state
+    target = ss.get("grill_jump_to")
+    key = ss.get("grill_key")
+    if not target or not key:
+        ss.pop("grill_jump_to", None)
+        return
+    client = ss.get("grill_client") or GeminiModelClient(api_key=key)
+    session = ss.get("grill_session") or _discovery_session(user_id, client)
+    try:
+        with st.spinner("Switching to that experience…"):
+            run_async(
+                session_helpers.patch_state(
+                    **_grill_ids(user_id), grill_frontier=target, pending_user_answer=""
+                )
+            )
+            turn = run_async(session.advance())
+            ss["grill_entry_label"] = _frontier_label(run_async(session.current_state()))
+    except ModelAPIError as exc:
+        _show_model_error(exc)
+        ss.pop("grill_jump_to", None)
+        return
+    ss["grill_client"] = client
+    ss["grill_session"] = session
+    ss.setdefault("grill_transcript", [])
+    ss["grill_started"] = True
+    ss["grill_checkpoint"] = ""
+    ss["grill_complete"] = False
+    ss.pop("grill_jump_to", None)
+    _apply_turn(turn)
+    _persist_transcript(user_id)
+    st.rerun()
+
+
+def _skip_entry(user_id: str) -> None:
+    """Skip the current experience (mark SKIPPED), advance, and ask the next opener.
+
+    The escape hatch for anything that shouldn't be metric-grilled — a course, a
+    credential, or just something the user doesn't want to detail.
+    """
+    ss = st.session_state
+    session: DiscoverySession = ss["grill_session"]
+    label = ss.get("grill_entry_label") or "this experience"
+    ss["grill_transcript"].append(("user", f"(skipped {label})"))
+    try:
+        with st.spinner("Moving on…"):
+            state = run_async(session.current_state())
+            fid = state.grill_frontier
+            new_timeline = [
+                e.model_copy(update={"status": EntryStatus.SKIPPED})
+                if str(e.entry_id) == fid
+                else e
+                for e in state.work_timeline
+            ]
+            # Mark skipped, clear the frontier (graph auto-picks the next needs-work
+            # entry), and drop any pending answer so we get a fresh opening question.
+            run_async(
+                session_helpers.patch_state(
+                    **_grill_ids(user_id),
+                    work_timeline=[e.model_dump(mode="json") for e in new_timeline],
+                    grill_frontier="",
+                    pending_user_answer="",
+                )
+            )
+            turn = run_async(session.advance())
+            ss["grill_entry_label"] = _frontier_label(run_async(session.current_state()))
     except ModelAPIError as exc:
         _show_model_error(exc)
         return
@@ -467,6 +601,10 @@ def render_grill(*, user_id: str) -> None:
             "or resumable** — your progress may be lost if you leave. Try again shortly."
         )
 
+    # ── "Grill me about this" jump from the Portfolio view ────────────────────
+    if ss.get("grill_jump_to"):
+        _apply_pending_jump(user_id)
+
     # ── Resume a durable session across reruns / restarts / redeploys ─────────
     # If we have the key but no live session object in this browser session, try
     # to rebuild it from Firestore. Skipped right after "Restart" (grill_start_fresh).
@@ -534,9 +672,22 @@ def render_grill(*, user_id: str) -> None:
         return
 
     question = ss.get("grill_question")
-    if question:
-        with st.chat_message("assistant"):
-            st.write(question)
+    if not question:
+        # Never strand the user with no prompt (e.g. after a topic change the model
+        # returned an empty follow-up) — ask an entry-aware opener, not a generic nudge.
+        label = ss.get("grill_entry_label") or "this experience"
+        question = (
+            f"Let's dig into **{label}** — what's a specific accomplishment there "
+            "you're proud of, and what impact did it have?"
+        )
+        ss["grill_question"] = question
+    with st.chat_message("assistant"):
+        st.write(question)
+
+    # Escape hatch: move past an entry that shouldn't be metric-grilled (a course /
+    # credential) or that the user doesn't want to detail.
+    if st.button("Skip this experience →"):
+        _skip_entry(user_id)
 
     answer: Any = st.chat_input("Your answer…")
     if answer:

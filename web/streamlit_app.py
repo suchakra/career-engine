@@ -149,18 +149,13 @@ def main() -> None:
 
 
 def _jump_grill_to_entry(*, user_id: str, entry_id: str) -> None:
-    """Pin the grill onto a chosen experience, then switch to the Grill view (4C)."""
-    from config import get_settings
-    from web.portfolio_store import set_grill_frontier
+    """Route to the Grill view and signal it to grill THIS experience (4C).
 
-    service = _session_service()
-    if service is not None:
-        try:
-            set_grill_frontier(
-                service, app_name=get_settings().app_name, user_id=user_id, entry_id=entry_id
-            )
-        except Exception:
-            st.warning("Couldn't focus that experience just now — starting a grill from the top.")
+    The grill view (``_apply_pending_jump``) pins the frontier and runs a turn so
+    it actually asks about this entry — a live in-browser session would otherwise
+    keep showing the previous question.
+    """
+    st.session_state["grill_jump_to"] = entry_id
     st.session_state["view"] = "grill"
 
 

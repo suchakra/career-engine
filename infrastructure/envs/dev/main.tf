@@ -118,6 +118,10 @@ module "cloud_run" {
     CE_AUTH_CLIENT_ID    = var.auth_client_id
     CE_AUTH_REDIRECT_URI = var.auth_redirect_uri
     CE_AUTH_METADATA_URL = "https://accounts.google.com/.well-known/openid-configuration"
+    # The web app is BYOK (every user brings their own key), so reasoning-heavy
+    # steps route to Pro on the user's key instead of Flash. ACCESS_MODE drives
+    # models.registry: REASONING_HIGH → gemini-2.5-pro in BYOK mode.
+    ACCESS_MODE = "BYOK"
   }
 
   # Values are set out-of-band (never in state); resources come from auth_secrets.
