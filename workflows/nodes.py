@@ -295,11 +295,19 @@ def _frontier_sort_key(entry: Entry) -> tuple[int, int, int]:
     Recency is driven by ``end_date`` — a CURRENT role (empty end_date) ranks above
     any dated one, which is what a reviewer expects (grill the roles you're in / just
     left first). Substance (experience type) breaks recency ties so a recent job
-    outranks a recent trivial entry. This is robust to the messy dates a résumé
-    parser emits: only the current role needs an empty end_date to float to the top.
+    outranks a recent trivial entry.
+
+    An empty end_date means "present" ONLY for ongoing work — NOT for EDUCATION. A
+    résumé parser frequently emits an empty end_date for a *completed* degree; if we
+    treated that as "present" the ancient degree would float above the user's real
+    current job (the "grilling starts from ancient history" bug). For EDUCATION with
+    no end_date we rank by start year instead, so it sits with its actual era.
     """
     if not entry.end_date:
-        end_year = _PRESENT_SENTINEL_YEAR
+        if entry.type is ExperienceType.EDUCATION:
+            end_year = _parse_year_from_date(entry.start_date) or -1
+        else:
+            end_year = _PRESENT_SENTINEL_YEAR
     else:
         end_year = _parse_year_from_date(entry.end_date) or -1
     start_year = _parse_year_from_date(entry.start_date) or -1

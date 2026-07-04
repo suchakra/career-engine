@@ -32,11 +32,18 @@ in by the caller (resolved via ``models.registry.get_registry().get_model_id()``
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+import time
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from config import AccessMode, get_settings
+
+# Transient server-side failures worth an automatic retry (NOT 429 — a quota/rate
+# limit won't clear on an immediate retry and we surface it to the user instead).
+_TRANSIENT_STATUSES = frozenset({500, 502, 503, 504})
+_MAX_TRANSIENT_RETRIES = 3  # total attempts
+_RETRY_BASE_DELAY = 1.0  # seconds; exponential: 1s, 2s between attempts
 
 
 class ModelAPIError(Exception):
@@ -61,13 +68,45 @@ class ModelAPIError(Exception):
         self.is_rate_limited = is_rate_limited
 
 
+def _status_of(exc: Exception) -> int | None:
+    """Best-effort HTTP/gRPC status code from a provider exception."""
+    code = getattr(exc, "code", None)
+    if isinstance(code, int):
+        return code
+    sc = getattr(exc, "status_code", None)
+    return sc if isinstance(sc, int) else None
+
+
+def _is_transient(exc: Exception) -> bool:
+    """True if the failure is a transient server error worth retrying (5xx / UNAVAILABLE)."""
+    status = _status_of(exc)
+    if status in _TRANSIENT_STATUSES:
+        return True
+    if status == 429:
+        return False  # rate/quota — surfaced to the user, not silently retried
+    upper = str(exc).upper()
+    return "UNAVAILABLE" in upper or "503" in upper or "OVERLOADED" in upper
+
+
+def _call_with_retry[R](call: Callable[[], R]) -> R:
+    """Run ``call``, retrying transient server errors with exponential backoff.
+
+    Non-transient errors (auth, 429 quota, bad request) propagate immediately.
+    The final transient failure is re-raised for the caller to wrap/surface.
+    """
+    for attempt in range(_MAX_TRANSIENT_RETRIES):
+        try:
+            return call()
+        except Exception as exc:
+            if attempt == _MAX_TRANSIENT_RETRIES - 1 or not _is_transient(exc):
+                raise
+            time.sleep(_RETRY_BASE_DELAY * (2**attempt))
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
 def _as_model_api_error(exc: Exception) -> ModelAPIError:
     """Translate a provider exception into a typed :class:`ModelAPIError`."""
-    code = getattr(exc, "code", None)
-    status: int | None = code if isinstance(code, int) else None
-    if status is None:
-        sc = getattr(exc, "status_code", None)
-        status = sc if isinstance(sc, int) else None
+    status = _status_of(exc)
 
     msg = str(exc)
     is_rl = status == 429 or "RESOURCE_EXHAUSTED" in msg or "quota" in msg.lower()
@@ -82,7 +121,15 @@ def _as_model_api_error(exc: Exception) -> ModelAPIError:
         except ValueError:
             retry = None
 
-    friendly = "Gemini quota / rate limit exceeded" if is_rl else f"Model API call failed: {msg}"
+    if is_rl:
+        friendly = "Gemini quota / rate limit exceeded"
+    elif _is_transient(exc):
+        friendly = (
+            "Gemini is temporarily overloaded (server busy) and didn't recover after a "
+            "few automatic retries. Please try again in a moment."
+        )
+    else:
+        friendly = f"Model API call failed: {msg}"
     return ModelAPIError(
         friendly, status_code=status, retry_after_seconds=retry, is_rate_limited=is_rl
     )
@@ -150,10 +197,12 @@ class GeminiModelClient:
         from google.genai import types as gtypes
 
         try:
-            response = self._client.models.generate_content(
-                model=model_id,
-                contents=user,
-                config=gtypes.GenerateContentConfig(system_instruction=system),
+            response = _call_with_retry(
+                lambda: self._client.models.generate_content(
+                    model=model_id,
+                    contents=user,
+                    config=gtypes.GenerateContentConfig(system_instruction=system),
+                )
             )
         except Exception as exc:
             raise _as_model_api_error(exc) from exc
@@ -197,10 +246,12 @@ class GeminiModelClient:
         ]
         parts.append(gtypes.Part.from_text(text=prompt))
         try:
-            response = self._client.models.generate_content(
-                model=model_id,
-                contents=parts,
-                config=gtypes.GenerateContentConfig(system_instruction=system),
+            response = _call_with_retry(
+                lambda: self._client.models.generate_content(
+                    model=model_id,
+                    contents=parts,
+                    config=gtypes.GenerateContentConfig(system_instruction=system),
+                )
             )
         except Exception as exc:
             raise _as_model_api_error(exc) from exc
@@ -231,10 +282,12 @@ class GeminiModelClient:
         from tools.web_scraper import ScraperError
 
         try:
-            response = self._client.models.generate_content(
-                model=model,
-                contents=prompt,
-                config=gtypes.GenerateContentConfig(system_instruction=system),
+            response = _call_with_retry(
+                lambda: self._client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config=gtypes.GenerateContentConfig(system_instruction=system),
+                )
             )
         except Exception as exc:
             raise ScraperError(f"Model call failed: {exc}") from exc
