@@ -8,18 +8,20 @@ This module resolves the user's most-recently-updated session and returns its
 
 Sync bridge: ``list_sessions`` / ``get_session`` are async on
 ``BaseSessionService``; the Streamlit script thread has no running event loop, so
-we bridge with ``asyncio.run`` (same pattern as ``FirestoreWorkspaceStore``).
+we bridge with :func:`web.async_runner.run_async` (a shared persistent loop —
+NOT ``asyncio.run`` per call, which would close the loop a reused async Firestore
+client's gRPC channel is bound to → "Event loop is closed").
 Do NOT call these from an async context.
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
 
 from google.adk.sessions import BaseSessionService
 
 from schema import CareerEngineState
+from web.async_runner import run_async
 
 _log = logging.getLogger("career_engine.web")
 
@@ -87,7 +89,7 @@ def load_latest_discovery_state(
     Raises on a genuine backend error; use :func:`try_load_latest_discovery_state`
     for the non-fatal UX path.
     """
-    return asyncio.run(
+    return run_async(
         _aload_latest_discovery_state(
             session_service,
             app_name=app_name,

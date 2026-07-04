@@ -14,13 +14,12 @@ own nodes persist. State lives FLAT at the top level of ``session.state`` (see
 ``grill_frontier``).
 
 Sync bridge: the ADK session API is async and the Streamlit script thread has no
-running loop, so we bridge with ``asyncio.run`` (same pattern as
-``session_loader``/``workspace_store``). Do NOT call these from an async context.
+running loop, so we bridge with :func:`web.async_runner.run_async` (a shared
+persistent loop — see that module for why ``asyncio.run`` per call breaks reused
+async clients). Do NOT call these from an async context.
 """
 
 from __future__ import annotations
-
-import asyncio
 
 from google.adk.events import Event, EventActions
 from google.adk.sessions import BaseSessionService
@@ -28,6 +27,7 @@ from google.adk.sessions import BaseSessionService
 from cli import session as session_helpers
 from config import CONTRACT_VERSION
 from schema import CareerEngineState, Entry, EntryStatus, ExperienceType
+from web.async_runner import run_async
 from web.session_loader import web_session_id
 
 
@@ -154,7 +154,7 @@ def add_manual_entry(
         bullets=[b for b in (bullets or []) if b.strip()],
         status=EntryStatus.NEEDS_QUANTIFYING,
     )
-    return asyncio.run(
+    return run_async(
         _aadd_manual_entry(
             session_service,
             app_name=app_name,
@@ -178,7 +178,7 @@ def set_grill_frontier(
     user's latest session. Returns the session_id, or ``None`` if the user has no
     session yet (nothing to steer — the caller starts a fresh grill instead).
     """
-    return asyncio.run(
+    return run_async(
         _aset_grill_frontier(
             session_service, app_name=app_name, user_id=user_id, entry_id=entry_id
         )
