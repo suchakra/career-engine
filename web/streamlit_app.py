@@ -16,6 +16,7 @@ delegate rendering to :func:`web.dashboard.render_dashboard`. No workflow logic 
 from __future__ import annotations
 
 from datetime import date
+from typing import Any
 
 import streamlit as st
 
@@ -49,20 +50,27 @@ def _load_workspace(user_id: str) -> UserWorkspace:
         return UserWorkspace()
 
 
+def _session_service() -> Any | None:
+    """Return a FirestoreSessionService, or None if one can't be constructed."""
+    from database.firestore_session import FirestoreSessionService
+
+    try:
+        return FirestoreSessionService()
+    except Exception:
+        return None
+
+
 def _load_discovery_state(*, user_id: str, today: str) -> CareerEngineState:
     """Resolve the user's latest discovery state, or an empty state on any failure."""
     from config import get_settings
-    from database.firestore_session import FirestoreSessionService
     from web.session_loader import try_load_latest_discovery_state
 
-    settings = get_settings()
-    try:
-        session_service = FirestoreSessionService()
-    except Exception:
+    service = _session_service()
+    if service is None:
         return CareerEngineState(reference_date=today)
     return try_load_latest_discovery_state(
-        session_service,
-        app_name=settings.app_name,
+        service,
+        app_name=get_settings().app_name,
         user_id=user_id,
         reference_date=today,
     )
@@ -128,12 +136,84 @@ def main() -> None:
     render_dashboard(view, st=st)
 
 
+def _jump_grill_to_entry(*, user_id: str, entry_id: str) -> None:
+    """Pin the grill onto a chosen experience, then switch to the Grill view (4C)."""
+    from config import get_settings
+    from web.portfolio_store import set_grill_frontier
+
+    service = _session_service()
+    if service is not None:
+        try:
+            set_grill_frontier(
+                service, app_name=get_settings().app_name, user_id=user_id, entry_id=entry_id
+            )
+        except Exception:
+            st.warning("Couldn't focus that experience just now — starting a grill from the top.")
+    st.session_state["view"] = "grill"
+
+
+def _render_add_experience_form(*, user_id: str, today: str) -> None:
+    """Form to add a remembered experience/project into the timeline (4D)."""
+    from config import get_settings
+    from schema import ExperienceType
+    from web.portfolio_store import add_manual_entry
+
+    type_values = [t.value for t in ExperienceType]
+    with st.expander("Add an experience or project"):
+        st.caption(
+            "Spent years somewhere with more projects than your résumé shows? Add one "
+            "here and grill it into a quantified achievement."
+        )
+        with st.form("add_experience", clear_on_submit=True):
+            title = st.text_input("Title", placeholder="e.g. Re-architected the billing pipeline")
+            org = st.text_input("Organisation", placeholder="e.g. same employer as the role")
+            experience_type = st.selectbox(
+                "Type", type_values, index=type_values.index(ExperienceType.PROJECT.value)
+            )
+            start_date = st.text_input("Start (YYYY or YYYY-MM)", placeholder="2019")
+            end_date = st.text_input("End (blank = present)", placeholder="2021")
+            notes = st.text_area("Notes / existing bullets (one per line)")
+            submitted = st.form_submit_button("Add to my portfolio")
+
+        if submitted:
+            if not title.strip():
+                st.warning("Give the experience a title so it can be grilled.")
+                return
+            service = _session_service()
+            if service is None:
+                st.error("Couldn't reach your workspace to save this — please try again.")
+                return
+            try:
+                add_manual_entry(
+                    service,
+                    app_name=get_settings().app_name,
+                    user_id=user_id,
+                    reference_date=today,
+                    title=title,
+                    org=org,
+                    experience_type=ExperienceType(experience_type),
+                    start_date=start_date,
+                    end_date=end_date,
+                    bullets=notes.splitlines(),
+                )
+            except Exception:
+                st.error("Couldn't save that just now — please try again.")
+                return
+            st.success(f"Added “{title.strip()}”. It's in your portfolio and ready to grill.")
+            st.rerun()
+
+
 def _render_portfolio(*, user_id: str, today: str) -> None:
-    """Read-only Portfolio view: the experience timeline + per-entry STAR stories."""
+    """Read-only Portfolio view + steer/add controls (4B/4C/4D)."""
     from web.portfolio import build_portfolio_view, render_portfolio
 
     state = _load_discovery_state(user_id=user_id, today=today)
-    render_portfolio(build_portfolio_view(state), st=st)
+
+    def _grill_entry(entry_id: str) -> None:
+        _jump_grill_to_entry(user_id=user_id, entry_id=entry_id)
+
+    render_portfolio(build_portfolio_view(state), st=st, on_grill_entry=_grill_entry)
+    _render_add_experience_form(user_id=user_id, today=today)
 
 
 def _render_tailor(*, user_id: str) -> None:
