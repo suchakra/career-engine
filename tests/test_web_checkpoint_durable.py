@@ -3,18 +3,20 @@
 A user reported the web checkpoint re-appearing after 'Looks right — keep going'.
 The graph resolution + flag persistence were suspected. This proves the exact web
 path — `DiscoverySession.confirm_checkpoint()` (patch checkpoint_verified=True →
-run a turn) — advances CHECKPOINT → GRILLING and clears the checkpoint when backed
-by `FirestoreSessionService` (the append_event override persists each turn), i.e.
-identically to the in-memory service.
+run a turn) — advances CHECKPOINT → GRILLING and clears the checkpoint under BOTH
+InMemorySessionService and FirestoreSessionService (the append_event override
+persists each turn), i.e. identically to the in-memory service.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import cast
 
 import pytest
 from google.adk.sessions import BaseSessionService, InMemorySessionService
 
+import workflows.nodes as nodes
 from cli import session as session_helpers
 from cli.app import DiscoverySession
 from config import AccessMode
@@ -23,9 +25,16 @@ from integration.model_client import GeminiModelClient
 from schema import CareerEngineState, Entry, EntryStatus, PhaseStatus
 from tests.fakes import FakeFirestoreClient
 from tests.test_integration import ScriptedNodeClient
-from workflows.nodes import set_model_client_factory
 
 _APP, _UID, _SID = "career-engine", "u", "web-u"
+
+
+@pytest.fixture(autouse=True)
+def _restore_model_client_factory() -> Iterator[None]:
+    """Restore the global node model-client factory so this test doesn't leak into others."""
+    original = nodes._client_factory
+    yield
+    nodes._client_factory = original
 
 
 def _services() -> list[BaseSessionService]:
@@ -37,9 +46,6 @@ def _services() -> list[BaseSessionService]:
 
 @pytest.mark.parametrize("svc", _services(), ids=["in_memory", "firestore"])
 async def test_confirm_checkpoint_advances_to_grilling(svc: BaseSessionService) -> None:
-    set_model_client_factory(
-        lambda: ScriptedNodeClient(responses={"summarizing progress": "Recap. Accurate?"})
-    )
     pending = Entry(
         title="Leadership Role", start_date="2021", status=EntryStatus.NEEDS_QUANTIFYING
     )
@@ -57,12 +63,13 @@ async def test_confirm_checkpoint_advances_to_grilling(svc: BaseSessionService) 
             question_count=5,
         ),
     )
+    # DiscoverySession installs this client into the workflow nodes itself (via
+    # _install_model_client), so a scripted node client is all we need here.
+    client = ScriptedNodeClient(responses={"summarizing progress": "Recap. Accurate?"})
     session = DiscoverySession(
         user_id=_UID,
         access_mode=AccessMode.BYOK,
-        # The node model client is installed via the factory above; DiscoverySession
-        # only needs an object satisfying the type here (duck-typed in the graph).
-        model_client=cast(GeminiModelClient, ScriptedNodeClient(responses={})),
+        model_client=cast(GeminiModelClient, client),
         session_service=svc,
         app_name=_APP,
         session_id=_SID,
