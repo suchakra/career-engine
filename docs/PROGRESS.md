@@ -17,7 +17,8 @@ Last updated: **2026-07-02** — *Phase 2 COMPLETE; contract now **v2.3.0** (tag
 | Phase 1.5 — Resume-aware + progressive discovery | ✅ | All five pieces built (contract v2.0.0, tag `contract-v2.0.0`, 317 tests). CORE (CONTRACT+GRILL+METRICS) Sonnet-built/Opus-reviewed/merged; INGEST + DISCOVERY Opus-built this session + Sonnet-reviewed PASS. Stale-docstring (#9) resolved. Deferred integration items (resume-file CLI wiring, full session-resume, discovery_turn in main graph) tracked in [HANDOFF.md](HANDOFF.md). |
 | Phase 1.7 — Integration closure (deferred Phase-1 work) | ✅ | 1.7-A resume-file CLI wiring, 1.7-B true session resume (load-before-create), 1.7-C discovery_turn graph edge (contract **v2.1.0**, additive `coverage_confirmed`), 1.7-D FakeFirestore→`tests/fakes.py`. 339 tests. Sonnet PASS + Copilot PASS; **tagged `contract-v2.1.0`, pushed.** 3 optional non-blocking polish items in [REVIEW.md](REVIEW.md) deferred to Phase 2. |
 | Phase 2 — Web / Infra / Async | ✅ | **All workstreams built & Sonnet-reviewed PASS (381 tests), tagged `contract-v2.2.0`, pushed.** 2C infra + contract v2.2.0 + 2D sweep + 2A dashboard + UserWorkspace Firestore repo + 2B web-auth bootstrap + 2E capstone runbook/skill. Deferred thin wiring (streamlit discovery-state load, sweep HTTP endpoint, terraform devcontainer dep) tracked in [HANDOFF.md](HANDOFF.md). Gate is Sonnet-only (Copilot out). |
-| Phase 3 — Hardening / Eval | ⬜ | |
+| Phase 3 — Hardening / Eval | ✅ | Queue COMPLETE (PRs #1–#6): user-simulator eval, security review, observability, CoT/Pro-escalation gate (v2.3.0), Phase-2 deferred wiring, capstone dry-run. Detail below. |
+| Phase 4 — Portfolio Workbench | ⬜ | Groomed & ready ([GROOMING.md](GROOMING.md) Phase 4; [ARCHITECTURE.md §14](ARCHITECTURE.md); D10). 4A sidebar nav · 4B portfolio view · 4C steerable grill · 4D add-experience seam — all **no contract change**; 4E highlight (deferred, +minor). Not started. |
 
 ---
 
@@ -111,6 +112,19 @@ Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.
 ---
 
 ## Decisions log (append-only)
+- 2026-07-04 — **D10 — Phase 4 "Portfolio Workbench" scoped & groomed.** Make the persisted portfolio
+  visible/navigable/steerable in the web app: 4A sidebar nav (repurpose the empty left panel), 4B
+  read-only Portfolio view (experience tree + per-entry recorded StarStories), 4C steerable grill (pin
+  `grill_frontier` to a chosen `entry_id`), 4D add-experience manually via a tested portfolio-mutation
+  seam (long-tenure breadth fix). **Key finding:** the persisted `CareerEngineState` already holds all
+  the data (`work_timeline`, `entry_id`-linked stories, jumpable frontier, `source="manual"`) → 4A–4D
+  need **no contract change**. Only deferred 4E (`Entry.highlighted`) bumps the contract (additive minor).
+  Spec: [ARCHITECTURE.md §14](ARCHITECTURE.md); builds: [GROOMING.md](GROOMING.md) Phase 4.
+- 2026-07-04 — Live-app fixes (PR #14, deployed): async Firestore client (`get_firestore_async_client`)
+  for the workspace/session stores (the sync client failed on `await` → "couldn't reach your saved
+  workspace"); reverted Cloud Run `concurrency=1` to the module default (it starved Streamlit's asset/
+  websocket loads → "Rate exceeded" / "Failed to fetch module"). Single-user isolation now rests on
+  `max_instances=1` + the (tracked) session-isolation work, not concurrency=1.
 - 2026-06-28 — D1–D7 locked (see [REFINED_PROJECT_PLAN.md §1](REFINED_PROJECT_PLAN.md)).
 - 2026-06-28 — Dropped Gemini 1.5 (legacy) and `tenant_id = SHA-256(key)`; adopted Identity Platform + Capability Registry.
 - 2026-06-28 — Build process: **Sonnet builds + tests, Opus reviews + gates**. No self-declared "done"; only an Opus PASS ticks this file. Builders run in `isolation: "worktree"`.

@@ -21,6 +21,7 @@
 | D7 | **Strict Pydantic + JSON contracts, versioned** | All boundaries typed; `CONTRACT_VERSION` stamped on every doc/message. |
 | D8 (2026-06-29) | **Resume-aware, role-based, progressive discovery** (Phase 1.5, contract v2.0.0) | Vision ingest of existing resumes; `work_timeline` of entries **replaces** pillar `active_gaps`; the gap = more entries; nudge-based (NOT gated) readiness over a trailing-5-yr window + backward-chronological return loop. See [ARCHITECTURE.md §12](ARCHITECTURE.md). |
 | D9 (2026-06-29) | **Capstone-deliverable discipline** (Google X Kaggle 5-day intensive) | Prioritize a demoable end-to-end slice, reproducible setup/gates, and evidence artifacts over speculative scope. Phase 1.7 closes integration seams before broad Phase 2 fan-out. |
+| D10 (2026-07-04) | **Portfolio Workbench** (Phase 4) — surface + steer the gathered data | The web app makes the persisted portfolio **visible** (experience tree + per-entry recorded stories), **navigable** (sidebar), and **user-steerable** (add a project; jump the grill to a chosen experience). Reads existing `CareerEngineState`; needs **no contract change** for 4A–4D (only deferred 4E `highlight` bumps the contract). See [ARCHITECTURE.md §14](ARCHITECTURE.md). |
 
 ---
 
@@ -107,6 +108,31 @@ is reproducible in one scripted runbook.
 - Monitoring/logging dashboards for graph hangs
 - Security review (key handling, IAM least-privilege, injection in scraper/PDF)
 - CoT prompt tuning to push Flash-Lite coverage; measure Pro-escalation rate
+
+### Phase 4 — Portfolio Workbench  *(PARALLEL-ish; UI-forward; mostly no contract change)*
+Full spec in [ARCHITECTURE.md §14](ARCHITECTURE.md); groomed build prompts in
+[GROOMING.md](GROOMING.md) Phase 4. Make the gathered career data visible, navigable, and steerable in
+the web app. Ordered so each slice is independently shippable:
+- **4A — Sidebar navigation shell.** Repurpose the empty left panel into persistent nav
+  (Dashboard / Portfolio / Grill / Tailor) + identity/sign-out + a compact applications list. Pure UI;
+  no schema/contract change. Quick win against the "bothersome empty panel."
+- **4B — Portfolio view (peruse recorded details).** Read-only view over the persisted discovery state:
+  `work_timeline` as an experience tree; select an `Entry` → its recorded `StarStory`s (grouped by
+  `entry_id`), status, and bullets. New pure helper `stories_by_entry`; no contract change.
+- **4C — Steerable grill (jump to an experience).** "Grill me about this" pins `grill_frontier` to the
+  chosen `entry_id` before the next turn (jumpable frontier already honored by the router). Lets the user
+  override reverse-chronological order. No contract change.
+- **4D — Add an experience/project manually.** UI to add an `Entry` (`source="manual"`, e.g. a `PROJECT`
+  under an existing org) into `work_timeline`, persisted so it shows in the tree and is immediately
+  grillable — the long-tenure breadth fix. Introduces the tested **portfolio-mutation seam** (AD-14.2).
+  No contract change.
+- **4E — (DEFERRED) Highlight/pin an experience for tailoring priority.** Add `Entry.highlighted`; the
+  tailor prioritizes highlighted stories. The ONE item needing a contract bump (additive minor). Build
+  only when asked ("maybe some day").
+
+**Exit criteria:** from the deployed web app a user can navigate via the sidebar, open the Portfolio view
+and read what was recorded per experience, add a remembered project under a long tenure, and start a grill
+targeted at that specific experience — without any contract break for 4A–4D.
 
 ### Phase N — opportunistic value-adds (wanted; NOT v1-blocking; build when feasible)
 - **Outcome learning (positive-reinforcement)** ([ARCHITECTURE.md §8.1](ARCHITECTURE.md)): async-learn,

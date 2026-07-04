@@ -1,9 +1,10 @@
 # CareerEngine — System Architecture
 
 > Status: **active** (design truth for shipped + upcoming work).
-> Last reviewed: 2026-06-29.
+> Last reviewed: 2026-07-04.
 > Build status is **not** canonical here — see [PROGRESS.md](PROGRESS.md). For orientation, Phase 0 +
-> Phase 1 are built & merged (contract v1.1.0); Phase 1.5 (contract v2.0.0) is spec'd in §12.
+> Phase 1 + Phase 1.5 (contract v2.0.0, §12) + Phase 2 (web/infra/async) are built & deployed;
+> Phase 4 (Portfolio Workbench) is spec'd in §14 and groomed but not yet built.
 > Decisions captured in [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md).
 
 CareerEngine converts raw, multi-decade career histories into quantified, STAR-formatted
@@ -475,3 +476,60 @@ Captured so the vision is recorded; explicitly **deferred** — do not build in 
   answers, the agent gives feedback. Reuses the conversational/grilling machinery + the user's portfolio
   (for behavioral/STAR answers), the web-search tool, and the existing application tracking / Pending
   Action surface (§8). Uses the user's key; same privacy posture. **Distant future, not v1.**
+
+---
+
+## 14. Portfolio Workbench (Phase 4) — visible, navigable, user-steerable career data
+
+> Status: **active** design for upcoming work. Motivated by live web use (2026-07-04):
+> the left panel is mostly empty; reverse-chronological discovery under-captures depth at long
+> tenures; and the user cannot see what the system has recorded about them. Grooming/build specs
+> live in [GROOMING.md](GROOMING.md) Phase 4; status in [PROGRESS.md](PROGRESS.md).
+
+### 14.1 The problem (from real use)
+- **Wasted navigation space.** The Streamlit sidebar holds only "signed in / sign out"; the main view
+  is a single scrolling column. There is no way to move between the workspace, the recorded portfolio,
+  a grill, and the tailor except via buttons that reset the view.
+- **Long-tenure blindness.** Discovery walks `work_timeline` newest-first and grills entry-by-entry. A
+  person who spent seven years at one org appears as **one** entry — a handful of bullets that cannot
+  represent the plethora of distinct projects done there. The user remembers more, but there is no way
+  to add a project and steer the grill onto it.
+- **No portfolio mirror.** Everything the grill extracts (`StarStory` per `entry_id`) is persisted but
+  never shown back. The user cannot review, trust, or correct what has been recorded.
+
+### 14.2 Key insight — the model already supports this
+The persisted discovery session (`CareerEngineState`, read via `web/session_loader.py`) is already the
+**portfolio of record**. No new storage or contract change is needed for the read/steer features:
+- `work_timeline: list[Entry]` **is** the experience tree. A long tenure is represented by additional
+  `Entry` rows (e.g. one `FULL_TIME` + several `PROJECT` entries sharing an `org`), each independently
+  grillable.
+- `Entry.source == "manual"` already models a user-added project — the schema anticipated this.
+- `StarStory.entry_id` links every recorded achievement to its `Entry` → grouping stories by entry is a
+  pure helper, no persistence change.
+- `grill_frontier` is documented **jumpable**: "setting it explicitly targets that entry next." Steering
+  the grill onto a chosen experience is a frontier write the router already honors — no new routing.
+
+### 14.3 Design decisions
+- **AD-14.1 — Session state is the portfolio of record.** The web app reads `work_timeline` +
+  `extracted_star_stories` directly from the persisted `CareerEngineState` for all navigation and
+  per-entry views. We do **not** duplicate portfolio content into `UserWorkspace` (which stays scoped to
+  applications + pending actions). Single source of truth; no sync problem.
+- **AD-14.2 — All manual portfolio edits go through a thin, tested mutation seam.** Adding/editing an
+  `Entry` and setting `grill_frontier` are **read-modify-write** operations on the persisted session
+  state, mirroring the async-bridge pattern in `session_loader`/`workspace_store` (sync façade over an
+  async client, stamped with `CONTRACT_VERSION`, no secrets). The UI **never** writes session state ad
+  hoc — it calls the seam. Keeps identity/contract discipline and keeps the write path unit-testable
+  without Streamlit.
+- **AD-14.3 — `grill_frontier` is the steering mechanism.** "Grill me about this experience" sets the
+  frontier to the chosen `entry_id` before the next grill turn; the existing router advances from there.
+  No new graph edges.
+- **AD-14.4 — Contract impact.** The sidebar (4A), portfolio view (4B), steerable grill (4C), and manual
+  add (4D) require **no contract change** — they surface and steer existing fields. Only the deferred
+  "highlight/pin an experience for tailoring priority" (4E) adds a field (`Entry.highlighted`), an
+  **additive minor** bump gated behind a `CONTRACT_VERSION` change when it is actually built.
+
+### 14.4 Concurrency caveat (demo posture)
+The mutation seam and a concurrent grill turn both write session state → last-write-wins. Acceptable on
+the single-user demo (`max_instances=1`, one pinned Streamlit session; see [SECURITY.md](SECURITY.md)).
+Multi-user correctness needs the same session-isolation work already tracked for the global model-client
+factory — do not treat the workbench as the thing that introduces the race.

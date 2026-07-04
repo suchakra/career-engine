@@ -1,8 +1,26 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-03)
-**`master` at contract v2.4.0. The web app is DEPLOYED & LIVE on Cloud Run (dev) with real Google login + an interactive BYOK web grill, deployed via keyless GitHub Actions CI/CD (WIF). 439 tests green; `make check` + `make tf-check` + all CI green.**
-- **Live dev URL:** https://career-engine-dev-app-ontyg6kaja-uc.a.run.app (revision 00005). Project `gen-lang-client-0513394764`, region us-central1.
+## 👉 YOU ARE HERE (updated 2026-07-04)
+**`master` at contract v2.4.0. Web app DEPLOYED & LIVE on Cloud Run (dev) with real Google login + interactive BYOK web grill + résumé upload, via keyless GitHub Actions CI/CD (WIF). Tree clean; `make check` + `make tf-check` + CI green.**
+
+**Latest this session:**
+- **Three live bugs fixed & deployed (PR #14):** (a) async Firestore client — the workspace/session
+  stores `await` their client but got the sync `Client` → "Couldn't reach your saved workspace"; fixed
+  with `get_firestore_async_client()`. (b)+(c) Cloud Run `concurrency=1` starved Streamlit → "Rate
+  exceeded" (Tailor) / "Failed to fetch module" (Grill); reverted to the module default (kept
+  `max_instances=1`). Deployed live (HTTP 200). **Re-test the app to confirm the workspace warning is gone.**
+- **Phase 4 "Portfolio Workbench" designed + groomed + ready to build (NOT started).** New product
+  features from live use: repurpose the empty sidebar (nav), a Portfolio view to read what's been
+  recorded per experience, add remembered projects under a long tenure, and steer the grill onto a chosen
+  experience. Key finding: the persisted `CareerEngineState` already holds all the data → 4A–4D need **no
+  contract change**. Spec [ARCHITECTURE.md §14](ARCHITECTURE.md); build prompts [GROOMING.md](GROOMING.md)
+  Phase 4; roadmap D10.
+
+**▶ NEXT ACTION:** build **Phase 4** in order **4A → 4B → 4C → 4D** (4E deferred). Each slice is one PR
+via the standard loop (branch → `make check` → review → PR → merge → `deploy.yml`). Start with 4A (sidebar
+nav shell) — the launchable spec is in [GROOMING.md](GROOMING.md).
+
+- **Live dev URL:** https://career-engine-dev-app-ontyg6kaja-uc.a.run.app. Project `gen-lang-client-0513394764`, region us-central1.
 - **CI/CD (works):** `gh workflow run deploy.yml --ref master -f environment=dev` → keyless WIF → docker build+push → `terraform apply`. State in GCS bucket `gen-lang-client-0513394764-tfstate` (prefix `envs/dev`). Repo *variables* drive it (GCP_PROJECT_ID/WIF_PROVIDER/DEPLOY_SA/TF_STATE_BUCKET/AR_LOCATION/CE_AUTH_*).
 - **What shipped (PR #11 + follow-ups):** Streamlit OIDC login (`st.login`); `web/grill_ui.py` interactive grill (start→Q&A→checkpoint→finalize→PDF); BYOK key set-once in Secret Manager (revoke/replace); Terraform auth wiring + scoped `ce-key-*` IAM + `datastore.user`; single-user isolation (`max_instances=1`, concurrency=1); `docker-entrypoint.sh` writes secrets.toml (json-escaped) from env.
 - **Bootstrap done out-of-band (one-time, NOT in main state):** billing link, OAuth client (Console), `cloudresourcemanager` + `serviceusage` + others enabled, WIF pool/provider `github-pool`/`github-provider` (repo-conditioned), deployer SA `career-engine-deployer`, GCS state bucket. Secret VALUES (`ce-auth-client-secret`, `ce-auth-cookie-secret`, `ce-key-*`) set out-of-band, never in state.

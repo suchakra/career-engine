@@ -20,8 +20,12 @@ Every groomed item below is constrained by the four standing goals:
 
 ## Current launch order
 
-1. Phase 1.7 (integration closure of deferred Phase-1 work).
-2. Phase 2 (web/infra/async fan-out once 1.7 is merged).
+1. ✅ Phase 1.7 (integration closure of deferred Phase-1 work) — merged.
+2. ✅ Phase 2 (web/infra/async) — built, deployed live on Cloud Run (dev).
+3. **▶ Phase 4 — Portfolio Workbench** (see below) — groomed & ready; **next up**. Order 4A→4B→4C→4D
+   (4E deferred). Each slice is an independent PR via the standard branch→check→review→PR→merge→deploy
+   loop in [HANDOFF.md](HANDOFF.md).
+4. Phase 3 (hardening/eval) — not groomed here.
 
 ---
 
@@ -330,6 +334,182 @@ Phase 2 is complete when:
 2. Web + CLI share state consistently.
 3. Pending-action sweep runs on schedule contract.
 4. Capstone runbook and evidence bundle are reviewer-friendly and reproducible.
+
+---
+
+## Phase 4 — grooming status (Portfolio Workbench: visible, navigable, steerable data)
+
+Spec: [ARCHITECTURE.md §14](ARCHITECTURE.md). Roadmap: [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md)
+Phase 4 / decision D10. These are **UI-forward** slices over already-persisted state — most need no
+contract change. Builds run as normal PRs (Opus in-context or a Sonnet builder), each green on
+`make check`, reviewed, merged, then deployed via `deploy.yml`.
+
+| WS | Scope | Depends on | Contract | Grooming |
+|----|-------|-----------|----------|----------|
+| 4A | Sidebar navigation shell (repurpose empty left panel) | live web app | none | ✅ Ready |
+| 4B | Portfolio view — experience tree + per-entry recorded stories | 4A shell | none | ✅ Ready |
+| 4C | Steerable grill — "grill me about this" pins `grill_frontier` | 4B (tree UI) | none | ✅ Ready |
+| 4D | Add an experience/project manually (portfolio-mutation seam) | 4B | none | ✅ Ready |
+| 4E | Highlight/pin an experience for tailoring priority (DEFERRED) | 4B/4D | **+minor** | ◐ Draft (deferred) |
+
+### Sequencing for Phase 4
+1. **4A first** — it introduces the sidebar/router shell the other slices hang off of.
+2. **4B** next — the read-only experience tree + per-entry story view (also the surface 4C/4D act on).
+3. **4C and 4D** can follow 4B (4C is a frontier write; 4D adds the mutation seam). Low coupling; either order.
+4. **4E deferred** — build only on explicit request (it's the one contract bump).
+
+Shared read-first for every 4x builder: [ARCHITECTURE.md §14](ARCHITECTURE.md) + §2 (layering: no
+workflow logic in UI) + the current `web/` modules (`streamlit_app.py`, `dashboard.py`, `grill_ui.py`,
+`session_loader.py`) + the Shared preamble & Definition of Done in
+[AGENT_EXECUTION_PROMPT.md](AGENT_EXECUTION_PROMPT.md).
+
+### ✅ 4A — sidebar navigation shell (build first)
+
+```text
+You are WS 4A for CareerEngine. Repurpose the near-empty Streamlit left panel into a persistent
+navigation sidebar for the web app. This is a pure presentation/routing refactor — NO schema, NO
+contract, NO workflow-logic changes.
+
+Stay in: web/streamlit_app.py, web/dashboard.py, and tests. Do NOT touch schema.py/config.py, the graph,
+or the persistence layer.
+
+Scope:
+- Build a persistent st.sidebar with: the signed-in identity + "Sign out" (already present), and a nav
+  control (radio or buttons) that sets st.session_state["view"] among: Dashboard, Portfolio, Grill,
+  Tailor. Keep the existing view-routing keys ("dashboard"/"grill"/"tailor"); add "portfolio" (its view
+  is built in 4B — for 4A a placeholder that says "coming next" is fine).
+- Show a compact tracked-applications list in the sidebar (company — title — status) read from the
+  already-loaded UserWorkspace; empty-state text when none.
+- The nav must not lose in-progress grill state on rerun (only switch the view key; do not clear
+  grill session_state). Selecting the current view is a no-op.
+- Keep the main column uncluttered — move only navigation/identity/app-list into the sidebar.
+
+Acceptance criteria (named tests required — the dashboard/view builders are already tested without a
+real Streamlit; follow that injectable pattern):
+- A nav view-model builder (pure function) returns the correct nav items + active view given
+  session_state; unit-tested without Streamlit.
+- The applications-list view-model renders company/title/status from a fixture UserWorkspace, and shows
+  the empty-state string when there are no applications.
+- Switching nav updates the view key and does not mutate grill/tailor session_state.
+
+DoD:
+- make check green. No workflow logic in the UI. No contract change.
+- Report READY FOR REVIEW with criterion->test map.
+```
+
+### ✅ 4B — portfolio view (peruse recorded details per experience)
+
+```text
+You are WS 4B for CareerEngine. Add a read-only "Portfolio" view that shows the user what has been
+recorded about them, per experience. Reads the persisted discovery state only — NO contract change.
+
+Stay in: web/streamlit_app.py (route the "portfolio" view), a new web/portfolio.py (view-model +
+injectable renderer, mirroring web/dashboard.py), a small pure helper (e.g. stories_by_entry in
+schema.py's helper region OR web/portfolio.py), web/session_loader.py (reuse; extend only if needed),
+and tests.
+
+Scope:
+- Load the user's latest CareerEngineState via web.session_loader.try_load_latest_discovery_state.
+- Render work_timeline as an experience tree/list (newest first), each Entry showing title, org, dates,
+  type, and status (documented / needs_quantifying / grilled / summarized / skipped).
+- Selecting an Entry shows: its recorded StarStory items (grouped by StarStory.entry_id == Entry.entry_id),
+  each story's situation/task/action/result + a "metric validated" indicator; and the Entry's existing
+  bullets. Entries with no stories yet show a clear "not grilled yet" state.
+- Pure view-model built and unit-tested WITHOUT Streamlit (follow build_dashboard_view). The Streamlit
+  renderer is a thin pass-through.
+- Best-effort/non-fatal: a load failure shows an empty portfolio, never crashes (session_loader already
+  swallows backend errors).
+
+Acceptance criteria (named tests required):
+- stories_by_entry groups stories correctly by entry_id and ignores/creates-empty for entries with none.
+- The portfolio view-model lists entries with their status and attaches the right stories to each entry
+  from a fixture CareerEngineState.
+- An entry with zero linked stories yields the "not grilled yet" marker in the view-model.
+- Empty/failed state yields an empty-but-valid view-model (no exception).
+
+DoD:
+- make check green. No contract change. No workflow logic in UI.
+- Report READY FOR REVIEW with criterion->test map.
+```
+
+### ✅ 4C — steerable grill (jump the grill to a chosen experience)
+
+```text
+You are WS 4C for CareerEngine. Let the user steer the grill onto a specific experience instead of the
+reverse-chronological default. grill_frontier is already documented jumpable and honored by the router —
+this slice sets it before the next grill turn. NO contract change, NO new graph edges.
+
+Stay in: web/portfolio.py (or web/grill_ui.py) for the "Grill me about this" action, web/streamlit_app.py
+routing, and a small tested write path to set grill_frontier on the persisted session (extend the
+portfolio-mutation seam from 4D if it lands first, else add a minimal set_grill_frontier(session_id,
+entry_id) helper using FirestoreSessionService with the same asyncio.run sync bridge as session_loader),
+and tests.
+
+Scope:
+- In the Portfolio experience tree (4B), each entry gets a "Grill me about this" action.
+- The action sets grill_frontier = that entry's entry_id on the user's latest session state (persisted),
+  then routes to the grill view so the next turn targets that entry.
+- If no session exists yet, fall back to starting a fresh grill seeded so that entry is the frontier.
+- Do not change one-node-per-run semantics or the checkpoint brake.
+
+Acceptance criteria (named tests required):
+- Setting the frontier writes grill_frontier = entry_id to the loaded state and it survives a reload
+  (use the fakes in tests/fakes.py — no live Firestore).
+- After a frontier jump, the next grill turn targets the chosen entry (assert via the existing
+  graph/router tests or a focused unit test of the frontier-selection logic).
+- No-session case starts a clean grill without raising.
+
+DoD:
+- make check green. No contract change.
+- Report READY FOR REVIEW with criterion->test map.
+```
+
+### ✅ 4D — add an experience/project manually (portfolio-mutation seam)
+
+```text
+You are WS 4D for CareerEngine. Let a user add a remembered project/experience (the long-tenure breadth
+fix) so it appears in the tree and is immediately grillable. The model already supports this
+(Entry.source == "manual"); introduce the reusable, tested portfolio-mutation seam (ARCHITECTURE
+AD-14.2). NO contract change.
+
+Stay in: a new database/portfolio_mutations.py (or web/portfolio_store.py) for the read-modify-write
+seam, web/portfolio.py for the "Add experience" form + wiring, web/streamlit_app.py routing, and tests.
+Do NOT write session state ad hoc from the UI — go through the seam.
+
+Scope:
+- Seam: a sync façade (asyncio.run bridge, like session_loader/workspace_store) that loads the user's
+  latest session state, appends/edits an Entry, stamps CONTRACT_VERSION, and saves via
+  FirestoreSessionService. If no session exists, create one seeded with the new Entry.
+- UI: an "Add experience" form capturing title, org, type (ExperienceType), start/end date, optional
+  bullets. New entries are source="manual", status=NEEDS_QUANTIFYING.
+- After add, the entry shows in the 4B tree and can be grilled (pairs naturally with 4C's jump action).
+- Guard: reject empty title; dates optional; no secrets ever enter the Entry.
+
+Acceptance criteria (named tests required — use tests/fakes.py, no live Firestore):
+- add_manual_entry appends an Entry with source="manual" and the given fields to work_timeline and it
+  survives a reload.
+- Adding when no prior session exists creates a session containing exactly that entry.
+- The saved document is stamped with CONTRACT_VERSION and carries no secret fields.
+- Concurrent-write posture is documented (last-write-wins on the single-user demo — see AD-14.4);
+  no correctness test required beyond single-writer.
+
+DoD:
+- make check green. No contract change.
+- Report READY FOR REVIEW with criterion->test map.
+```
+
+### ◐ 4E — highlight/pin an experience (DEFERRED — needs a contract bump)
+
+Not launchable yet. When requested: add `Entry.highlighted: bool` (additive → minor `CONTRACT_VERSION`
+bump + tag), surface a pin toggle in the 4B tree, and have the tailor node prefer highlighted stories.
+Groom fully (files + named tests + the version-bump note) at build time, per the version-gate rule.
+
+### Phase 4 exit gate
+
+Phase 4 (4A–4D) is complete when, on the deployed dev app, a user can: navigate via the sidebar; open
+Portfolio and read the STAR stories recorded per experience; add a remembered project under a long
+tenure; and launch a grill targeted at a chosen experience — all with `make check` green and **no
+contract break**.
 
 ---
 
