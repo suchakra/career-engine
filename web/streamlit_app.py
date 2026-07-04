@@ -96,12 +96,21 @@ def main() -> None:
         return
 
     today = date.today().isoformat()  # the one wall-clock read, at the boundary
+
+    # Load the workspace once — the sidebar (applications list) and the dashboard
+    # both read it, so we avoid a double Firestore round-trip per rerun.
+    workspace = _load_workspace(user_id)
+    view_name = st.session_state.get("view", "dashboard")
+
     with st.sidebar:
+        from web.navigation import build_sidebar_view, render_sidebar
+
         st.caption(f"Signed in as {st.user.get('email') or user_id}")
         st.button("Sign out", on_click=st.logout)
+        st.divider()
+        render_sidebar(build_sidebar_view(workspace, active_view=view_name), st=st)
 
-    # View routing — the dashboard buttons set st.session_state["view"].
-    view_name = st.session_state.get("view", "dashboard")
+    # View routing — sidebar + dashboard buttons set st.session_state["view"].
     if view_name == "grill":
         from web.grill_ui import render_grill
 
@@ -110,11 +119,23 @@ def main() -> None:
     if view_name == "tailor":
         _render_tailor(user_id=user_id)
         return
+    if view_name == "portfolio":
+        _render_portfolio(user_id=user_id)
+        return
 
-    workspace = _load_workspace(user_id)
     state = _load_discovery_state(user_id=user_id, today=today)
     view = build_dashboard_view(state, workspace, today=today)
     render_dashboard(view, st=st)
+
+
+def _render_portfolio(*, user_id: str) -> None:
+    """Placeholder Portfolio view — the read-only experience tree lands in 4B."""
+    st.title("Your portfolio")
+    st.info(
+        "A view of everything recorded about you — your experiences and the STAR "
+        "stories grilled out of each — is coming next. For now, use **Grill** to add "
+        "detail and **Dashboard** to see progress."
+    )
 
 
 def _render_tailor(*, user_id: str) -> None:
