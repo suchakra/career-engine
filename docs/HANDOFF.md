@@ -4,9 +4,15 @@
 **`master` at contract v2.4.0. Web app DEPLOYED & LIVE on Cloud Run (dev): real Google login + interactive BYOK web grill + résumé upload + Portfolio Workbench (sidebar nav, portfolio view, add-experience, steerable grill), via keyless GitHub Actions CI/CD (WIF). 467 tests; tree clean; `make check` + `make tf-check` + CI green.**
 
 **Latest this session:**
+- **DURABLE WEB SESSIONS (data-loss root cause fixed):** the web grill was on `InMemorySessionService`
+  (RAM only) AND `FirestoreSessionService` never persisted per-turn `append_event` deltas → grilling was
+  never durable. Fixed: `append_event` override persists each turn; grill now uses `FirestoreSessionService`
+  under a stable per-user id (`web_session_id`) with resume-on-load; portfolio seam shares that canonical
+  id. No contract change (469 tests; regression test proves the persist). Older in-memory data is
+  unrecoverable (was never written); new grilling persists + resumes. (PR pending — see below.)
 - **Live bugs fixed & deployed (PR #14):** async Firestore client (`get_firestore_async_client`) →
   fixes "Couldn't reach your saved workspace"; reverted Cloud Run `concurrency=1` → fixes "Rate
-  exceeded"/"Failed to fetch module". **Re-test to confirm the workspace warning is gone.**
+  exceeded"/"Failed to fetch module".
 - **Phase 4 "Portfolio Workbench" SHIPPED & deployed (PRs #15/#16/#17, 467 tests, no contract change):**
   - **4A** sidebar nav (`web/navigation.py`) — the empty left panel is now Dashboard/Portfolio/Grill/
     Tailor nav + a compact applications list.

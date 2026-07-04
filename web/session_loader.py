@@ -24,6 +24,16 @@ from schema import CareerEngineState
 _log = logging.getLogger("career_engine.web")
 
 
+def web_session_id(user_id: str) -> str:
+    """The canonical, stable discovery-session id for a web user (one per user).
+
+    Deterministic so the grill (write path), the Portfolio view (read path), and
+    the add-experience seam all address the SAME durable session — the user keeps
+    building one resumable portfolio instead of spawning orphaned sessions.
+    """
+    return f"web-{user_id}"
+
+
 async def _aload_latest_discovery_state(
     session_service: BaseSessionService,
     *,
