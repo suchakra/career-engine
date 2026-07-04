@@ -137,7 +137,7 @@ def main() -> None:
         render_grill(user_id=user_id)
         return
     if view_name == "tailor":
-        _render_tailor(user_id=user_id)
+        _render_tailor(user_id=user_id, today=today)
         return
     if view_name == "portfolio":
         _render_portfolio(user_id=user_id, today=today)
@@ -223,16 +223,96 @@ def _render_portfolio(*, user_id: str, today: str) -> None:
     _render_add_experience_form(user_id=user_id, today=today)
 
 
-def _render_tailor(*, user_id: str) -> None:
-    """Placeholder tailor view — web tailor is a follow-up; the CLI works today."""
-    if st.button("← Dashboard"):
-        st.session_state["view"] = "dashboard"
-        st.rerun()
+def _resolve_byok_key(user_id: str) -> str | None:
+    """Return the user's BYOK Gemini key: session cache → Secret Manager (set once)."""
+    key = st.session_state.get("grill_key")
+    if key:
+        return str(key)
+    try:
+        from auth.key_vault import SecretManagerKeyVault
+
+        vault = SecretManagerKeyVault()
+        if vault.key_exists(user_id):
+            fetched = vault.fetch_key(user_id)
+            st.session_state["grill_key"] = fetched
+            return fetched
+    except Exception:
+        pass
+    return None
+
+
+def _render_tailor(*, user_id: str, today: str) -> None:
+    """Tailor the user's portfolio to a pasted job description (produce + download)."""
+    from cli.app import _install_model_client
+    from integration.model_client import GeminiModelClient, ModelAPIError
+    from web.tailor import build_tailored_resume_json, parse_tailored, tailored_to_markdown
+
     st.title("Tailor a résumé")
-    st.info(
-        "Tailoring a completed résumé to a job description is available via the CLI today "
-        "(`career-engine tailor <session-id> <jd>`); the in-app tailor flow is a follow-up. "
-        "Finish a **Grill Me** session first to build your master résumé."
+    key = _resolve_byok_key(user_id)
+    if not key:
+        st.info(
+            "Tailoring runs on **your Gemini key** — add it once in **Grill Me** "
+            "(sidebar → Grill), then come back here."
+        )
+        return
+
+    st.caption(
+        "Paste a job description — we select and reframe your strongest grilled "
+        "achievements for this role. (Stronger results the more you've grilled; "
+        "tailoring is never blocked.)"
+    )
+    jd = st.text_area("Job description", height=220, placeholder="Paste the JD text here…")
+    if st.button("Tailor my résumé", type="primary"):
+        if not jd.strip():
+            st.warning("Paste a job description to tailor against.")
+        else:
+            state = _load_discovery_state(user_id=user_id, today=today)
+            client = GeminiModelClient(api_key=key)
+            _install_model_client(client)
+            try:
+                with st.spinner("Tailoring to this role…"):
+                    st.session_state["tailor_result"] = build_tailored_resume_json(
+                        state, jd.strip(), client=client
+                    )
+            except ModelAPIError as exc:
+                st.error(f"Couldn't tailor just now: {exc}")
+
+    result = st.session_state.get("tailor_result")
+    if not result:
+        return
+    tailored = parse_tailored(result)
+    if tailored.is_empty:
+        st.warning(
+            "Nothing to tailor yet — grill a few experiences first (so there are "
+            "quantified achievements to select from), then try again."
+        )
+        return
+
+    st.divider()
+    if tailored.summary:
+        st.subheader("Summary")
+        st.write(tailored.summary)
+    st.subheader("Selected achievements")
+    for a in tailored.achievements:
+        st.markdown(f"**{a.headline}**")
+        if a.full_text:
+            st.write(a.full_text)
+        if a.relevance_note:
+            st.caption(f"Why it fits this role: {a.relevance_note}")
+
+    md = tailored_to_markdown(tailored)
+    c1, c2 = st.columns(2)
+    c1.download_button(
+        "⬇️ Download (Markdown)",
+        data=md,
+        file_name="tailored_resume.md",
+        mime="text/markdown",
+    )
+    c2.download_button(
+        "⬇️ Download (JSON)",
+        data=result,
+        file_name="tailored_resume.json",
+        mime="application/json",
     )
 
 
