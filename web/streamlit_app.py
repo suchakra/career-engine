@@ -120,7 +120,7 @@ def main() -> None:
         _render_tailor(user_id=user_id)
         return
     if view_name == "portfolio":
-        _render_portfolio(user_id=user_id)
+        _render_portfolio(user_id=user_id, today=today)
         return
 
     state = _load_discovery_state(user_id=user_id, today=today)
@@ -128,14 +128,12 @@ def main() -> None:
     render_dashboard(view, st=st)
 
 
-def _render_portfolio(*, user_id: str) -> None:
-    """Placeholder Portfolio view — the read-only experience tree lands in 4B."""
-    st.title("Your portfolio")
-    st.info(
-        "A view of everything recorded about you — your experiences and the STAR "
-        "stories grilled out of each — is coming next. For now, use **Grill** to add "
-        "detail and **Dashboard** to see progress."
-    )
+def _render_portfolio(*, user_id: str, today: str) -> None:
+    """Read-only Portfolio view: the experience timeline + per-entry STAR stories."""
+    from web.portfolio import build_portfolio_view, render_portfolio
+
+    state = _load_discovery_state(user_id=user_id, today=today)
+    render_portfolio(build_portfolio_view(state), st=st)
 
 
 def _render_tailor(*, user_id: str) -> None:
