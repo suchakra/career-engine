@@ -178,15 +178,26 @@ def _frontier_label(state: CareerEngineState) -> str:
     return " · ".join(parts)
 
 
+_TRANSCRIPT_MAX_MESSAGES = 40  # keep the recent tail (bounds Firestore doc size)
+_TRANSCRIPT_MAX_CHARS = 2000  # per message (a pasted wall of text can't bloat the doc)
+
+
 def _persist_transcript(user_id: str) -> None:
-    """Persist the chat transcript into the durable session (best-effort).
+    """Persist a BOUNDED chat transcript into the durable session (best-effort).
 
     Stored under a non-contract ADK session-state key so a returning user sees
-    prior context on resume. Never blocks a turn — a failure is swallowed.
+    prior context on resume. The transcript shares the session document, so it is
+    capped (recent tail + per-message length) to stay well under Firestore's 1 MiB
+    doc limit — an unbounded transcript could otherwise fail core workflow writes.
+    Persisted as plain [role, text] lists (Firestore-safe). Never blocks a turn.
     """
     transcript = st.session_state.get("grill_transcript", [])
+    bounded = [
+        [str(role), str(text)[:_TRANSCRIPT_MAX_CHARS]]
+        for role, text in transcript[-_TRANSCRIPT_MAX_MESSAGES:]
+    ]
     try:
-        run_async(session_helpers.patch_state(**_grill_ids(user_id), _ui_transcript=transcript))
+        run_async(session_helpers.patch_state(**_grill_ids(user_id), _ui_transcript=bounded))
     except Exception:
         pass
 
