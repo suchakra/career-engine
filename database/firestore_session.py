@@ -43,7 +43,9 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Any
+from datetime import datetime
+from enum import Enum
+from typing import Any, cast
 
 from google.adk.events import Event
 from google.adk.sessions import BaseSessionService, Session
@@ -210,6 +212,30 @@ class FirestoreSessionService(BaseSessionService):
             .collection("sessions")
         )
 
+    @staticmethod
+    def _firestore_safe(value: Any) -> Any:
+        """Recursively coerce a value to Firestore-storable types.
+
+        The workflow writes state via ``model_dump()`` (Python mode), so session
+        state can carry raw ``UUID`` / ``datetime`` / ``Enum`` objects (e.g. an
+        ``Entry.entry_id``). Firestore's client rejects those ("Cannot convert to a
+        Firestore Value", ``Invalid type``). They round-trip back to the right
+        types on read via ``CareerEngineState.model_validate``, so stringifying
+        here is safe and lossless. (In-memory services never hit this because they
+        don't serialize.)
+        """
+        if isinstance(value, dict):
+            return {k: FirestoreSessionService._firestore_safe(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [FirestoreSessionService._firestore_safe(v) for v in value]
+        if isinstance(value, uuid.UUID):
+            return str(value)
+        if isinstance(value, datetime):
+            return value.isoformat()
+        if isinstance(value, Enum):
+            return value.value
+        return value
+
     def _build_session_document(
         self,
         app_name: str,
@@ -253,15 +279,22 @@ class FirestoreSessionService(BaseSessionService):
             k: v for k, v in session_state.items() if k != "career_engine_state"
         }
 
-        return {
-            "contract_version": CONTRACT_VERSION,
-            "app_name": app_name,
-            "user_id": user_id,
-            "session_id": session_id,
-            "last_update_time": last_update_time,
-            "career_engine_state": career_engine_state_dict,
-            "session_state": other_state,
-        }
+        # Coerce to Firestore-storable types — session state written by the
+        # workflow (Python-mode model_dump) may hold raw UUID/datetime/Enum objects.
+        return cast(
+            "dict[str, Any]",
+            self._firestore_safe(
+                {
+                    "contract_version": CONTRACT_VERSION,
+                    "app_name": app_name,
+                    "user_id": user_id,
+                    "session_id": session_id,
+                    "last_update_time": last_update_time,
+                    "career_engine_state": career_engine_state_dict,
+                    "session_state": other_state,
+                }
+            ),
+        )
 
     def _session_from_doc(self, doc_data: dict[str, Any]) -> Session:
         """Reconstruct an ADK Session from a Firestore document dict.
