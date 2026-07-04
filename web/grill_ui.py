@@ -27,7 +27,7 @@ from datetime import date
 from typing import Any
 
 import streamlit as st
-from google.adk.sessions import BaseSessionService
+from google.adk.sessions import BaseSessionService, InMemorySessionService
 
 from auth.key_vault import SecretManagerKeyVault
 from cli.app import (
@@ -38,6 +38,7 @@ from cli.app import (
     guess_resume_mime,
 )
 from config import AccessMode, get_settings
+from database.firestore_session import ContractVersionError
 from integration.model_client import GeminiModelClient, ModelAPIError
 from schema import Entry, PhaseStatus
 from web.session_loader import web_session_id
@@ -204,8 +205,16 @@ def _try_resume(user_id: str) -> None:
     session = _discovery_session(user_id, client)
     try:
         state = asyncio.run(session.resume_state())
+    except ContractVersionError:
+        st.warning(
+            "Your saved session was created by an incompatible version and can't be "
+            "resumed. You can start a new one below."
+        )
+        return
     except Exception:
-        return  # unreachable backend / no session → fall through to seeding UI
+        # Backend hiccup — don't crash; make the failure visible and let it retry.
+        st.warning("Couldn't load your saved session just now — you can keep going or retry.")
+        return
     if state is None or not (state.work_timeline or state.question_count):
         return  # nothing meaningful to resume
 
@@ -387,6 +396,14 @@ def render_grill(*, user_id: str) -> None:
             st.rerun()
     else:
         st.caption("🔑 Using your Gemini key (this session only — couldn't persist).")
+
+    # Durability guard: if storage fell back to in-memory, grilling won't be saved
+    # or resumable — say so plainly rather than silently losing progress later.
+    if isinstance(_grill_session_service(), InMemorySessionService):
+        st.warning(
+            "⚠️ Saved storage is unavailable right now, so this grill **won't be saved "
+            "or resumable** — your progress may be lost if you leave. Try again shortly."
+        )
 
     # ── Resume a durable session across reruns / restarts / redeploys ─────────
     # If we have the key but no live session object in this browser session, try
