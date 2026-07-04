@@ -138,6 +138,12 @@ banner above. After that, Phase 2 proceeds per
 - Launch as Sonnet builders in worktrees, fan-out where files are disjoint.
 
 ## Process (how we work — keep doing this)
+**Use the [`ship-change`](../skills/ship-change/SKILL.md) skill for every code change** — it encodes
+this whole loop (branch → gate → dual review → merge → deploy → verify) so it runs the same way each
+time, and its `scripts/deploy_and_verify.sh` automates the merge+deploy+verify tail. Use the sibling
+[`wait-for-pr-review`](../skills/wait-for-pr-review/SKILL.md) skill to block for Copilot's review instead
+of hand-rolling a poll loop.
+
 **The standard per-change loop (every code change goes through this):**
 1. **Opus builds** the change in-context on a fresh branch (`fix/…`, `feat/…`).
 2. **`make check` green** (ruff + mypy --strict + pytest) — plus `make tf-check` for infra.
