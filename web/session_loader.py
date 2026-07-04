@@ -24,6 +24,16 @@ from schema import CareerEngineState
 _log = logging.getLogger("career_engine.web")
 
 
+def web_session_id(user_id: str) -> str:
+    """The canonical, stable discovery-session id for a web user (one per user).
+
+    Deterministic so the grill (write path), the Portfolio view (read path), and
+    the add-experience seam all address the SAME durable session — the user keeps
+    building one resumable portfolio instead of spawning orphaned sessions.
+    """
+    return f"web-{user_id}"
+
+
 async def _aload_latest_discovery_state(
     session_service: BaseSessionService,
     *,
@@ -34,17 +44,24 @@ async def _aload_latest_discovery_state(
     """Async core: read the user's most-recent session state, or an empty state."""
     empty = CareerEngineState(reference_date=reference_date)
 
-    response = await session_service.list_sessions(app_name=app_name, user_id=user_id)
-    sessions = list(getattr(response, "sessions", []) or [])
-    if not sessions:
-        return empty
-
-    # list_sessions may return lightweight sessions (no state); fetch the newest
-    # by last_update_time and read its full state.
-    latest = max(sessions, key=lambda s: s.last_update_time or 0.0)
+    # Prefer the canonical per-user session — the exact one the web grill + the
+    # add-experience seam write — so the read (meter / Portfolio) can never diverge
+    # from the write path. Fall back to the most-recent session only if the
+    # canonical one doesn't exist (e.g. legacy/other sessions).
     full = await session_service.get_session(
-        app_name=app_name, user_id=user_id, session_id=latest.id
+        app_name=app_name, user_id=user_id, session_id=web_session_id(user_id)
     )
+    if full is None:
+        response = await session_service.list_sessions(app_name=app_name, user_id=user_id)
+        sessions = list(getattr(response, "sessions", []) or [])
+        if not sessions:
+            return empty
+        # list_sessions may return lightweight sessions (no state); fetch the newest
+        # by last_update_time and read its full state.
+        latest = max(sessions, key=lambda s: s.last_update_time or 0.0)
+        full = await session_service.get_session(
+            app_name=app_name, user_id=user_id, session_id=latest.id
+        )
     if full is None or not full.state:
         return empty
     # CareerEngineState fields live FLAT at the top level of session.state (see

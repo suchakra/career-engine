@@ -112,6 +112,17 @@ Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.
 ---
 
 ## Decisions log (append-only)
+- 2026-07-04 — **Durable web sessions fix (data-loss root cause).** A user's grilling from days
+  earlier wasn't reappearing. Two coupled bugs: (1) the web grill used `InMemorySessionService`
+  (in-process RAM) — nothing reached Firestore, and Cloud Run `min_instances=0` + redeploys wiped it;
+  (2) `FirestoreSessionService` never overrode `append_event`, so even Firestore-backed sessions
+  persisted ONLY `create_session`'s state and silently dropped every turn's `state_delta` on re-read.
+  Fix: override `FirestoreSessionService.append_event` to write post-event state to Firestore
+  (regression test proves it fails without the write); wire the web grill to `FirestoreSessionService`
+  under a **stable per-user session id** (`web.session_loader.web_session_id`, app_name aligned with the
+  readers) with **resume-on-load**; and point the portfolio-mutation seam at that same canonical id so
+  grill + Portfolio + add-experience share ONE resumable session. No contract change (469 tests). The
+  older in-memory data is unrecoverable (never persisted); going forward grilling is durable + resumes.
 - 2026-07-04 — **Phase 4 (4A–4D) SHIPPED & deployed** (PRs #15/#16/#17, 467 tests, no contract
   change). 4A sidebar nav (`web/navigation.py`); 4B read-only Portfolio view (`web/portfolio.py` —
   experience tree + per-entry StarStories via `stories_by_entry`); 4C+4D portfolio-mutation seam

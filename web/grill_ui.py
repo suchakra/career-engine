@@ -5,9 +5,13 @@ rendered as a Streamlit chat. Bring-your-own-key (BYOK): the user pastes their o
 Gemini API key so grilling runs on THEIR quota (no shared platform key, no
 free-tier bottleneck) — consistent with the privacy-first design (ARCHITECTURE §5).
 
-State lives in ``st.session_state`` (per browser session): the live
-``DiscoverySession`` (in-memory ADK session service), the transcript, the current
-question / checkpoint, and the BYOK key (session-only, never persisted).
+Persistence: the discovery session is backed by ``FirestoreSessionService`` under a
+STABLE per-user session id (:func:`web.session_loader.web_session_id`), so grilling
+is durable — it survives reruns, restarts, and redeploys, shows up in the Portfolio
+view + progress meter (which read the same session), and resumes where the user left
+off. Transient UI bits (the live ``DiscoverySession`` object, the chat transcript,
+the current question, the BYOK key) live in ``st.session_state``; the key is never
+persisted to the session (BYOK stays in Secret Manager only).
 
 Note: the discovery nodes resolve their model client from a process-global factory
 (``workflows.nodes``), so this UI targets ONE user per server instance — fine for
@@ -20,7 +24,7 @@ import asyncio
 import pathlib
 import tempfile
 from datetime import date
-from typing import Any, cast
+from typing import Any
 
 import streamlit as st
 from google.adk.sessions import BaseSessionService, InMemorySessionService
@@ -30,11 +34,14 @@ from cli.app import (
     DiscoverySession,
     TurnResult,
     _install_model_client,
+    build_session_service,
     guess_resume_mime,
 )
-from config import AccessMode
+from config import AccessMode, get_settings
+from database.firestore_session import ContractVersionError
 from integration.model_client import GeminiModelClient, ModelAPIError
-from schema import Entry
+from schema import Entry, PhaseStatus
+from web.session_loader import web_session_id
 
 _MAX_AUTO_TURNS = 6  # bound the non-interactive drive to finalize
 _METRIC_NUDGE = (
@@ -117,26 +124,48 @@ def _apply_turn(turn: TurnResult) -> None:
     ss["grill_question"] = turn.next_question or _METRIC_NUDGE
 
 
+@st.cache_resource(show_spinner=False)
+def _grill_session_service() -> BaseSessionService:
+    """Cached Firestore-backed session service (identity-agnostic → safe to share).
+
+    Cached across reruns so the grill doesn't churn a new async Firestore client on
+    every interaction / resume attempt. ``build_session_service`` falls back to
+    in-memory (LOUD on stderr) only if Firestore is unreachable.
+    """
+    return build_session_service(use_firestore=True)
+
+
+def _discovery_session(user_id: str, client: GeminiModelClient) -> DiscoverySession:
+    """Build a DiscoverySession backed by durable Firestore state (stable per-user id).
+
+    FREE routes grilling to Flash (cheap) even on the user's own key — BYOK here
+    means "your quota", not "unlock Pro". The app_name + session_id match what the
+    Portfolio view / progress meter / add-experience seam read, so it's ONE
+    resumable session per user.
+    """
+    return DiscoverySession(
+        user_id=user_id,
+        access_mode=AccessMode.FREE,
+        model_client=client,
+        session_service=_grill_session_service(),
+        app_name=get_settings().app_name,
+        session_id=web_session_id(user_id),
+    )
+
+
 def _start_session(
     user_id: str, history: str, work_timeline: list[Entry] | None = None
 ) -> None:
     """Create a DiscoverySession on the BYOK key and run the opening turn.
 
     ``work_timeline`` seeds pre-parsed entries (résumé vision ingest) instead of
-    parsing ``history`` text.
+    parsing ``history`` text. ``start`` is last-write-wins on the stable session id,
+    so this cleanly (re)starts a fresh durable session.
     """
     ss = st.session_state
+    ss.pop("grill_start_fresh", None)  # committing to a new session
     client = GeminiModelClient(api_key=ss["grill_key"])
-    svc = cast(BaseSessionService, InMemorySessionService())  # type: ignore[no-untyped-call]
-    session = DiscoverySession(
-        user_id=user_id,
-        # Deliberate: FREE routes grilling to Flash (cheap) even though we run on the
-        # user's own key — BYOK here means "your quota", not "unlock Pro". BYOK→Pro
-        # would cost materially more; Flash+CoT is the design's baseline.
-        access_mode=AccessMode.FREE,
-        model_client=client,
-        session_service=svc,
-    )
+    session = _discovery_session(user_id, client)
     try:
         with st.spinner("Reading your history and preparing the first question…"):
             question = asyncio.run(
@@ -158,6 +187,52 @@ def _start_session(
     ss["grill_complete"] = False
     ss["grill_started"] = True
     st.rerun()
+
+
+def _try_resume(user_id: str) -> None:
+    """Rebuild the durable session from Firestore and restore the UI (if one exists).
+
+    Called when there's no live DiscoverySession in this browser session (fresh
+    tab, restart, or redeploy). The grilling STATE lives in Firestore, so we
+    reconstruct the (cheap) session object and re-derive what to show. A brand-new
+    user with no prior session is a no-op → the seeding UI is shown.
+    """
+    ss = st.session_state
+    key = ss.get("grill_key")
+    if not key:
+        return
+    client = GeminiModelClient(api_key=key)
+    session = _discovery_session(user_id, client)
+    try:
+        state = asyncio.run(session.resume_state())
+    except ContractVersionError:
+        st.warning(
+            "Your saved session was created by an incompatible version and can't be "
+            "resumed. You can start a new one below."
+        )
+        return
+    except Exception:
+        # Backend hiccup — don't crash; make the failure visible and let it retry.
+        st.warning("Couldn't load your saved session just now — you can keep going or retry.")
+        return
+    if state is None or not (state.work_timeline or state.question_count):
+        return  # nothing meaningful to resume
+
+    ss["grill_client"] = client
+    ss["grill_session"] = session
+    ss.setdefault("grill_transcript", [])
+    ss["grill_started"] = True
+    ss["grill_resumed"] = True
+    if state.current_phase == PhaseStatus.COMPLETE:
+        ss["grill_complete"] = True
+        ss["grill_question"] = ""
+        ss["grill_checkpoint"] = ""
+    elif state.checkpoint_delta_summary and not state.checkpoint_verified:
+        ss["grill_checkpoint"] = state.checkpoint_delta_summary
+        ss["grill_question"] = ""
+    else:
+        ss["grill_checkpoint"] = ""
+        ss["grill_question"] = state.current_question or _METRIC_NUDGE
 
 
 def _submit_answer(answer: str) -> None:
@@ -267,10 +342,18 @@ def _revoke_key(user_id: str) -> None:
 
 
 def _reset() -> None:
-    """Clear all grill state (start over)."""
+    """Clear local grill UI state and mark intent to start fresh (non-destructive).
+
+    Keeps the BYOK key (so it needn't be re-entered) and does NOT delete the durable
+    Firestore session — the existing portfolio stays intact until the user actually
+    starts a new grill, which overwrites it (last-write-wins on the stable id).
+    ``grill_start_fresh`` suppresses auto-resume so the seeding UI is shown.
+    """
+    keep = {"grill_key", "grill_key_persisted"}
     for k in list(st.session_state.keys()):
-        if isinstance(k, str) and k.startswith("grill_"):
+        if isinstance(k, str) and k.startswith("grill_") and k not in keep:
             del st.session_state[k]
+    st.session_state["grill_start_fresh"] = True
 
 
 def render_grill(*, user_id: str) -> None:
@@ -314,6 +397,24 @@ def render_grill(*, user_id: str) -> None:
     else:
         st.caption("🔑 Using your Gemini key (this session only — couldn't persist).")
 
+    # Durability guard: if storage fell back to in-memory, grilling won't be saved
+    # or resumable — say so plainly rather than silently losing progress later.
+    if isinstance(_grill_session_service(), InMemorySessionService):
+        st.warning(
+            "⚠️ Saved storage is unavailable right now, so this grill **won't be saved "
+            "or resumable** — your progress may be lost if you leave. Try again shortly."
+        )
+
+    # ── Resume a durable session across reruns / restarts / redeploys ─────────
+    # If we have the key but no live session object in this browser session, try
+    # to rebuild it from Firestore. Skipped right after "Restart" (grill_start_fresh).
+    if (
+        "grill_session" not in ss
+        and not ss.get("grill_started")
+        and not ss.get("grill_start_fresh")
+    ):
+        _try_resume(user_id)
+
     # ── Step 2: seed from a résumé upload OR pasted history ───────────────────
     if not ss.get("grill_started"):
         st.write("**Start from your résumé** (vision-parsed), or paste your history below.")
@@ -345,6 +446,9 @@ def render_grill(*, user_id: str) -> None:
 
     # ── Step 3: the conversation ──────────────────────────────────────────────
     _install_model_client(ss["grill_client"])  # ensure nodes use this user's key
+
+    if ss.pop("grill_resumed", False) and not ss.get("grill_transcript"):
+        st.caption("↩︎ Picked up your saved session where you left off.")
 
     for role, text in ss.get("grill_transcript", []):
         with st.chat_message("assistant" if role == "agent" else "user"):

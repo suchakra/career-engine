@@ -16,7 +16,9 @@ ADK 2.0 session model:
       get_session(app_name, user_id, session_id, config)   -> Session | None
       list_sessions(app_name, user_id)                     -> ListSessionsResponse
       delete_session(app_name, user_id, session_id)        -> None
-    append_event() has a default implementation in the base class.
+    append_event() is OVERRIDDEN here: the base implementation only mutates the
+    in-memory session, so a Firestore service must persist the post-event state
+    itself or every turn after create_session would be lost on the next read.
 
     The ADK Session object (google.adk.sessions.Session) carries 'state' as a
     plain dict[str, Any].  CareerEngineState is serialised in / out via
@@ -43,6 +45,7 @@ import time
 import uuid
 from typing import Any
 
+from google.adk.events import Event
 from google.adk.sessions import BaseSessionService, Session
 from google.adk.sessions.base_session_service import GetSessionConfig, ListSessionsResponse
 
@@ -331,6 +334,38 @@ class FirestoreSessionService(BaseSessionService):
         await doc_ref.set(doc_data)
 
         return self._session_from_doc(doc_data)
+
+    async def append_event(self, session: Session, event: Event) -> Event:
+        """Apply an event to the session AND persist the new state to Firestore.
+
+        CRITICAL: the base ``BaseSessionService.append_event`` only mutates the
+        in-memory ``session`` object — it does NOT write to the backing store. For
+        an in-memory service that's fine (``get_session`` returns the same live
+        object), but a Firestore-backed service that inherited the base behavior
+        would persist ONLY the initial ``create_session`` state and silently lose
+        every subsequent turn's ``state_delta`` (grill answers, extracted stories,
+        frontier advances) on the next ``get_session`` re-read from Firestore.
+
+        This override applies the delta in-memory via ``super()`` and then writes
+        the updated session state back so each turn is durable — the behavior the
+        web grill + CLI resume rely on. No secret is ever written (the document
+        builder persists only ``CareerEngineState`` + ADK-internal state keys).
+        """
+        event = await super().append_event(session=session, event=event)
+        if event.partial:
+            return event  # streaming partials carry no committed state delta
+
+        now = time.time()
+        session.last_update_time = now
+        doc_data = self._build_session_document(
+            app_name=session.app_name,
+            user_id=session.user_id,
+            session_id=session.id,
+            session_state=session.state,
+            last_update_time=now,
+        )
+        await self._session_doc_ref(session.app_name, session.user_id, session.id).set(doc_data)
+        return event
 
     async def get_session(
         self,

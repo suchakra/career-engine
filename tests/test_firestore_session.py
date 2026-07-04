@@ -246,6 +246,81 @@ class TestRoundTrip:
         assert restored.question_count == 9
 
 
+class TestAppendEventPersists:
+    """append_event must WRITE the post-event state to Firestore (not just memory).
+
+    Regression for the durable-web-sessions fix: the base BaseSessionService only
+    mutates the in-memory session, so a Firestore service that inherited it would
+    persist ONLY create_session's state and drop every turn's delta on re-read.
+    """
+
+    async def test_state_delta_survives_reread(
+        self, service: FirestoreSessionService
+    ) -> None:
+        """A delta appended after create_session is visible on a fresh get_session."""
+        from google.adk.events import Event, EventActions
+
+        # Create with FLAT state (how DiscoverySession / cli.session persist).
+        ces = CareerEngineState(current_phase=PhaseStatus.GRILLING, question_count=1)
+        await service.create_session(
+            app_name="career-engine",
+            user_id="user-turn",
+            state=ces.model_dump(mode="json"),
+            session_id="sess-turn",
+        )
+        session = await service.get_session(
+            app_name="career-engine", user_id="user-turn", session_id="sess-turn"
+        )
+        assert session is not None
+
+        # Simulate a grill turn committing new state.
+        event = Event(
+            author="user",
+            actions=EventActions(
+                state_delta={"question_count": 7, "current_question": "How many?"}
+            ),
+        )
+        await service.append_event(session, event)
+
+        # Re-read from the store (NOT the in-memory object) — the delta must persist.
+        reloaded = await service.get_session(
+            app_name="career-engine", user_id="user-turn", session_id="sess-turn"
+        )
+        assert reloaded is not None
+        state = CareerEngineState.model_validate(reloaded.state)
+        assert state.question_count == 7
+        assert state.current_question == "How many?"
+
+    async def test_partial_event_not_persisted(
+        self, service: FirestoreSessionService
+    ) -> None:
+        """A partial (streaming) event carries no committed delta and is a no-op write."""
+        from google.adk.events import Event, EventActions
+
+        await service.create_session(
+            app_name="career-engine",
+            user_id="user-partial",
+            state=CareerEngineState(question_count=3).model_dump(mode="json"),
+            session_id="sess-partial",
+        )
+        session = await service.get_session(
+            app_name="career-engine", user_id="user-partial", session_id="sess-partial"
+        )
+        assert session is not None
+        event = Event(
+            author="user",
+            partial=True,
+            actions=EventActions(state_delta={"question_count": 99}),
+        )
+        await service.append_event(session, event)
+
+        reloaded = await service.get_session(
+            app_name="career-engine", user_id="user-partial", session_id="sess-partial"
+        )
+        assert reloaded is not None
+        assert CareerEngineState.model_validate(reloaded.state).question_count == 3
+
+
 # ── AC-2: Keyed by user_id; no API key in docs ───────────────────────────────
 
 

@@ -81,6 +81,23 @@ class TestLoadLatestDiscoveryState:
         # The meter view uses TODAY, not the persisted (older) reference_date.
         assert state.reference_date == "2026-07-02"
 
+    def test_prefers_canonical_session_over_newer_other(self) -> None:
+        """The canonical per-user session wins even if another session is newer."""
+        from web.session_loader import web_session_id
+
+        canonical = CareerEngineState(question_count=7).model_dump(mode="json")
+        other = CareerEngineState(question_count=99).model_dump(mode="json")
+        svc = _FakeSessionService(
+            [
+                _session(web_session_id(_UID), updated=100.0, state=canonical),
+                _session("other", updated=999.0, state=other),  # newer but not canonical
+            ]
+        )
+        state = load_latest_discovery_state(
+            _svc(svc), app_name=_APP, user_id=_UID, reference_date="2026-07-02"
+        )
+        assert state.question_count == 7  # canonical preferred, not the newer "other"
+
     def test_no_sessions_returns_empty_state(self) -> None:
         state = load_latest_discovery_state(
             _svc(_FakeSessionService([])), app_name=_APP, user_id=_UID, reference_date="2026-07-02"

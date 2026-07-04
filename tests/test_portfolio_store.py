@@ -16,17 +16,19 @@ from google.adk.sessions import BaseSessionService, InMemorySessionService
 from config import CONTRACT_VERSION
 from schema import CareerEngineState, Entry, ExperienceType
 from web.portfolio_store import add_manual_entry, set_grill_frontier
+from web.session_loader import web_session_id
 
 _APP = "career-engine"
 _UID = "user-1"
 _REF = "2026-07-04"
+_SID = web_session_id(_UID)  # the canonical per-user session id the seam targets
 
 
 def _service() -> BaseSessionService:
     return cast(BaseSessionService, InMemorySessionService())  # type: ignore[no-untyped-call]
 
 
-def _seed(service: BaseSessionService, state: CareerEngineState, *, sid: str = "s1") -> None:
+def _seed(service: BaseSessionService, state: CareerEngineState, *, sid: str = _SID) -> None:
     asyncio.run(
         service.create_session(
             app_name=_APP, user_id=_UID, session_id=sid, state=state.model_dump(mode="json")

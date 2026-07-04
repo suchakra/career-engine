@@ -21,34 +21,17 @@ running loop, so we bridge with ``asyncio.run`` (same pattern as
 from __future__ import annotations
 
 import asyncio
-from uuid import uuid4
 
 from google.adk.events import Event, EventActions
 from google.adk.sessions import BaseSessionService
 
+from cli import session as session_helpers
 from config import CONTRACT_VERSION
 from schema import CareerEngineState, Entry, EntryStatus, ExperienceType
+from web.session_loader import web_session_id
 
 
-async def _resolve_latest_session(
-    session_service: BaseSessionService, *, app_name: str, user_id: str
-) -> tuple[str, CareerEngineState] | None:
-    """Return the (session_id, state) of the user's newest session, or None."""
-    response = await session_service.list_sessions(app_name=app_name, user_id=user_id)
-    sessions = list(getattr(response, "sessions", []) or [])
-    if not sessions:
-        return None
-    latest = max(sessions, key=lambda s: s.last_update_time or 0.0)
-    full = await session_service.get_session(
-        app_name=app_name, user_id=user_id, session_id=latest.id
-    )
-    if full is None:
-        return None
-    state = CareerEngineState.model_validate(full.state) if full.state else CareerEngineState()
-    return latest.id, state
-
-
-async def _patch_latest(
+async def _patch_session(
     session_service: BaseSessionService,
     *,
     app_name: str,
@@ -66,26 +49,6 @@ async def _patch_latest(
     await session_service.append_event(session, event)
 
 
-async def _acreate_session_with_entry(
-    session_service: BaseSessionService,
-    *,
-    app_name: str,
-    user_id: str,
-    reference_date: str,
-    entry: Entry,
-) -> str:
-    """Create a fresh session seeded with a single entry; return its session_id."""
-    session_id = uuid4().hex
-    state = CareerEngineState(reference_date=reference_date, work_timeline=[entry])
-    await session_service.create_session(
-        app_name=app_name,
-        user_id=user_id,
-        session_id=session_id,
-        state=state.model_dump(mode="json"),
-    )
-    return session_id
-
-
 async def _aadd_manual_entry(
     session_service: BaseSessionService,
     *,
@@ -94,21 +57,29 @@ async def _aadd_manual_entry(
     reference_date: str,
     entry: Entry,
 ) -> str:
-    """Append a manual entry to the latest session (creating one if none)."""
-    resolved = await _resolve_latest_session(
-        session_service, app_name=app_name, user_id=user_id
+    """Append a manual entry to the user's canonical session (creating it if none).
+
+    Targets the SAME stable session the grill + Portfolio view use, so a manually
+    added experience shows in the tree and is immediately grillable.
+    """
+    session_id = web_session_id(user_id)
+    existing = await session_helpers.get_session_state_if_exists(
+        session_service=session_service,
+        app_name=app_name,
+        user_id=user_id,
+        session_id=session_id,
     )
-    if resolved is None:
-        return await _acreate_session_with_entry(
-            session_service,
+    if existing is None:
+        state = CareerEngineState(reference_date=reference_date, work_timeline=[entry])
+        await session_service.create_session(
             app_name=app_name,
             user_id=user_id,
-            reference_date=reference_date,
-            entry=entry,
+            session_id=session_id,
+            state=state.model_dump(mode="json"),
         )
-    session_id, state = resolved
-    new_timeline = [*state.work_timeline, entry]
-    await _patch_latest(
+        return session_id
+    new_timeline = [*existing.work_timeline, entry]
+    await _patch_session(
         session_service,
         app_name=app_name,
         user_id=user_id,
@@ -128,14 +99,17 @@ async def _aset_grill_frontier(
     user_id: str,
     entry_id: str,
 ) -> str | None:
-    """Pin grill_frontier to entry_id on the latest session; None if no session."""
-    resolved = await _resolve_latest_session(
-        session_service, app_name=app_name, user_id=user_id
+    """Pin grill_frontier to entry_id on the canonical session; None if no session."""
+    session_id = web_session_id(user_id)
+    existing = await session_helpers.get_session_state_if_exists(
+        session_service=session_service,
+        app_name=app_name,
+        user_id=user_id,
+        session_id=session_id,
     )
-    if resolved is None:
+    if existing is None:
         return None
-    session_id, _state = resolved
-    await _patch_latest(
+    await _patch_session(
         session_service,
         app_name=app_name,
         user_id=user_id,
