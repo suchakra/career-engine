@@ -146,16 +146,26 @@ def render_portfolio(view: PortfolioView, *, st: Any) -> None:
             st.caption(meta)
         st.caption(f"Status: {entry.status_label}")
 
+        # Existing resume bullets/notes for this entry (may be present even before
+        # any grilling has produced STAR stories).
+        if entry.bullets:
+            st.caption("From your resume:")
+            for bullet in entry.bullets:
+                st.write(f"• {bullet}")
+
         if entry.not_grilled_yet:
             st.write(f"_{_NOT_GRILLED_TEXT}_")
             continue
 
+        st.caption("Recorded achievements:")
         for story in entry.stories:
             check = "✅" if story.metric_validated else "•"
             st.write(f"{check} {story.result}")
-            detail = " ".join(p for p in (story.situation, story.task, story.action) if p)
-            if detail:
-                st.caption(detail)
+            # Supporting context (we deliberately never surface the STAR labels to
+            # the user — see StarStory docstring), one line per present field.
+            for context in (story.situation, story.task, story.action):
+                if context:
+                    st.caption(context)
 
 
 __all__ = [

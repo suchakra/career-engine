@@ -88,6 +88,18 @@ class TestStoriesByEntry:
     def test_no_stories_yields_empty_map(self) -> None:
         assert stories_by_entry(CareerEngineState()) == {}
 
+    def test_unknown_entry_id_grouped_under_empty_string(self) -> None:
+        """A story with no entry_id groups under '' and attaches to no timeline entry."""
+        e1 = _entry("A")
+        state = CareerEngineState(
+            work_timeline=[e1],
+            extracted_star_stories=[_story("", "orphan achievement")],
+        )
+        grouped = stories_by_entry(state)
+        assert [s.result for s in grouped[""]] == ["orphan achievement"]
+        # The orphan does not attach to the real entry.
+        assert build_portfolio_view(state).entries[0].not_grilled_yet is True
+
 
 class TestBuildPortfolioView:
     """build_portfolio_view attaches the right stories to each entry."""
@@ -143,3 +155,15 @@ class TestRenderPortfolio:
         st = FakeSt()
         render_portfolio(build_portfolio_view(CareerEngineState(work_timeline=[_entry("A")])), st=st)
         assert any("Not grilled yet" in str(w) for w in st.writes)
+
+    def test_existing_bullets_rendered(self) -> None:
+        """An entry's existing resume bullets are shown in the Portfolio view."""
+        entry = Entry(
+            type=ExperienceType.FULL_TIME,
+            title="A",
+            org="Acme",
+            bullets=["Built the thing", "Owned the roadmap"],
+        )
+        st = FakeSt()
+        render_portfolio(build_portfolio_view(CareerEngineState(work_timeline=[entry])), st=st)
+        assert any("Built the thing" in str(w) for w in st.writes)
