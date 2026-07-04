@@ -94,10 +94,12 @@ Status: **REVIEW REQUIRED before GA / real users.** New attack surfaces since th
   (no HTTP route), so it is not reachable via the public URL (the scheduler's daily
   POST 404s). Before the sweep is mounted, split it into a **separate private**
   (`allow_unauthenticated=false`) service so public ingress never fronts it.
-- **Single-user isolation (enforced):** the web grill installs the BYOK model client
-  via a process-global factory, so dev Cloud Run runs `max_instances=1` +
-  concurrency=1 to prevent cross-user key/data bleed. Multi-user needs
-  contextvar/thread-local client isolation (tracked).
+- **Single-user isolation (demo):** the web grill installs the BYOK model client via
+  a process-global factory. Dev Cloud Run runs `max_instances=1` (one server; keeps
+  a user's Streamlit session pinned). Concurrency is left at the default — setting it
+  to 1 broke Streamlit (it needs many concurrent connections). So the multi-user
+  factory race is NOT fully prevented by infra; the demo URL is single-user, and the
+  real fix is contextvar/thread-local client isolation (tracked, required before GA).
 - **CI/CD deployer** — GitHub Actions deploys keyless via Workload Identity
   Federation (no stored keys; the `github-pool` provider is attribute-conditioned
   to `suchakra/career-engine`). The `career-engine-deployer` SA currently holds
