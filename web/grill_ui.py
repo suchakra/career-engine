@@ -20,7 +20,6 @@ the single-user demo (Cloud Run is pinned to one instance).
 
 from __future__ import annotations
 
-import asyncio
 import pathlib
 import tempfile
 from datetime import date
@@ -41,6 +40,7 @@ from config import AccessMode, get_settings
 from database.firestore_session import ContractVersionError
 from integration.model_client import GeminiModelClient, ModelAPIError
 from schema import Entry, PhaseStatus
+from web.async_runner import run_async
 from web.session_loader import web_session_id
 
 _MAX_AUTO_TURNS = 6  # bound the non-interactive drive to finalize
@@ -168,7 +168,7 @@ def _start_session(
     session = _discovery_session(user_id, client)
     try:
         with st.spinner("Reading your history and preparing the first question…"):
-            question = asyncio.run(
+            question = run_async(
                 session.start(
                     history,
                     reference_date=date.today().isoformat(),
@@ -204,7 +204,7 @@ def _try_resume(user_id: str) -> None:
     client = GeminiModelClient(api_key=key)
     session = _discovery_session(user_id, client)
     try:
-        state = asyncio.run(session.resume_state())
+        state = run_async(session.resume_state())
     except ContractVersionError:
         st.warning(
             "Your saved session was created by an incompatible version and can't be "
@@ -243,9 +243,9 @@ def _submit_answer(answer: str) -> None:
     ss["grill_transcript"].append(("user", answer))
     try:
         with st.spinner("Thinking…"):
-            before = asyncio.run(session.current_state())
-            turn = asyncio.run(session.answer(answer))
-            after = asyncio.run(session.current_state())
+            before = run_async(session.current_state())
+            turn = run_async(session.answer(answer))
+            after = run_async(session.current_state())
             # Only auto-advance when the answer was ACCEPTED (a story was committed
             # → the frontier moved on to the next entry / finalize). On a vague answer
             # nothing is committed and the turn carries a probe; advancing here would
@@ -261,7 +261,7 @@ def _submit_answer(answer: str) -> None:
                         or turn.next_question
                     ):
                         break
-                    turn = asyncio.run(session.advance())
+                    turn = run_async(session.advance())
     except ModelAPIError as exc:
         _show_model_error(exc)
         return
@@ -277,7 +277,7 @@ def _confirm_checkpoint() -> None:
     ss["grill_transcript"].append(("user", "Looks right — keep going."))
     try:
         with st.spinner("Continuing…"):
-            question = asyncio.run(session.confirm_checkpoint())
+            question = run_async(session.confirm_checkpoint())
     except ModelAPIError as exc:
         _show_model_error(exc)
         return
@@ -294,7 +294,7 @@ def _offer_pdf() -> None:
         try:
             with st.spinner("Rendering your résumé…"):
                 with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tf:
-                    out = asyncio.run(session.render_resume_pdf(pathlib.Path(tf.name)))
+                    out = run_async(session.render_resume_pdf(pathlib.Path(tf.name)))
                 data = out.read_bytes()
                 out.unlink(missing_ok=True)  # don't orphan the temp file
             st.download_button(
