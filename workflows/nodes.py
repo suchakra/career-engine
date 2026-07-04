@@ -96,11 +96,15 @@ def _default_client_factory() -> ModelClient:
             )
 
         def generate(self, model_id: str, system: str, user: str) -> str:
-            """Call generate_content and return the text response."""
-            response = self._client.models.generate_content(
-                model=model_id,
-                contents=user,
-                config=gtypes.GenerateContentConfig(system_instruction=system),
+            """Call generate_content (retrying transient 5xx) and return the text."""
+            from integration.model_client import _call_with_retry
+
+            response = _call_with_retry(
+                lambda: self._client.models.generate_content(
+                    model=model_id,
+                    contents=user,
+                    config=gtypes.GenerateContentConfig(system_instruction=system),
+                )
             )
             return response.text or ""
 
@@ -303,14 +307,12 @@ def _frontier_sort_key(entry: Entry) -> tuple[int, int, int]:
     current job (the "grilling starts from ancient history" bug). For EDUCATION with
     no end_date we rank by start year instead, so it sits with its actual era.
     """
+    start_year = _parse_year_from_date(entry.start_date) or -1
     if not entry.end_date:
-        if entry.type is ExperienceType.EDUCATION:
-            end_year = _parse_year_from_date(entry.start_date) or -1
-        else:
-            end_year = _PRESENT_SENTINEL_YEAR
+        # EDUCATION with no end date → rank by its start era, not "present".
+        end_year = start_year if entry.type is ExperienceType.EDUCATION else _PRESENT_SENTINEL_YEAR
     else:
         end_year = _parse_year_from_date(entry.end_date) or -1
-    start_year = _parse_year_from_date(entry.start_date) or -1
     return (end_year, _TYPE_WEIGHT.get(entry.type, 1), start_year)
 
 

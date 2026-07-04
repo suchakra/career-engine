@@ -110,13 +110,17 @@ class _RealGenAIClient:
         Raises:
             ScraperError: if the model call fails or returns an empty response.
         """
+        from integration.model_client import _call_with_retry
+
         try:
-            response = self._client.models.generate_content(
-                model=model,
-                contents=prompt,
-                config=self._types.GenerateContentConfig(
-                    system_instruction=system,
-                ),
+            response = _call_with_retry(
+                lambda: self._client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config=self._types.GenerateContentConfig(
+                        system_instruction=system,
+                    ),
+                )
             )
         except Exception as exc:
             raise ScraperError(f"Model call failed: {exc}") from exc
