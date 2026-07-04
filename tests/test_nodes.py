@@ -1383,3 +1383,16 @@ class TestFrontierPrioritization:
         state = CareerEngineState(work_timeline=[degree, job], grill_frontier="")
         picked = nodes._get_frontier_entry(state)
         assert picked is not None and picked.title == "Staff Engineer"
+
+    def test_education_is_summarized_not_metric_grilled(self) -> None:
+        """A certification/course (EDUCATION) is recorded (summarized), NOT queued for
+        job-metric grilling — the 'cert grilled as a job' bug."""
+        cert = self._mk(
+            title="Project Management", type_=ExperienceType.EDUCATION, start="2023", end="2023"
+        )
+        job = self._mk(
+            title="Engineer", type_=ExperienceType.FULL_TIME, start="2022", end=""
+        )
+        nodes._apply_entry_status_rules([cert, job], "2026-06-29")
+        assert cert.status == EntryStatus.SUMMARIZED  # recorded, not grilled for metrics
+        assert job.status == EntryStatus.NEEDS_QUANTIFYING  # real work still grilled

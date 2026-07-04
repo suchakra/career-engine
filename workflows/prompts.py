@@ -222,6 +222,19 @@ research, open-source, leadership (clubs, TA), competitions, and education.
 For education-heavy / early-career resumes, education and projects are
 first-class entries — extract them.
 
+Classify each entry's "type" carefully — a resume is NOT all job experience:
+  - Paid/unpaid WORK with an employer and a role → full_time / part_time /
+    internship.
+  - A degree, diploma, CERTIFICATION, online course, MOOC, bootcamp,
+    specialization, or professional license → education. This holds even when
+    the title contains words like "Project", "Management", or "Engineering", and
+    even when issued by a company (e.g. Google) or a platform/school offering a
+    course (e.g. Coursera, a "University of ..." online specialization). A
+    certification or course has NO employer role — never label it as a job.
+  - Self-built work, capstones, hackathons, side projects → project.
+Entries under a "Certifications", "Courses", "Licenses", or "Education" section
+are education, not employment.
+
 Return ONLY valid JSON.  No markdown, no commentary.
 """
 
