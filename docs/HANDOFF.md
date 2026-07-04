@@ -1,24 +1,27 @@
 # CareerEngine — Session Handoff / Resume Point
 
 ## 👉 YOU ARE HERE (updated 2026-07-04)
-**`master` at contract v2.4.0. Web app DEPLOYED & LIVE on Cloud Run (dev) with real Google login + interactive BYOK web grill + résumé upload, via keyless GitHub Actions CI/CD (WIF). Tree clean; `make check` + `make tf-check` + CI green.**
+**`master` at contract v2.4.0. Web app DEPLOYED & LIVE on Cloud Run (dev): real Google login + interactive BYOK web grill + résumé upload + Portfolio Workbench (sidebar nav, portfolio view, add-experience, steerable grill), via keyless GitHub Actions CI/CD (WIF). 467 tests; tree clean; `make check` + `make tf-check` + CI green.**
 
 **Latest this session:**
-- **Three live bugs fixed & deployed (PR #14):** (a) async Firestore client — the workspace/session
-  stores `await` their client but got the sync `Client` → "Couldn't reach your saved workspace"; fixed
-  with `get_firestore_async_client()`. (b)+(c) Cloud Run `concurrency=1` starved Streamlit → "Rate
-  exceeded" (Tailor) / "Failed to fetch module" (Grill); reverted to the module default (kept
-  `max_instances=1`). Deployed live (HTTP 200). **Re-test the app to confirm the workspace warning is gone.**
-- **Phase 4 "Portfolio Workbench" designed + groomed + ready to build (NOT started).** New product
-  features from live use: repurpose the empty sidebar (nav), a Portfolio view to read what's been
-  recorded per experience, add remembered projects under a long tenure, and steer the grill onto a chosen
-  experience. Key finding: the persisted `CareerEngineState` already holds all the data → 4A–4D need **no
-  contract change**. Spec [ARCHITECTURE.md §14](ARCHITECTURE.md); build prompts [GROOMING.md](GROOMING.md)
-  Phase 4; roadmap D10.
+- **Live bugs fixed & deployed (PR #14):** async Firestore client (`get_firestore_async_client`) →
+  fixes "Couldn't reach your saved workspace"; reverted Cloud Run `concurrency=1` → fixes "Rate
+  exceeded"/"Failed to fetch module". **Re-test to confirm the workspace warning is gone.**
+- **Phase 4 "Portfolio Workbench" SHIPPED & deployed (PRs #15/#16/#17, 467 tests, no contract change):**
+  - **4A** sidebar nav (`web/navigation.py`) — the empty left panel is now Dashboard/Portfolio/Grill/
+    Tailor nav + a compact applications list.
+  - **4B** Portfolio view (`web/portfolio.py`) — read what's recorded per experience: the experience
+    tree + each entry's STAR stories (`stories_by_entry`), status, and bullets.
+  - **4C+4D** portfolio-mutation seam (`web/portfolio_store.py`) — **add a remembered experience/project**
+    (`add_manual_entry`, the long-tenure breadth fix) and **"Grill me about this"** to steer the grill onto
+    a chosen entry (`set_grill_frontier`; jumpable frontier honored by the router).
+  - Spec [ARCHITECTURE.md §14](ARCHITECTURE.md); grooming [GROOMING.md](GROOMING.md) Phase 4; D10.
 
-**▶ NEXT ACTION:** build **Phase 4** in order **4A → 4B → 4C → 4D** (4E deferred). Each slice is one PR
-via the standard loop (branch → `make check` → review → PR → merge → `deploy.yml`). Start with 4A (sidebar
-nav shell) — the launchable spec is in [GROOMING.md](GROOMING.md).
+**▶ NEXT ACTION:** await user direction. Candidates: (a) **4E** — highlight/pin an experience for
+tailoring priority (the one item needing an additive-minor contract bump; groom fully at build time);
+(b) the still-open **web Tailor flow** (placeholder today; CLI works); (c) the pre-GA **/security-review**
+(web login + paid-key storage + deployer-SA breadth, see [SECURITY.md](SECURITY.md)); (d) custom domain
+`career-engine.bitcrafty.cloud`.
 
 - **Live dev URL:** https://career-engine-dev-app-ontyg6kaja-uc.a.run.app. Project `gen-lang-client-0513394764`, region us-central1.
 - **CI/CD (works):** `gh workflow run deploy.yml --ref master -f environment=dev` → keyless WIF → docker build+push → `terraform apply`. State in GCS bucket `gen-lang-client-0513394764-tfstate` (prefix `envs/dev`). Repo *variables* drive it (GCP_PROJECT_ID/WIF_PROVIDER/DEPLOY_SA/TF_STATE_BUCKET/AR_LOCATION/CE_AUTH_*).

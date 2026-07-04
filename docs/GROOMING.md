@@ -22,9 +22,7 @@ Every groomed item below is constrained by the four standing goals:
 
 1. ✅ Phase 1.7 (integration closure of deferred Phase-1 work) — merged.
 2. ✅ Phase 2 (web/infra/async) — built, deployed live on Cloud Run (dev).
-3. **▶ Phase 4 — Portfolio Workbench** (see below) — groomed & ready; **next up**. Order 4A→4B→4C→4D
-   (4E deferred). Each slice is an independent PR via the standard branch→check→review→PR→merge→deploy
-   loop in [HANDOFF.md](HANDOFF.md).
+3. ✅ **Phase 4 — Portfolio Workbench** (4A–4D) — SHIPPED & deployed (PRs #15/#16/#17). 4E deferred.
 4. Phase 3 (hardening/eval) — not groomed here.
 
 ---
@@ -346,11 +344,14 @@ contract change. Builds run as normal PRs (Opus in-context or a Sonnet builder),
 
 | WS | Scope | Depends on | Contract | Grooming |
 |----|-------|-----------|----------|----------|
-| 4A | Sidebar navigation shell (repurpose empty left panel) | live web app | none | ✅ Ready |
-| 4B | Portfolio view — experience tree + per-entry recorded stories | 4A shell | none | ✅ Ready |
-| 4C | Steerable grill — "grill me about this" pins `grill_frontier` | 4B (tree UI) | none | ✅ Ready |
-| 4D | Add an experience/project manually (portfolio-mutation seam) | 4B | none | ✅ Ready |
+| 4A | Sidebar navigation shell (repurpose empty left panel) | live web app | none | ✅✅ SHIPPED (PR #15) |
+| 4B | Portfolio view — experience tree + per-entry recorded stories | 4A shell | none | ✅✅ SHIPPED (PR #16) |
+| 4C | Steerable grill — "grill me about this" pins `grill_frontier` | 4B (tree UI) | none | ✅✅ SHIPPED (PR #17) |
+| 4D | Add an experience/project manually (portfolio-mutation seam) | 4B | none | ✅✅ SHIPPED (PR #17) |
 | 4E | Highlight/pin an experience for tailoring priority (DEFERRED) | 4B/4D | **+minor** | ◐ Draft (deferred) |
+
+> **Status:** 4A–4D built, Copilot-reviewed, merged, and deployed to dev (467 tests, no contract
+> change). 4C+4D shipped together (they share `web/portfolio_store.py`). 4E remains deferred.
 
 ### Sequencing for Phase 4
 1. **4A first** — it introduces the sidebar/router shell the other slices hang off of.

@@ -18,7 +18,7 @@ Last updated: **2026-07-02** — *Phase 2 COMPLETE; contract now **v2.3.0** (tag
 | Phase 1.7 — Integration closure (deferred Phase-1 work) | ✅ | 1.7-A resume-file CLI wiring, 1.7-B true session resume (load-before-create), 1.7-C discovery_turn graph edge (contract **v2.1.0**, additive `coverage_confirmed`), 1.7-D FakeFirestore→`tests/fakes.py`. 339 tests. Sonnet PASS + Copilot PASS; **tagged `contract-v2.1.0`, pushed.** 3 optional non-blocking polish items in [REVIEW.md](REVIEW.md) deferred to Phase 2. |
 | Phase 2 — Web / Infra / Async | ✅ | **All workstreams built & Sonnet-reviewed PASS (381 tests), tagged `contract-v2.2.0`, pushed.** 2C infra + contract v2.2.0 + 2D sweep + 2A dashboard + UserWorkspace Firestore repo + 2B web-auth bootstrap + 2E capstone runbook/skill. Deferred thin wiring (streamlit discovery-state load, sweep HTTP endpoint, terraform devcontainer dep) tracked in [HANDOFF.md](HANDOFF.md). Gate is Sonnet-only (Copilot out). |
 | Phase 3 — Hardening / Eval | ✅ | Queue COMPLETE (PRs #1–#6): user-simulator eval, security review, observability, CoT/Pro-escalation gate (v2.3.0), Phase-2 deferred wiring, capstone dry-run. Detail below. |
-| Phase 4 — Portfolio Workbench | ⬜ | Groomed & ready ([GROOMING.md](GROOMING.md) Phase 4; [ARCHITECTURE.md §14](ARCHITECTURE.md); D10). 4A sidebar nav · 4B portfolio view · 4C steerable grill · 4D add-experience seam — all **no contract change**; 4E highlight (deferred, +minor). Not started. |
+| Phase 4 — Portfolio Workbench | ✅ (4E deferred) | 4A sidebar nav (**PR #15**), 4B portfolio view (**#16**), 4C+4D steerable grill + add-experience seam (**#17**) — all shipped & **deployed** to dev, Copilot-reviewed, **no contract change**. 4E highlight/pin deferred (needs +minor bump). [GROOMING.md](GROOMING.md) Phase 4 / [ARCHITECTURE.md §14](ARCHITECTURE.md) / D10. |
 
 ---
 
@@ -112,6 +112,13 @@ Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.
 ---
 
 ## Decisions log (append-only)
+- 2026-07-04 — **Phase 4 (4A–4D) SHIPPED & deployed** (PRs #15/#16/#17, 467 tests, no contract
+  change). 4A sidebar nav (`web/navigation.py`); 4B read-only Portfolio view (`web/portfolio.py` —
+  experience tree + per-entry StarStories via `stories_by_entry`); 4C+4D portfolio-mutation seam
+  (`web/portfolio_store.py`) — `add_manual_entry` (source="manual" entries; long-tenure breadth fix)
+  + `set_grill_frontier` (jump the grill to a chosen entry). All Copilot-reviewed (4B: render bullets +
+  empty-entry_id test; 4C/4D: cache the session service via `st.cache_resource`). 4E (highlight/pin)
+  remains deferred behind an additive minor bump.
 - 2026-07-04 — **D10 — Phase 4 "Portfolio Workbench" scoped & groomed.** Make the persisted portfolio
   visible/navigable/steerable in the web app: 4A sidebar nav (repurpose the empty left panel), 4B
   read-only Portfolio view (experience tree + per-entry recorded StarStories), 4C steerable grill (pin
