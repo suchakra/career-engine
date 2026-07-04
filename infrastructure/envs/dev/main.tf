@@ -100,7 +100,7 @@ module "cloud_run" {
   service_account_id = "${var.name_prefix}-run"
   image              = var.image
   contract_version   = var.contract_version
-  min_instances = 0
+  min_instances      = 0
   # Single instance keeps a user's Streamlit session (session_state) pinned to one
   # server for the demo. Concurrency stays at the module default — Streamlit needs
   # many concurrent connections (websocket + static assets + reruns), so
