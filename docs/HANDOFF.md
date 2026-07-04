@@ -138,11 +138,24 @@ banner above. After that, Phase 2 proceeds per
 - Launch as Sonnet builders in worktrees, fan-out where files are disjoint.
 
 ## Process (how we work — keep doing this)
-- **Current model (since Phase 1.5 fan-out): Opus builds in-context, Sonnet reviews as the gate.** Chosen
-  for token efficiency on small/coupled work — spawning cold Sonnet worktree builders re-derives context
-  and costs more. Opus builds directly on `master`, commits per workstream (green each), then a Sonnet
-  review agent re-runs all gates + reads the diff and returns PASS / CHANGES REQUESTED. **Copilot was a
-  third independent gate but is out for the month → Sonnet is now the SOLE gate.**
+**The standard per-change loop (every code change goes through this):**
+1. **Opus builds** the change in-context on a fresh branch (`fix/…`, `feat/…`).
+2. **`make check` green** (ruff + mypy --strict + pytest) — plus `make tf-check` for infra.
+3. **Sonnet reviews** the diff as an independent gate (re-runs the gates, reads the diff, returns
+   PASS / CHANGES REQUESTED). Opus does not self-declare done; address CHANGES REQUESTED and re-review.
+   *(For small/surgical changes this may be an Opus self-review; a Sonnet subagent review is the norm
+   for anything non-trivial or state-machine/contract-touching.)*
+4. **PR created** (`gh pr create`), then **Copilot review requested** on the PR
+   (`gh api --method POST repos/{owner}/{repo}/pulls/N/requested_reviewers -f
+   'reviewers[]=copilot-pull-request-reviewer[bot]'`; it surfaces as login `Copilot`).
+5. **Address Copilot comments** (fix + reply), CI green.
+6. **Squash-merge** (`gh pr merge N --squash --delete-branch`).
+7. **Deploy** (`gh workflow run deploy.yml --ref master -f environment=dev`) + verify HTTP 200 live.
+8. **Reconcile docs** in the same session (PROGRESS/HANDOFF/etc.).
+
+So: **Opus builds → Sonnet reviews → PR → Copilot reviews → address → merge → deploy.** Two independent
+review gates (Sonnet + Copilot) plus CI. This whole loop is a strong candidate to become a coded skill
+(see the skills discussion) — it is executed by hand on every change today.
 - **Alternative (large, file-disjoint work): Sonnet builds in worktrees, Opus reviews** (`model: "sonnet"`,
   `isolation: "worktree"`). Use when workstreams are big and don't share files.
 - No agent self-declares done; only a review PASS ticks `docs/PROGRESS.md`. The reviewer independently
