@@ -50,12 +50,24 @@ def _load_workspace(user_id: str) -> UserWorkspace:
         return UserWorkspace()
 
 
-def _session_service() -> Any | None:
-    """Return a FirestoreSessionService, or None if one can't be constructed."""
+@st.cache_resource(show_spinner=False)
+def _build_session_service() -> Any:
+    """Construct a FirestoreSessionService (its async Firestore client is expensive).
+
+    Cached across reruns/sessions so we don't churn a new client per interaction.
+    The service is identity-agnostic — app_name/user_id are passed per call — so a
+    shared instance is safe. A construction failure raises (not cached by
+    cache_resource), so a transient outage isn't pinned forever.
+    """
     from database.firestore_session import FirestoreSessionService
 
+    return FirestoreSessionService()
+
+
+def _session_service() -> Any | None:
+    """Return the cached FirestoreSessionService, or None if it can't be built."""
     try:
-        return FirestoreSessionService()
+        return _build_session_service()
     except Exception:
         return None
 
