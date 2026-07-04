@@ -403,6 +403,8 @@ def _apply_entry_status_rules(entries: list[Entry], reference_date: str) -> None
     Intended for freshly-built entries (just parsed/seeded).  Entries that
     already carry progress (grilled / summarized / skipped) are left untouched,
     so a pre-seeded timeline with prior progress is never silently reset.
+    - EDUCATION (degrees / certifications / courses) → summarized (recorded as
+      context, never deep-grilled for job-style metrics).
     - Soft horizon (end_date > ~15y before reference_date) → summarized.
     - Documented AND already has a metric-bearing bullet → grilled (not re-asked).
     - Otherwise → needs_quantifying.
@@ -410,7 +412,13 @@ def _apply_entry_status_rules(entries: list[Entry], reference_date: str) -> None
     for entry in entries:
         if entry.status in _PROCESSED_STATUSES:
             continue  # preserve existing progress
-        if _is_soft_horizon(entry, reference_date):
+        if entry.type is ExperienceType.EDUCATION:
+            # Degrees / certifications / courses are recorded as context, NOT
+            # deep-grilled for job-style metrics — "how much cost did you save?"
+            # is nonsensical for a course. (Quantifiable work the candidate
+            # actually did should be typed project/research, not education.)
+            entry.status = EntryStatus.SUMMARIZED
+        elif _is_soft_horizon(entry, reference_date):
             entry.status = EntryStatus.SUMMARIZED
         elif entry.status == EntryStatus.DOCUMENTED and _has_metric_bullet(entry):
             entry.status = EntryStatus.GRILLED
