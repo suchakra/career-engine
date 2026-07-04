@@ -1369,3 +1369,17 @@ class TestFrontierPrioritization:
         volunteer = self._mk(title="Volunteer", type_=ExperienceType.OTHER, start="2019", end="2019")
         nxt = nodes._next_frontier([current, prev_job, volunteer], str(current.entry_id))
         assert nxt == str(prev_job.entry_id)
+
+    def test_education_with_empty_end_date_does_not_rank_as_present(self) -> None:
+        """Regression: a degree with an unparsed (empty) end_date must NOT be grilled
+        first over a dated current job — the 'starts from ancient history' bug."""
+        # Résumé parser left the degree's end_date empty; the job has a (stale) end year.
+        degree = self._mk(
+            title="B.Tech (IIT)", type_=ExperienceType.EDUCATION, start="2007", end=""
+        )
+        job = self._mk(
+            title="Staff Engineer", type_=ExperienceType.FULL_TIME, start="2018", end="2021"
+        )
+        state = CareerEngineState(work_timeline=[degree, job], grill_frontier="")
+        picked = nodes._get_frontier_entry(state)
+        assert picked is not None and picked.title == "Staff Engineer"
