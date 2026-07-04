@@ -14,6 +14,7 @@ Same two-layer, UI-logic-only pattern as :mod:`web.dashboard`:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -129,8 +130,22 @@ def build_portfolio_view(state: CareerEngineState) -> PortfolioView:
     return PortfolioView(entries=entries)
 
 
-def render_portfolio(view: PortfolioView, *, st: Any) -> None:
-    """Render the portfolio via an injected ``st``-like module (thin pass-through)."""
+def render_portfolio(
+    view: PortfolioView,
+    *,
+    st: Any,
+    on_grill_entry: Callable[[str], None] | None = None,
+) -> None:
+    """Render the portfolio via an injected ``st``-like module (thin pass-through).
+
+    Args:
+        view: The view-model from :func:`build_portfolio_view`.
+        st: A Streamlit-like module (real ``streamlit`` in the app; a fake in tests).
+        on_grill_entry: Optional callback wired to each entry's "Grill me about
+            this" button; receives the entry_id. The backend frontier-write +
+            view switch live in the caller (``streamlit_app``), keeping this
+            renderer free of persistence logic (4C).
+    """
     st.title("Your portfolio")
 
     if view.is_empty:
@@ -155,17 +170,24 @@ def render_portfolio(view: PortfolioView, *, st: Any) -> None:
 
         if entry.not_grilled_yet:
             st.write(f"_{_NOT_GRILLED_TEXT}_")
-            continue
+        else:
+            st.caption("Recorded achievements:")
+            for story in entry.stories:
+                check = "✅" if story.metric_validated else "•"
+                st.write(f"{check} {story.result}")
+                # Supporting context (we deliberately never surface the STAR labels
+                # to the user — see StarStory docstring), one line per present field.
+                for context in (story.situation, story.task, story.action):
+                    if context:
+                        st.caption(context)
 
-        st.caption("Recorded achievements:")
-        for story in entry.stories:
-            check = "✅" if story.metric_validated else "•"
-            st.write(f"{check} {story.result}")
-            # Supporting context (we deliberately never surface the STAR labels to
-            # the user — see StarStory docstring), one line per present field.
-            for context in (story.situation, story.task, story.action):
-                if context:
-                    st.caption(context)
+        # Steer the grill onto this specific experience (4C).
+        if on_grill_entry is not None:
+            st.button(
+                "Grill me about this",
+                key=f"grill_entry_{entry.entry_id}",
+                on_click=lambda eid=entry.entry_id: on_grill_entry(eid),
+            )
 
 
 __all__ = [

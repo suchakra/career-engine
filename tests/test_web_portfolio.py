@@ -27,6 +27,7 @@ class FakeSt:
         self.writes: list[Any] = []
         self.infos: list[str] = []
         self.dividers = 0
+        self.buttons: list[tuple[str, dict[str, Any]]] = []
 
     def title(self, body: str) -> None:
         self.titles.append(body)
@@ -45,6 +46,9 @@ class FakeSt:
 
     def divider(self) -> None:
         self.dividers += 1
+
+    def button(self, label: str, **kwargs: Any) -> None:
+        self.buttons.append((label, kwargs))
 
 
 def _entry(title: str, status: EntryStatus = EntryStatus.NEEDS_QUANTIFYING) -> Entry:
@@ -167,3 +171,23 @@ class TestRenderPortfolio:
         st = FakeSt()
         render_portfolio(build_portfolio_view(CareerEngineState(work_timeline=[entry])), st=st)
         assert any("Built the thing" in str(w) for w in st.writes)
+
+    def test_grill_me_button_invokes_callback_with_entry_id(self) -> None:
+        """The 'Grill me about this' button calls on_grill_entry with the entry_id (4C)."""
+        e1 = _entry("A")
+        state = CareerEngineState(work_timeline=[e1])
+        seen: list[str] = []
+        st = FakeSt()
+        render_portfolio(
+            build_portfolio_view(state), st=st, on_grill_entry=lambda eid: seen.append(eid)
+        )
+        grill_buttons = [(label, kw) for label, kw in st.buttons if label == "Grill me about this"]
+        assert len(grill_buttons) == 1
+        grill_buttons[0][1]["on_click"]()  # simulate the click
+        assert seen == [str(e1.entry_id)]
+
+    def test_no_grill_button_without_callback(self) -> None:
+        """Without on_grill_entry, no steering button is rendered (pure read view)."""
+        st = FakeSt()
+        render_portfolio(build_portfolio_view(CareerEngineState(work_timeline=[_entry("A")])), st=st)
+        assert st.buttons == []
