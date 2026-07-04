@@ -253,7 +253,10 @@ def _migrate_education_on_resume(user_id: str, state: CareerEngineState) -> Care
 
     migrated = [e.model_copy() for e in state.work_timeline]
     before = [e.status for e in migrated]
-    _apply_entry_status_rules(migrated, date.today().isoformat())
+    # Use the session's injected clock so the migration is stable/idempotent across
+    # days (contract: nodes treat reference_date as "now", never datetime.now()).
+    ref_date = state.reference_date or date.today().isoformat()
+    _apply_entry_status_rules(migrated, ref_date)
     if [e.status for e in migrated] == before and not _frontier_needs_reset(state, migrated):
         return state  # nothing to heal
 
@@ -432,7 +435,6 @@ def _skip_entry(user_id: str) -> None:
     ss = st.session_state
     session: DiscoverySession = ss["grill_session"]
     label = ss.get("grill_entry_label") or "this experience"
-    ss["grill_transcript"].append(("user", f"(skipped {label})"))
     try:
         with st.spinner("Moving on…"):
             state = run_async(session.current_state())
@@ -456,8 +458,10 @@ def _skip_entry(user_id: str) -> None:
             turn = run_async(session.advance())
             ss["grill_entry_label"] = _frontier_label(run_async(session.current_state()))
     except ModelAPIError as exc:
-        _show_model_error(exc)
+        _show_model_error(exc)  # nothing recorded yet → no false "skipped" line to undo
         return
+    # Only record the skip once the state change actually succeeded.
+    ss["grill_transcript"].append(("user", f"(skipped {label})"))
     _apply_turn(turn)
     _persist_transcript(user_id)
     st.rerun()
