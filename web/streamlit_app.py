@@ -224,7 +224,13 @@ def _render_portfolio(*, user_id: str, today: str) -> None:
 
 
 def _resolve_byok_key(user_id: str) -> str | None:
-    """Return the user's BYOK Gemini key: session cache → Secret Manager (set once)."""
+    """Return the user's BYOK Gemini key: session cache → Secret Manager (set once).
+
+    Honors the Grill view's ``grill_force_key_prompt`` flag (set by "Change key") so a
+    key re-entry in progress isn't silently overridden here.
+    """
+    if st.session_state.get("grill_force_key_prompt"):
+        return None
     key = st.session_state.get("grill_key")
     if key:
         return str(key)
@@ -266,6 +272,8 @@ def _render_tailor(*, user_id: str, today: str) -> None:
         if not jd.strip():
             st.warning("Paste a job description to tailor against.")
         else:
+            # Drop any previous result so a failed run can't render a stale résumé.
+            st.session_state.pop("tailor_result", None)
             state = _load_discovery_state(user_id=user_id, today=today)
             client = GeminiModelClient(api_key=key)
             _install_model_client(client)
