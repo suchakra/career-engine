@@ -114,6 +114,25 @@ def get_firestore_client() -> Any:
     return firestore.Client(project=project)
 
 
+def get_firestore_async_client() -> Any:
+    """Return an authenticated async Firestore client (``firestore.AsyncClient``).
+
+    The workspace/session stores ``await`` their client, so they need the ASYNC
+    client — the sync ``Client`` returns non-awaitable snapshots and fails at
+    runtime. Raises ImportError if google-cloud-firestore is not installed.
+    """
+    try:
+        import google.cloud.firestore as firestore
+    except ImportError as exc:
+        raise ImportError(
+            "google-cloud-firestore is required. Run: pip install google-cloud-firestore"
+        ) from exc
+
+    settings = get_settings()
+    project = settings.gcp_project_id or None
+    return firestore.AsyncClient(project=project)
+
+
 def get_secret_manager_client() -> Any:
     """Return an authenticated Secret Manager client (SecretManagerServiceClient).
 

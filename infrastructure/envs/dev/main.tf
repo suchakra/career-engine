@@ -100,12 +100,14 @@ module "cloud_run" {
   service_account_id = "${var.name_prefix}-run"
   image              = var.image
   contract_version   = var.contract_version
-  min_instances      = 0
-  # Single-user isolation: the grill installs the BYOK model client via a
-  # process-global factory, so one instance + one concurrent request per instance
-  # prevents any cross-user key/data bleed. (Multi-user needs contextvar isolation.)
-  max_instances   = 1
-  max_concurrency = 1
+  min_instances = 0
+  # Single instance keeps a user's Streamlit session (session_state) pinned to one
+  # server for the demo. Concurrency stays at the module default — Streamlit needs
+  # many concurrent connections (websocket + static assets + reruns), so
+  # concurrency=1 breaks asset loading ("Rate exceeded"). The multi-user
+  # global-model-client-factory race is a documented, deferred limitation
+  # (SECURITY.md): the demo URL is single-user.
+  max_instances = 1
 
   # Public web app; sign-in is enforced at the app layer (Streamlit OIDC).
   allow_unauthenticated = true

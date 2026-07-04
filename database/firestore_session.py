@@ -46,7 +46,7 @@ from typing import Any
 from google.adk.sessions import BaseSessionService, Session
 from google.adk.sessions.base_session_service import GetSessionConfig, ListSessionsResponse
 
-from config import CONTRACT_VERSION, get_firestore_client
+from config import CONTRACT_VERSION, get_firestore_async_client
 from schema import CareerEngineState
 
 # ── Contract version helpers ──────────────────────────────────────────────────
@@ -157,7 +157,7 @@ class FirestoreSessionService(BaseSessionService):
             client: Optional injected Firestore client (real or in-memory test double).
         """
         self._collection_prefix = collection_prefix
-        self._client: Any = client if client is not None else get_firestore_client()
+        self._client: Any = client if client is not None else get_firestore_async_client()
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 

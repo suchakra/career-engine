@@ -21,7 +21,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from config import CONTRACT_VERSION, get_firestore_client
+from config import CONTRACT_VERSION, get_firestore_async_client
 from database.firestore_session import ContractVersionError, check_version
 from schema import UserWorkspace
 
@@ -45,7 +45,7 @@ class FirestoreWorkspaceStore:
                 in-memory test double). ``None`` → ``get_firestore_client()``.
         """
         self._prefix = collection_prefix
-        self._client: Any = client if client is not None else get_firestore_client()
+        self._client: Any = client if client is not None else get_firestore_async_client()
 
     # ── Firestore refs ────────────────────────────────────────────────────────
 
