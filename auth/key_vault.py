@@ -17,12 +17,19 @@ Design rules (enforced by tests):
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from google.api_core import exceptions as gcp_exceptions
 
 from auth.provider import KeyVault, KeyVaultError
 from config import get_secret_manager_client, get_settings
+
+# Secret Manager secret ids must match [A-Za-z0-9_-] (max 255 chars total). The
+# user_id is the OIDC ``sub`` (Google issues a numeric subject), but validate it
+# defensively so a malformed/hostile subject can never produce an unexpected or
+# path-like secret id — the value is used to build a cloud resource name.
+_USER_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,200}$")
 
 
 class SecretManagerKeyVault(KeyVault):
@@ -54,7 +61,17 @@ class SecretManagerKeyVault(KeyVault):
         return f"projects/{project}"
 
     def _secret_id(self, user_id: str) -> str:
-        """Return the secret resource ID (not the full path) for a user."""
+        """Return the secret resource ID (not the full path) for a user.
+
+        Raises:
+            KeyVaultError: if ``user_id`` isn't a safe secret-id component
+                (``[A-Za-z0-9_-]``, 1-200 chars) — belt-and-braces against a
+                malformed OIDC subject producing an unexpected resource name.
+        """
+        if not _USER_ID_RE.fullmatch(user_id):
+            raise KeyVaultError(
+                "Invalid user_id for secret naming: expected 1-200 chars of [A-Za-z0-9_-]."
+            )
         return f"ce-key-{user_id}"
 
     def _secret_path(self, user_id: str) -> str:

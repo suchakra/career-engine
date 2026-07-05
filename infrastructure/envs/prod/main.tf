@@ -26,6 +26,10 @@ provider "google" {
   region  = var.region
 }
 
+data "google_project" "current" {
+  project_id = var.project_id
+}
+
 module "artifact_registry" {
   source        = "../../modules/artifact_registry"
   project_id    = var.project_id
@@ -55,6 +59,7 @@ module "cloud_run" {
 module "secret_manager" {
   source                = "../../modules/secret_manager"
   project_id            = var.project_id
+  project_number        = data.google_project.current.number
   service_account_email = module.cloud_run.service_account_email
 }
 

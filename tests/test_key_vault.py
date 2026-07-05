@@ -456,3 +456,28 @@ class TestDeleteKey:
     def test_delete_absent_key_is_idempotent(self) -> None:
         vault = SecretManagerKeyVault(client=FakeSecretManagerClient())
         vault.delete_key("never-stored")  # must not raise
+
+
+class TestUserIdValidation:
+    """user_id is validated before it's used to build a Secret Manager resource id."""
+
+    def test_valid_google_subject_accepted(self) -> None:
+        vault = SecretManagerKeyVault(client=FakeSecretManagerClient())
+        vault.store_key("109876543210987654321", "AIza-secret")  # numeric Google sub
+        assert vault.key_exists("109876543210987654321") is True
+
+    @pytest.mark.parametrize(
+        "bad",
+        ["", "has space", "a/b", "../evil", "a@b.com", "name!", "x" * 201],
+    )
+    def test_malformed_user_id_rejected(self, bad: str) -> None:
+        vault = SecretManagerKeyVault(client=FakeSecretManagerClient())
+        with pytest.raises(KeyVaultError):
+            vault.store_key(bad, "AIza-secret")
+
+    def test_malformed_user_id_rejected_on_fetch_and_exists(self) -> None:
+        vault = SecretManagerKeyVault(client=FakeSecretManagerClient())
+        with pytest.raises(KeyVaultError):
+            vault.fetch_key("a/b")
+        with pytest.raises(KeyVaultError):
+            vault.key_exists("a/b")
