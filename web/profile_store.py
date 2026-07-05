@@ -19,8 +19,12 @@ from web.application_store import WorkspaceStore
 
 
 def load_profile(store: WorkspaceStore, *, user_id: str) -> UserProfile:
-    """Return the user's persisted profile (empty for a new user)."""
-    return store.load(user_id).profile
+    """Return the user's persisted profile (empty for a new user).
+
+    Returns a defensive copy so a caller mutating the result can't accidentally
+    write through to a store that returned a cached/shared workspace instance.
+    """
+    return store.load(user_id).profile.model_copy(deep=True)
 
 
 def save_profile(store: WorkspaceStore, *, user_id: str, profile: UserProfile) -> None:

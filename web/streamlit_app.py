@@ -294,14 +294,14 @@ def _prefill_contact_from_profile(user_id: str) -> None:
     ss = st.session_state
     if ss.get("_contact_prefilled"):
         return
-    ss["_contact_prefilled"] = True
     try:
         from database.workspace_store import FirestoreWorkspaceStore
         from web.profile_store import load_profile
 
         profile = load_profile(FirestoreWorkspaceStore(), user_id=user_id)
     except Exception:
-        return
+        return  # leave the flag unset → retry on a later render if the backend recovers
+    ss["_contact_prefilled"] = True  # only mark done once the load actually succeeded
     ss.setdefault("contact_name", profile.name)
     ss.setdefault("contact_email", profile.email)
     ss.setdefault("contact_phone", profile.phone)
@@ -321,13 +321,14 @@ def _persist_contact_profile(user_id: str) -> None:
         from web.profile_store import save_profile
 
         c = _contact_from_session()
-        save_profile(
-            FirestoreWorkspaceStore(),
-            user_id=user_id,
-            profile=UserProfile(
-                name=c.name, email=c.email, phone=c.phone, location=c.location, links=c.links
-            ),
+        profile = UserProfile(
+            name=c.name, email=c.email, phone=c.phone, location=c.location, links=c.links
         )
+        # Don't overwrite an existing saved profile with a blank one (e.g. if
+        # prefill failed and the user tailored without filling the form).
+        if not (profile.name or profile.email or profile.phone or profile.location or profile.links):
+            return
+        save_profile(FirestoreWorkspaceStore(), user_id=user_id, profile=profile)
     except Exception:
         pass
 

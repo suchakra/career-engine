@@ -65,6 +65,15 @@ def test_users_are_isolated() -> None:
     assert load_profile(store, user_id="u2") == UserProfile()
 
 
+def test_load_profile_returns_a_defensive_copy() -> None:
+    # Mutating the returned profile must not write through to a shared/cached store.
+    store = _FakeStore()
+    store.save("u1", UserWorkspace(profile=UserProfile(name="Ada")))
+    loaded = load_profile(store, user_id="u1")
+    loaded.name = "Mutated"
+    assert store.load("u1").profile.name == "Ada"
+
+
 def test_pre_v260_workspace_without_profile_key_validates() -> None:
     # Backward compat: a workspace document persisted before v2.6.0 has no 'profile'
     # key; the additive field must default (not raise), so existing users load fine.

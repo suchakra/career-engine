@@ -3,9 +3,10 @@
 > Status: **active** (design truth for shipped + upcoming work).
 > Last reviewed: 2026-07-05.
 > Build status is **not** canonical here — see [PROGRESS.md](PROGRESS.md). For orientation, Phase 0 +
-> Phase 1 + Phase 1.5 (contract v2.0.0, §12) + Phase 2 (web/infra/async) + Phase 4 (Portfolio Workbench, §14)
-> are built & deployed; Phase 5A (real ATS résumé) is shipped; **Phase 6 two-agent A2A discovery (§15,
-> contract v2.5.0) is built on `feat/discovery-a2a`, pending review/merge + packaging**.
+> Phase 1 + Phase 1.5 (§12) + Phase 2 (web/infra/async) + Phase 4 (Portfolio Workbench, §14) are built &
+> deployed; **Phase 6 two-agent A2A discovery (§15) merged (contract v2.5.0)**; Phase 5 in progress — 5A
+> (real ATS résumé), 5B (save-as-application), and persist-Contact are merged (**latest contract v2.6.0**:
+> `UserProfile` on `UserWorkspace`); 5C/4E/security-review remain.
 > Decisions captured in [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md).
 
 CareerEngine converts raw, multi-decade career histories into quantified, STAR-formatted
