@@ -134,6 +134,11 @@ class TestBuildPortfolioView:
         assert view.is_empty is True
         assert view.entries == []
 
+    def test_highlighted_flag_mapped(self) -> None:
+        e = Entry(type=ExperienceType.FULL_TIME, title="A", org="Acme", highlighted=True)
+        card = build_portfolio_view(CareerEngineState(work_timeline=[e])).entries[0]
+        assert card.highlighted is True
+
 
 class TestRenderPortfolio:
     """render_portfolio maps the view to widgets via an injected fake st."""
@@ -191,3 +196,46 @@ class TestRenderPortfolio:
         st = FakeSt()
         render_portfolio(build_portfolio_view(CareerEngineState(work_timeline=[_entry("A")])), st=st)
         assert st.buttons == []
+
+    def test_pin_button_toggles_to_highlighted(self) -> None:
+        """An unpinned entry's pin button calls on_toggle_highlight(entry_id, True) (4E)."""
+        e1 = _entry("A")
+        seen: list[tuple[str, bool]] = []
+        st = FakeSt()
+        render_portfolio(
+            build_portfolio_view(CareerEngineState(work_timeline=[e1])),
+            st=st,
+            on_toggle_highlight=lambda eid, val: seen.append((eid, val)),
+        )
+        pin = [(label, kw) for label, kw in st.buttons if "Pin for tailoring" in label]
+        assert len(pin) == 1
+        pin[0][1]["on_click"]()
+        assert seen == [(str(e1.entry_id), True)]
+
+    def test_pinned_entry_shows_unpin_marker_and_toggles_off(self) -> None:
+        e1 = Entry(type=ExperienceType.FULL_TIME, title="A", org="Acme", highlighted=True)
+        seen: list[tuple[str, bool]] = []
+        st = FakeSt()
+        render_portfolio(
+            build_portfolio_view(CareerEngineState(work_timeline=[e1])),
+            st=st,
+            on_toggle_highlight=lambda eid, val: seen.append((eid, val)),
+        )
+        assert any(s.startswith("📌") for s in st.subheaders)
+        assert any("Pinned as tailoring priority" in c for c in st.captions)
+        unpin = [(label, kw) for label, kw in st.buttons if label == "Unpin from tailoring priority"]
+        assert len(unpin) == 1
+        unpin[0][1]["on_click"]()
+        assert seen == [(str(e1.entry_id), False)]
+
+    def test_no_pin_button_without_callback(self) -> None:
+        # Pass on_grill_entry so a button IS rendered — then prove the pin button
+        # specifically is absent (not just that no buttons exist at all).
+        st = FakeSt()
+        render_portfolio(
+            build_portfolio_view(CareerEngineState(work_timeline=[_entry("A")])),
+            st=st,
+            on_grill_entry=lambda _eid: None,
+        )
+        assert any(label == "Grill me about this" for label, _ in st.buttons)
+        assert not any("tailoring priority" in label for label, _ in st.buttons)

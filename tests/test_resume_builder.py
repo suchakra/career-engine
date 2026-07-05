@@ -173,6 +173,31 @@ class TestTailorStructuredResume:
         )
         assert resume.experience[0].bullets == ["Cut cost 20%"]  # fell back, not empty
 
+    def test_highlighted_entry_stories_always_included(self) -> None:
+        """A pinned (highlighted) experience's achievements survive even if the model
+        didn't select them (4E)."""
+        job_a = _job()  # Staff Engineer at Acme
+        job_b = Entry(
+            type=ExperienceType.FULL_TIME, title="Lead", org="BitCrafty",
+            start_date="2018", end_date="2020", status=EntryStatus.GRILLED, highlighted=True,
+        )
+        sa, sb = _story(job_a, "Cut latency 40%"), _story(job_b, "Grew revenue 3x")
+        state = CareerEngineState(work_timeline=[job_a, job_b], extracted_star_stories=[sa, sb])
+        # Model selects ONLY sa; sb belongs to the pinned entry and must still appear.
+        client = ScriptedNodeClient(
+            responses={
+                "tailoring a candidate's real": json.dumps(
+                    {"tailored_summary": "S", "skills": [], "selected_achievement_ids": [str(sa.story_id)]}
+                )
+            }
+        )
+        resume = tailor_structured_resume(
+            state, "JD", Contact(), client=cast(GeminiModelClient, client)
+        )
+        bullets = [b for role in resume.experience for b in role.bullets]
+        assert "Cut latency 40%" in bullets
+        assert "Grew revenue 3x" in bullets  # kept because job_b is highlighted
+
     def test_no_stories_returns_empty_without_calling_model(self) -> None:
         resume = tailor_structured_resume(
             CareerEngineState(work_timeline=[_job()]), "JD", Contact(),

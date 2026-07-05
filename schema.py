@@ -156,6 +156,13 @@ class Entry(BaseModel):
         default=EntryStatus.NEEDS_QUANTIFYING,
         description="Processing status of this entry in the discovery pipeline",
     )
+    highlighted: bool = Field(
+        default=False,
+        description=(
+            "User pinned this experience as tailoring priority (4E, additive v2.7.0): "
+            "its quantified achievements are always included when tailoring to a JD."
+        ),
+    )
 
 
 class StarStory(BaseModel):

@@ -77,9 +77,11 @@ class TestEntryRoundTrip:
             source="resume",
             bullets=["Led a team of 8 engineers.", "Reduced p99 latency by 70%."],
             status=EntryStatus.GRILLED,
+            highlighted=True,
         )
         reconstructed = _roundtrip(original)
         assert original == reconstructed
+        assert reconstructed.highlighted is True
 
     def test_entry_with_empty_end_date_means_present(self) -> None:
         """Empty end_date is the 'present' sentinel and round-trips correctly."""
@@ -95,6 +97,7 @@ class TestEntryRoundTrip:
         assert entry.source == "manual"
         assert entry.bullets == []
         assert entry.org == ""
+        assert entry.highlighted is False
 
     def test_all_experience_types_roundtrip(self) -> None:
         """All ExperienceType values survive round-trip."""
@@ -227,11 +230,11 @@ class TestCareerEngineStateRoundTrip:
         reconstructed = _roundtrip(original)
         assert original == reconstructed
 
-    def test_state_carries_contract_version_260(self) -> None:
-        """CareerEngineState must be stamped with CONTRACT_VERSION == "2.6.0"."""
+    def test_state_carries_contract_version_270(self) -> None:
+        """CareerEngineState must be stamped with CONTRACT_VERSION == "2.7.0"."""
         state = CareerEngineState()
         assert state.contract_version == CONTRACT_VERSION
-        assert CONTRACT_VERSION == "2.6.0"
+        assert CONTRACT_VERSION == "2.7.0"
 
     def test_coverage_confirmed_defaults_false_and_roundtrips(self) -> None:
         """coverage_confirmed (v2.1.0) defaults to False and round-trips."""
@@ -648,9 +651,9 @@ class TestCapabilityEnum:
 class TestContractVersion:
     """Tests to ensure CONTRACT_VERSION is semver-formatted and consistent."""
 
-    def test_contract_version_is_260(self) -> None:
-        """CONTRACT_VERSION must be exactly "2.6.0" (UserProfile additive bump)."""
-        assert CONTRACT_VERSION == "2.6.0"
+    def test_contract_version_is_270(self) -> None:
+        """CONTRACT_VERSION must be exactly "2.7.0" (Entry.highlighted additive bump)."""
+        assert CONTRACT_VERSION == "2.7.0"
 
     def test_contract_version_is_semver(self) -> None:
         """CONTRACT_VERSION must be a valid semver string (MAJOR.MINOR.PATCH)."""

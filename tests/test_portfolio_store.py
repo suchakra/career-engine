@@ -15,7 +15,7 @@ from google.adk.sessions import BaseSessionService, InMemorySessionService
 
 from config import CONTRACT_VERSION
 from schema import CareerEngineState, Entry, ExperienceType
-from web.portfolio_store import add_manual_entry, set_grill_frontier
+from web.portfolio_store import add_manual_entry, set_entry_highlight, set_grill_frontier
 from web.session_loader import web_session_id
 
 _APP = "career-engine"
@@ -135,3 +135,53 @@ class TestSetGrillFrontier:
             service, app_name=_APP, user_id=_UID, entry_id="whatever"
         )
         assert result is None
+
+
+class TestSetEntryHighlight:
+    def test_pins_entry_on_latest_session(self) -> None:
+        service = _service()
+        entry = Entry(type=ExperienceType.PROJECT, title="Billing rewrite")
+        _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
+
+        sid = set_entry_highlight(
+            service, app_name=_APP, user_id=_UID, entry_id=str(entry.entry_id), highlighted=True
+        )
+        assert sid is not None
+        state = _read_latest(service)
+        assert state.work_timeline[0].highlighted is True
+        assert state.contract_version == CONTRACT_VERSION
+
+    def test_unpin_sets_false(self) -> None:
+        service = _service()
+        entry = Entry(type=ExperienceType.PROJECT, title="X", highlighted=True)
+        _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
+
+        set_entry_highlight(
+            service, app_name=_APP, user_id=_UID, entry_id=str(entry.entry_id), highlighted=False
+        )
+        assert _read_latest(service).work_timeline[0].highlighted is False
+
+    def test_returns_none_when_no_session(self) -> None:
+        service = _service()
+        assert (
+            set_entry_highlight(
+                service, app_name=_APP, user_id=_UID, entry_id="x", highlighted=True
+            )
+            is None
+        )
+
+    def test_returns_none_when_entry_not_found(self) -> None:
+        service = _service()
+        _seed(
+            service,
+            CareerEngineState(
+                reference_date=_REF,
+                work_timeline=[Entry(type=ExperienceType.PROJECT, title="X")],
+            ),
+        )
+        assert (
+            set_entry_highlight(
+                service, app_name=_APP, user_id=_UID, entry_id="nonexistent", highlighted=True
+            )
+            is None
+        )

@@ -50,6 +50,7 @@ class EntryCard:
     status_label: str
     bullets: list[str] = field(default_factory=list)
     stories: list[StoryCard] = field(default_factory=list)
+    highlighted: bool = False
 
     @property
     def not_grilled_yet(self) -> bool:
@@ -116,6 +117,7 @@ def _entry_card(entry: Entry, stories: list[StarStory]) -> EntryCard:
             )
             for s in stories
         ],
+        highlighted=entry.highlighted,
     )
 
 
@@ -135,6 +137,7 @@ def render_portfolio(
     *,
     st: Any,
     on_grill_entry: Callable[[str], None] | None = None,
+    on_toggle_highlight: Callable[[str, bool], None] | None = None,
 ) -> None:
     """Render the portfolio via an injected ``st``-like module (thin pass-through).
 
@@ -145,6 +148,8 @@ def render_portfolio(
             this" button; receives the entry_id. The backend frontier-write +
             view switch live in the caller (``streamlit_app``), keeping this
             renderer free of persistence logic (4C).
+        on_toggle_highlight: Optional callback for the pin control (4E); receives
+            ``(entry_id, new_highlighted)``. The persistence lives in the caller.
     """
     st.title("Your portfolio")
 
@@ -152,14 +157,20 @@ def render_portfolio(
         st.info(view.empty_text)
         return
 
-    st.caption("Everything recorded about you, by experience. Read-only.")
+    st.caption(
+        "Everything recorded about you, by experience. Pin the ones you want the "
+        "Tailor to always prioritize."
+    )
     for entry in view.entries:
         st.divider()
-        st.subheader(entry.title or "(untitled experience)")
+        pin = "📌 " if entry.highlighted else ""
+        st.subheader(f"{pin}{entry.title or '(untitled experience)'}")
         meta = " · ".join(p for p in (entry.org, entry.dates, entry.type_label) if p)
         if meta:
             st.caption(meta)
         st.caption(f"Status: {entry.status_label}")
+        if entry.highlighted:
+            st.caption("⭐ Pinned as tailoring priority — always included when tailoring.")
 
         # Existing resume bullets/notes for this entry (may be present even before
         # any grilling has produced STAR stories).
@@ -187,6 +198,17 @@ def render_portfolio(
                 "Grill me about this",
                 key=f"grill_entry_{entry.entry_id}",
                 on_click=lambda eid=entry.entry_id: on_grill_entry(eid),
+            )
+
+        # Pin/unpin this experience as a tailoring priority (4E).
+        if on_toggle_highlight is not None:
+            label = "Unpin from tailoring priority" if entry.highlighted else "📌 Pin for tailoring priority"
+            st.button(
+                label,
+                key=f"pin_entry_{entry.entry_id}",
+                on_click=lambda eid=entry.entry_id, val=not entry.highlighted: on_toggle_highlight(
+                    eid, val
+                ),
             )
 
 

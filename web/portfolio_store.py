@@ -119,6 +119,46 @@ async def _aset_grill_frontier(
     return session_id
 
 
+async def _aset_entry_highlight(
+    session_service: BaseSessionService,
+    *,
+    app_name: str,
+    user_id: str,
+    entry_id: str,
+    highlighted: bool,
+) -> str | None:
+    """Flip an entry's ``highlighted`` flag on the canonical session; None if absent."""
+    session_id = web_session_id(user_id)
+    existing = await session_helpers.get_session_state_if_exists(
+        session_service=session_service,
+        app_name=app_name,
+        user_id=user_id,
+        session_id=session_id,
+    )
+    if existing is None:
+        return None
+    found = False
+    new_timeline: list[Entry] = []
+    for entry in existing.work_timeline:
+        if str(entry.entry_id) == entry_id:
+            entry = entry.model_copy(update={"highlighted": highlighted})
+            found = True
+        new_timeline.append(entry)
+    if not found:
+        return None
+    await _patch_session(
+        session_service,
+        app_name=app_name,
+        user_id=user_id,
+        session_id=session_id,
+        state_delta={
+            "work_timeline": [e.model_dump(mode="json") for e in new_timeline],
+            "contract_version": CONTRACT_VERSION,
+        },
+    )
+    return session_id
+
+
 def add_manual_entry(
     session_service: BaseSessionService,
     *,
@@ -185,4 +225,29 @@ def set_grill_frontier(
     )
 
 
-__all__ = ["add_manual_entry", "set_grill_frontier"]
+def set_entry_highlight(
+    session_service: BaseSessionService,
+    *,
+    app_name: str,
+    user_id: str,
+    entry_id: str,
+    highlighted: bool,
+) -> str | None:
+    """Pin/unpin an experience as a tailoring priority (4E; sync bridge).
+
+    Sets ``Entry.highlighted`` on the canonical session so the Tailor always
+    includes this experience's achievements. Returns the session_id, or ``None``
+    if the user has no session or the entry isn't found.
+    """
+    return run_async(
+        _aset_entry_highlight(
+            session_service,
+            app_name=app_name,
+            user_id=user_id,
+            entry_id=entry_id,
+            highlighted=highlighted,
+        )
+    )
+
+
+__all__ = ["add_manual_entry", "set_entry_highlight", "set_grill_frontier"]
