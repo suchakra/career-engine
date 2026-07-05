@@ -162,6 +162,28 @@ def _jump_grill_to_entry(*, user_id: str, entry_id: str) -> None:
     st.session_state["view"] = "grill"
 
 
+def _set_entry_highlight(*, user_id: str, entry_id: str, highlighted: bool) -> None:
+    """Persist a pin/unpin of an experience for tailoring priority (4E).
+
+    Runs as an on_click callback (before the rerun), so the next render reflects
+    the change. A backend hiccup warns rather than crashing the page.
+    """
+    from config import get_settings
+    from web.portfolio_store import set_entry_highlight
+
+    service = _session_service()
+    if service is None:
+        st.warning("Couldn't reach your saved portfolio just now — try again in a moment.")
+        return
+    set_entry_highlight(
+        service,
+        app_name=get_settings().app_name,
+        user_id=user_id,
+        entry_id=entry_id,
+        highlighted=highlighted,
+    )
+
+
 def _render_add_experience_form(*, user_id: str, today: str) -> None:
     """Form to add a remembered experience/project into the timeline (4D)."""
     from config import get_settings
@@ -222,7 +244,15 @@ def _render_portfolio(*, user_id: str, today: str) -> None:
     def _grill_entry(entry_id: str) -> None:
         _jump_grill_to_entry(user_id=user_id, entry_id=entry_id)
 
-    render_portfolio(build_portfolio_view(state), st=st, on_grill_entry=_grill_entry)
+    def _toggle_highlight(entry_id: str, highlighted: bool) -> None:
+        _set_entry_highlight(user_id=user_id, entry_id=entry_id, highlighted=highlighted)
+
+    render_portfolio(
+        build_portfolio_view(state),
+        st=st,
+        on_grill_entry=_grill_entry,
+        on_toggle_highlight=_toggle_highlight,
+    )
     _render_master_resume_download(user_id=user_id, state=state)
     _render_add_experience_form(user_id=user_id, today=today)
 

@@ -5,8 +5,9 @@
 > Build status is **not** canonical here — see [PROGRESS.md](PROGRESS.md). For orientation, Phase 0 +
 > Phase 1 + Phase 1.5 (§12) + Phase 2 (web/infra/async) + Phase 4 (Portfolio Workbench, §14) are built &
 > deployed; **Phase 6 two-agent A2A discovery (§15) merged (contract v2.5.0)**; Phase 5 in progress — 5A
-> (real ATS résumé), 5B (save-as-application), and persist-Contact are merged (**latest contract v2.6.0**:
-> `UserProfile` on `UserWorkspace`); 5C/4E/security-review remain.
+> (real ATS résumé), 5B (save-as-application), persist-Contact (v2.6.0), 5C (one renderer + master download),
+> and 4E (pin an experience for tailoring priority — `Entry.highlighted`, **latest contract v2.7.0**) are
+> merged; only the pre-GA /security-review remains.
 > Decisions captured in [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md).
 
 CareerEngine converts raw, multi-decade career histories into quantified, STAR-formatted
