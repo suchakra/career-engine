@@ -40,11 +40,89 @@ résumé** — contact header · JD-aligned skills · **experience grouped by ro
 → `Entry`) · education, downloadable as PDF/DOCX/MD, with the internal "why it fits" removed. Built in
 `web/resume_builder.py` (deterministic assembly + one model call for selection/summary/skills) +
 `web/resume_render.py`; the flat `web/tailor.py`/`web/exporter.py` were removed.
-**▶ NEXT (Phase 5 remaining):** persist **Contact** (extend `tools/resume_parser.py` and/or a profile
-form → likely +minor contract bump — today it's a per-session UI form); **5B** save-as-tracked-application
-(→ dashboard + 14-day sweep); **5C** one structured renderer for master+tailored; 4E highlight (+minor);
-pre-GA /security-review. Also awaiting the user's grill re-test on a fresh session (checkpoint loop
-unreproducible; regression test PR #25).
+**▶ ACTIVE (branch `feat/discovery-a2a`) — CAPSTONE DELIVERABLE, due 2026-07-06 11:59pm PT.**
+Pivot to a **two-agent (A2A) job-discovery** feature for the Kaggle capstone (concepts: Multi-agent · MCP ·
+Agent skills · Security/HITL · Deployability · Antigravity). Design = the definitive spec (this session's
+long "Multi-Agent Async Architecture Spec" message), **marrying Gemini's eval concepts with best-practice
+SaaS** (my judgment is the guide; structured contracts over prose; reuse existing models).
+**Deliverable cut (today; rest = roadmap):** stateful **Primary** (Groomer/Tailor, Pro) ⇄ stateless
+**Scout** (Fetcher, Flash) **in-process** with the typed `EvaluationDiff` contract; real **MCP server**
+(separate process, live no-key source e.g. Remotive/HN-Algolia) exposing `search_jobs`+`fetch_jd`;
+**bounded loop MAX_ITERATIONS=3**; deterministic ledger HARD_REJECT + agentic eval → `match_status`+
+`ai_rationale`; commit ACCEPTED/SOFT_REJECT to Firestore (idempotent `job_id`); **CLI `career-engine
+discover`** demo; **on-demand Tailor reuses the deployed tailor**. Roadmap: async worker+spin-down, network
+A2A, Podman sandbox, full HITL dashboard (TTL/override), multi-user.
+**DONE this session:** contract **v2.5.0** ontology committed on the branch — `JobOpportunity`,
+`EvaluationDiff`, `ScoutDirective`, `SessionPreferences`, `InteractionLedger`, enums, `make_job_id()` +
+tests (`tests/test_discovery_schema.py`), 509 green.
+**EVAL CRITERIA (user's real prefs — use as default `SessionPreferences` + Primary test fixture; later a UI
+form per customer):** target_roles = Fractional Technology Leadership / consulting / highly-autonomous
+Principal-level eng (e.g. via BitCrafty Inc.). nice_to_haves (soft) = AWS infra (SAP-C02-level), multi-agent
+AI orchestration (ADK/LangGraph/MCP), containerized sandboxing (Podman/Linux), agile-startup / autonomous-
+pipeline teams. dealbreakers (HARD_REJECT) = traditional W2 middle-management; deeply bureaucratic
+enterprise; rigid 100% on-site; pure maintenance-only roles. (Plus already-applied from the ledger.)
+**Package naming decision:** the whole two-agent feature lives under **one package `discovery/`** (not the
+literal `mcp/` + `agents/` paths sketched earlier) — a top-level `mcp/` dir would **shadow the installed
+`mcp` SDK** on `sys.path`. So: `discovery/job_source.py`, `discovery/mcp_server.py`, `discovery/scout.py`,
+`discovery/primary.py`.
+**NEXT build order:**
+- ✅ **(1) MCP server DONE** — `discovery/mcp_server.py` (real FastMCP, stdio, `python -m discovery.mcp_server`)
+  exposes `search_jobs` + `fetch_jd`; logic in `discovery/job_source.py` (pure/injectable, **live key-free
+  Remotive source**, SSRF-guarded via the scraper's `_assert_safe_url`, normalises → `JobOpportunity` with
+  `make_job_id`). Tests `tests/test_job_source.py` + `tests/test_mcp_server.py`; `mcp==1.28.1` pinned;
+  `discovery/` added to Makefile gates. **523 green**, live smoke fetched real jobs. (branch, uncommitted→commit next)
+- ✅ **(2) Scout DONE** — `discovery/scout.py`: stateless Fetcher; accesses data **only** through the MCP
+  tool surface (`JobToolClient`), never importing `job_source`. `InProcessMcpClient` dispatches through the
+  real FastMCP machinery (`mcp.call_tool`) — a genuine MCP client interaction, key-free + subprocess-free for
+  tests/demo (stdio subprocess transport = roadmap). Tests `tests/test_scout.py`.
+- ✅ **(3) Primary + bounded loop DONE** — `discovery/primary.py`: stateful Evaluator/Orchestrator.
+  Deterministic `hard_reject_reason` gate (ledger already-applied / rejected company / dealbreaker keyword →
+  drop, no model). Injectable `BatchEvaluator`: key-free `HeuristicEvaluator` (default, demoable) vs agentic
+  `ModelEvaluator` (REASONING_HIGH→Pro on BYOK, one batch call, JSON-parsed, **falls back to heuristic on any
+  parse/API error**). Pure `evaluate_batch(...) → EvaluationDiff` (stamps `match_status`+`ai_rationale`,
+  computes `next_directive`). `PrimaryAgent.discover()` = MAX_ITERATIONS=3 loop, dedupes by `job_id`,
+  refines directive (excludes missed companies), stops at `desired_total` or the cap. Tests
+  `tests/test_primary.py`. **551 green.**
+- ✅ **(4) CLI `discover` DONE** — `career-engine discover [--count N --max-iterations M --firestore]`
+  (`main.py` thin cmd → `discovery/cli.py`). `run_discover` (testable, offline) runs a pre-wired Primary,
+  prints ACCEPTED/FOR-REVIEW with rationale, persists accepted via a `LedgerStore`; `discover_command`
+  (IO seam) resolves auth, hydrates the ledger, wires Scout+ModelEvaluator. `discovery/store.py`:
+  `InMemoryLedgerStore` (default) + sync `FirestoreLedgerStore` (`discovered_jobs/{uid}/jobs/{job_id}`,
+  idempotent, no secrets). `discovery/preferences.py`: `default_session_preferences()` = the operator's
+  real EVAL CRITERIA. Tests `tests/test_ledger_store.py` + `tests/test_discovery_loop_cli.py`. **557 green;
+  LIVE end-to-end run against real Remotive succeeded** (3 iters, ranked output, idempotent persist).
+- ✅ **(5) Tailor reuse DONE** — `discover --tailor-session <SID> [-o pdf]` closes the loop: the top ACCEPTED
+  job's cleaned `raw_description` is fed straight into the existing/deployed `run_tailor_command` (no new
+  résumé code). `select_top_match(result)` picks the first strong match; without the flag, discover prints a
+  ready-to-run `career-engine tailor …` hint. Tests added. **559 green.**
+
+**▶ ALL 5 BUILD STEPS DONE.** The demoable slice is complete: `career-engine discover` runs the live
+two-agent A2A loop (Scout ⇄ MCP ⇄ Primary) → ranked matches + rationale → idempotent persist → optional
+Tailor. Safety-net floor (deployed grill→tailor) untouched.
+
+**▶▶ RESUME HERE NEXT SESSION (2026-07-05, session budget hit; tree CLEAN, all committed):**
+The A2A build is DONE + pushed on `feat/discovery-a2a` → **PR #30** open
+(https://github.com/suchakra/career-engine/pull/30). **Two review gates were in flight when the session
+ended:** (a) a **Sonnet subagent review** was spawned (background — its result is NOT captured in docs; it may
+be lost on reset, so re-spawn if no verdict is visible); (b) **Copilot** review requested on PR #30.
+**Exact next actions, in order:**
+1. Read PR #30 review comments: `gh api repos/suchakra/career-engine/pulls/30/comments` and the Copilot
+   review; if no Sonnet verdict survived, re-run a Sonnet review of `git diff master...feat/discovery-a2a`.
+2. Address any MUST-FIX/SHOULD-FIX (re-run `make check`, currently **559 green**), push.
+3. Squash-merge: `gh pr merge 30 --squash --delete-branch`; then **tag `contract-v2.5.0`** + push tag.
+4. Deploy is OPTIONAL (discover is a **CLI** demo, recorded from terminal — no redeploy needed; honors
+   "nothing risky Monday"). The deployed web floor is unaffected.
+5. **PACKAGING** (user-owned, Mon eve): video + writeup + README + architecture diagram. User is running
+   NotebookLM on the docs to draft script/diagram/writeup/README — **review those drafts against the code so
+   nothing overclaims.** Best source set for NotebookLM: `docs/ARCHITECTURE.md` §15, `docs/DISCOVERY_DEMO.md`
+   (verified demo runbook — commands to record), this file, and the PR #30 body.
+**Deferred (not blocking submission):** README "Job Discovery" section (20-pt docs), network/stdio A2A,
+Podman sandbox, async worker, full HITL dashboard, multi-user isolation. **Submission due 2026-07-06 11:59pm PT.**
+**PACKAGING (protected, own session Mon eve):** 5-min video, writeup, README + architecture diagram (~40+
+pts; can be drafted in parallel by a designer/communicator). **Rule: nothing risky Monday; capture demo
+footage EOD Sunday.**
+**Deferred (pre-capstone Phase 5):** persist Contact (+minor); 5B save-as-application; 5C one renderer;
+4E highlight; pre-GA /security-review; grill re-test (checkpoint loop unreproducible, PR #25).
 
 - **Live dev URL:** https://career-engine-dev-app-ontyg6kaja-uc.a.run.app. Project `gen-lang-client-0513394764`, region us-central1.
 - **CI/CD (works):** `gh workflow run deploy.yml --ref master -f environment=dev` → keyless WIF → docker build+push → `terraform apply`. State in GCS bucket `gen-lang-client-0513394764-tfstate` (prefix `envs/dev`). Repo *variables* drive it (GCP_PROJECT_ID/WIF_PROVIDER/DEPLOY_SA/TF_STATE_BUCKET/AR_LOCATION/CE_AUTH_*).

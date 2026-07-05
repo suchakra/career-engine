@@ -14,8 +14,9 @@ the exact same wiring without touching this file.
 
 Commands
 --------
-  grill   Start or continue a "Grill Me" discovery session.
-  tailor  Tailor a completed resume to a job description.
+  grill     Start or continue a "Grill Me" discovery session.
+  tailor    Tailor a completed resume to a job description.
+  discover  Run the two-agent (Scout ⇄ Primary) job-discovery loop.
 """
 
 from __future__ import annotations
@@ -173,6 +174,85 @@ def tailor(
         )
     except ModelAPIError as exc:
         click.echo(format_model_api_error(exc, use_firestore=firestore), err=True)
+        sys.exit(1)
+
+
+@cli.command()
+@click.option(
+    "--count",
+    "-n",
+    "desired_total",
+    type=int,
+    default=5,
+    show_default=True,
+    help="Target number of strong (ACCEPTED) matches to collect.",
+)
+@click.option(
+    "--max-iterations",
+    type=int,
+    default=3,
+    show_default=True,
+    help="Hard cap on Scout ⇄ Primary round-trips (bounds cost).",
+)
+@click.option(
+    "--firestore",
+    is_flag=True,
+    default=False,
+    help="Persist accepted jobs to Firestore (idempotent by job_id).",
+)
+@click.option(
+    "--tailor-session",
+    default=None,
+    help="Completed grill SESSION_ID to tailor toward the top match (closes discover → tailor).",
+)
+@click.option(
+    "--output-pdf",
+    "-o",
+    type=click.Path(path_type=pathlib.Path),
+    default=None,
+    help="Optional path for the tailored PDF (only with --tailor-session).",
+)
+def discover(
+    desired_total: int,
+    max_iterations: int,
+    firestore: bool,
+    tailor_session: str | None,
+    output_pdf: pathlib.Path | None,
+) -> None:
+    """Run the two-agent job-discovery loop over a live job source.
+
+    The stateless Scout fetches postings through the MCP job server; the stateful
+    Primary evaluates each against your preferences + ledger (deterministic
+    hard-reject gate → agentic ACCEPTED/SOFT_REJECT), refining the search across a
+    bounded loop. Accepted matches are printed with a rationale and (optionally)
+    persisted for idempotent re-runs.
+
+    Example::
+
+        career-engine discover --count 5 --firestore
+    """
+    from discovery.cli import discover_command
+    from integration.model_client import ModelAPIError
+    from tools.web_scraper import ScraperError
+
+    try:
+        discover_command(
+            use_firestore=firestore,
+            desired_total=desired_total,
+            max_iterations=max_iterations,
+            tailor_session=tailor_session,
+            output_pdf=output_pdf,
+            out=click.echo,
+        )
+    except ModelAPIError as exc:
+        from cli.app import format_model_api_error
+
+        click.echo(format_model_api_error(exc, use_firestore=firestore), err=True)
+        sys.exit(1)
+    except ScraperError as exc:
+        # A live job-source fetch failed (network / non-2xx / SSRF-blocked URL) —
+        # guide the user instead of dumping a traceback.
+        click.echo(f"\n⚠️  Couldn't reach the job source: {exc}", err=True)
         sys.exit(1)
 
 

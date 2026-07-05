@@ -1,10 +1,11 @@
 # CareerEngine — System Architecture
 
 > Status: **active** (design truth for shipped + upcoming work).
-> Last reviewed: 2026-07-04.
+> Last reviewed: 2026-07-05.
 > Build status is **not** canonical here — see [PROGRESS.md](PROGRESS.md). For orientation, Phase 0 +
-> Phase 1 + Phase 1.5 (contract v2.0.0, §12) + Phase 2 (web/infra/async) are built & deployed;
-> Phase 4 (Portfolio Workbench) is spec'd in §14 and groomed but not yet built.
+> Phase 1 + Phase 1.5 (contract v2.0.0, §12) + Phase 2 (web/infra/async) + Phase 4 (Portfolio Workbench, §14)
+> are built & deployed; Phase 5A (real ATS résumé) is shipped; **Phase 6 two-agent A2A discovery (§15,
+> contract v2.5.0) is built on `feat/discovery-a2a`, pending review/merge + packaging**.
 > Decisions captured in [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md).
 
 CareerEngine converts raw, multi-decade career histories into quantified, STAR-formatted
@@ -533,3 +534,67 @@ The mutation seam and a concurrent grill turn both write session state → last-
 the single-user demo (`max_instances=1`, one pinned Streamlit session; see [SECURITY.md](SECURITY.md)).
 Multi-user correctness needs the same session-isolation work already tracked for the global model-client
 factory — do not treat the workbench as the thing that introduces the race.
+
+---
+
+## 15. Two-agent (A2A) job discovery — decoupled Scout ⇄ Primary over MCP (contract v2.5.0)
+
+> Status: **built** (Phase 6, branch `feat/discovery-a2a`; see [PROGRESS.md](PROGRESS.md) for state).
+> The `discovery/` package; runtime is separate from the grill/tailor graph and reuses the shared contract.
+
+### 15.1 Why this is inevitable (not rubric-driven)
+The multi-user vision — *N* signed-in users, each with a stateful agent, all negotiating a shared live job
+market — makes a **stateless data-fetch tier** unavoidable. You cannot fan a stateful per-user reasoning
+loop directly at a rate-limited external source and stay correct or affordable. So the design **decouples**:
+
+- **Primary agent** (stateful, per-user): owns `SessionPreferences` + `InteractionLedger`, evaluates, and
+  orchestrates. Routed to the expensive **REASONING_HIGH** capability (Pro on BYOK).
+- **Scout agent** (stateless Fetcher): given a self-contained `ScoutDirective`, returns a batch. Keeps **no**
+  memory, so one Scout fleet can serve many Primaries and scale/replace freely.
+
+This is the same "two meanings of agents" discipline as §11: the **workflow** is the deterministic loop; the
+**model** is invoked only where judgement is needed (the Primary's evaluation).
+
+### 15.2 The MCP server is the security boundary (not just a tool bus)
+The Scout reaches job data **only** through a real, separate-process **MCP server** (`discovery/mcp_server.py`,
+FastMCP, stdio) exposing `search_jobs` + `fetch_jd`. The untrusted network fetch lives *inside* that server —
+never in the agent's reasoning process. Today that boundary is enforced by reusing the scraper's **SSRF
+guard** (`_assert_safe_url`: scheme allow-list + resolve-and-reject private/loopback/metadata addresses) on
+the caller-controlled `fetch_jd` path, and by hitting only a **fixed source host** for search (query is
+URL-encoded, host is never attacker-controlled). Roadmap: Podman/zero-trust sandbox around the server process.
+The source is a **live, key-free** public board (Remotive) so the demo carries **no secrets** — aligned with
+the Kaggle "no API keys in code" mandate. The tool logic (`discovery/job_source.py`) is pure + injectable, so
+the whole data layer is unit-tested offline; `InProcessMcpClient` dispatches through the genuine FastMCP tool
+machinery (validation + serialisation) for a key-free, subprocess-free demo/test path.
+
+### 15.3 The typed A2A contract + the bounded adversarial loop
+Inter-agent messages are **validated Pydantic models, never prose** (contract v2.5.0): `ScoutDirective` in,
+`JobOpportunity` batch out, `EvaluationDiff` back. The Primary evaluates each batch in two tiers:
+
+1. **Deterministic HARD_REJECT gate** (`hard_reject_reason`) — ledger already-applied / dismissed-company /
+   absolute-dealbreaker keyword. Cheap, idempotent, runs before any inference (never wastes a model call on
+   known noise).
+2. **Agentic evaluation** of survivors → `ACCEPTED` / `SOFT_REJECT` + one-line `ai_rationale`. Injectable
+   `BatchEvaluator`: the key-free `HeuristicEvaluator` (default; keeps the pipeline demoable and CI-green) or
+   the `ModelEvaluator` (one REASONING_HIGH call for the whole batch — cost-bounded — that **falls back to
+   the heuristic on any parse/API error**, so a flaky model never crashes discovery).
+
+`evaluate_batch` (pure) stamps `match_status`+`ai_rationale`, sets the `ScoutBatchStatus`, and computes the
+refined `next_directive` (folding missed companies into the exclusion set). `PrimaryAgent.discover()` runs the
+loop with **MAX_ITERATIONS=3** (bounds cost + guarantees progress), dedupes by `job_id`, and stops at
+`desired_total` or the cap. `next_directive is None` is the A2A "loop satisfied" signal.
+
+### 15.4 Idempotency + closing the loop
+Every posting carries a stable content-hash `job_id` (`make_job_id(source, external_id)`), so the ledger
+never dupes across worker restarts. Accepted jobs persist via a `LedgerStore` (`InMemoryLedgerStore` default;
+sync `FirestoreLedgerStore` at `discovered_jobs/{uid}/jobs/{job_id}`, no secrets); stored ids hydrate the next
+run's ledger so re-runs hard-reject already-seen jobs. The discovered `JobOpportunity.raw_description` is
+exactly the `jd_source` the existing/deployed **Tailor** consumes, so `discover --tailor-session` closes
+**discover → tailor** with no new résumé code.
+
+### 15.5 Deliberate deviations (deadline-safe cut; roadmap noted)
+- **Package named `discovery/`**, not the literal `mcp/`+`agents/` paths first sketched — a top-level `mcp/`
+  dir would shadow the installed `mcp` SDK on `sys.path`. One feature, one package.
+- **In-process MCP transport** for the demo (real dispatch, no subprocess); **network/stdio A2A** and the
+  **Podman sandbox** are roadmap. Async background worker + spin-down, full HITL dashboard (TTL/override), and
+  multi-user session isolation are also roadmap. The deployed grill→tailor path is the untouched safety-net floor.

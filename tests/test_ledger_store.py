@@ -1,0 +1,34 @@
+"""Unit tests for discovery/store.py — the InMemoryLedgerStore idempotency."""
+
+from __future__ import annotations
+
+from discovery.store import InMemoryLedgerStore
+from schema import JobMetadata, JobOpportunity, make_job_id
+
+
+def _job(ext: str) -> JobOpportunity:
+    return JobOpportunity(
+        job_id=make_job_id("remotive", ext),
+        metadata=JobMetadata(title="Fractional CTO", company="Acme"),
+    )
+
+
+def test_record_counts_only_new_writes() -> None:
+    store = InMemoryLedgerStore()
+    assert store.record_accepted("u1", [_job("1"), _job("2")]) == 2
+    # Re-recording the same jobs writes nothing new (idempotent by job_id).
+    assert store.record_accepted("u1", [_job("1"), _job("2")]) == 0
+    assert store.record_accepted("u1", [_job("2"), _job("3")]) == 1
+
+
+def test_load_ledger_returns_stored_ids() -> None:
+    store = InMemoryLedgerStore()
+    store.record_accepted("u1", [_job("1"), _job("2")])
+    ledger = store.load_ledger("u1")
+    assert set(ledger.already_applied_ids) == {make_job_id("remotive", "1"), make_job_id("remotive", "2")}
+
+
+def test_users_are_isolated() -> None:
+    store = InMemoryLedgerStore()
+    store.record_accepted("u1", [_job("1")])
+    assert store.load_ledger("u2").already_applied_ids == []

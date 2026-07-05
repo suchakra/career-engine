@@ -226,11 +226,11 @@ class TestCareerEngineStateRoundTrip:
         reconstructed = _roundtrip(original)
         assert original == reconstructed
 
-    def test_state_carries_contract_version_240(self) -> None:
-        """CareerEngineState must be stamped with CONTRACT_VERSION == "2.4.0"."""
+    def test_state_carries_contract_version_250(self) -> None:
+        """CareerEngineState must be stamped with CONTRACT_VERSION == "2.5.0"."""
         state = CareerEngineState()
         assert state.contract_version == CONTRACT_VERSION
-        assert CONTRACT_VERSION == "2.4.0"
+        assert CONTRACT_VERSION == "2.5.0"
 
     def test_coverage_confirmed_defaults_false_and_roundtrips(self) -> None:
         """coverage_confirmed (v2.1.0) defaults to False and round-trips."""
@@ -647,9 +647,9 @@ class TestCapabilityEnum:
 class TestContractVersion:
     """Tests to ensure CONTRACT_VERSION is semver-formatted and consistent."""
 
-    def test_contract_version_is_240(self) -> None:
-        """CONTRACT_VERSION must be exactly "2.4.0" (Phase 3 grill-memory bump)."""
-        assert CONTRACT_VERSION == "2.4.0"
+    def test_contract_version_is_250(self) -> None:
+        """CONTRACT_VERSION must be exactly "2.5.0" (discovery A2A ontology bump)."""
+        assert CONTRACT_VERSION == "2.5.0"
 
     def test_contract_version_is_semver(self) -> None:
         """CONTRACT_VERSION must be a valid semver string (MAJOR.MINOR.PATCH)."""

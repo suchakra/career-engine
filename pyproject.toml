@@ -42,6 +42,9 @@ dependencies = [
     "pyyaml==6.0.3",
     "tenacity==9.1.4",
     "click==8.4.2",
+    # Model Context Protocol SDK — the discovery Scout connects to our FastMCP
+    # job server (discovery/mcp_server.py) as an MCP client. Ships FastMCP.
+    "mcp==1.28.1",
 ]
 
 [project.optional-dependencies]
@@ -73,6 +76,7 @@ include = [
     "auth*",
     "cli*",
     "database*",
+    "discovery*",
     "evaluation*",
     "integration*",
     "jobs*",
