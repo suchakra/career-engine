@@ -336,13 +336,21 @@ def _render_tailor(*, user_id: str, today: str) -> None:
                     built = tailor_structured_resume(
                         state, jd_text, _contact_from_session(), client=client
                     )
-                    ss["tailor_resume"] = built
-                    # Render exports once, now (WeasyPrint PDF is expensive per rerun).
-                    ss["tailor_pdf"] = structured_to_pdf_bytes(built)
-                    ss["tailor_docx"] = structured_to_docx_bytes(built)
-                    ss["tailor_md"] = structured_to_markdown(built)
+                    # Render exports into locals first (WeasyPrint PDF is expensive
+                    # per rerun) and commit all session keys ATOMICALLY, so a render
+                    # failure can't leave grill_resume set without its export bytes.
+                    pdf, docx, md = (
+                        structured_to_pdf_bytes(built),
+                        structured_to_docx_bytes(built),
+                        structured_to_markdown(built),
+                    )
+                ss["tailor_resume"], ss["tailor_pdf"], ss["tailor_docx"], ss["tailor_md"] = (
+                    built, pdf, docx, md
+                )
             except ModelAPIError as exc:
                 st.error(f"Couldn't tailor just now: {exc}")
+            except Exception as exc:  # rendering/backend hiccup — degrade, don't crash
+                st.error(f"Couldn't build the résumé just now: {exc}")
 
     resume = ss.get("tailor_resume")
     if resume is None:
@@ -357,8 +365,10 @@ def _render_tailor(*, user_id: str, today: str) -> None:
     st.divider()
     st.subheader(resume.contact.name or "Your tailored résumé")
     contact_line = " · ".join(
-        p for p in (resume.contact.email, resume.contact.phone, resume.contact.location,
-                    *resume.contact.links) if p
+        p.strip()
+        for p in (resume.contact.email, resume.contact.phone, resume.contact.location,
+                  *resume.contact.links)
+        if p.strip()
     )
     if contact_line:
         st.caption(contact_line)

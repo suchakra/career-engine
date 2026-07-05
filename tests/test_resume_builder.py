@@ -92,6 +92,13 @@ class TestAssembleResume:
         )
         assert resume.is_empty is True
 
+    def test_education_only_is_not_empty(self) -> None:
+        """An early-career, education-only résumé must render (education counts)."""
+        resume = assemble_resume(
+            CareerEngineState(work_timeline=[_edu()]), contact=Contact(), summary="", skills=[]
+        )
+        assert resume.education and resume.is_empty is False
+
 
 class TestTailorStructuredResume:
     def test_selects_and_builds_structured_resume(self) -> None:
@@ -117,6 +124,23 @@ class TestTailorStructuredResume:
         assert resume.skills == ["Python", "Distributed systems"]
         assert resume.experience[0].bullets == ["Cut p99 latency 40%"]
         assert resume.education[0].org == "MIT"
+
+    def test_invalid_selected_ids_fall_back_to_all_validated(self) -> None:
+        """If the model returns only non-existent ids, don't drop the résumé."""
+        job = _job()
+        s1 = _story(job, "Cut cost 20%")
+        state = CareerEngineState(work_timeline=[job], extracted_star_stories=[s1])
+        client = ScriptedNodeClient(
+            responses={
+                "tailoring a candidate's real": json.dumps(
+                    {"tailored_summary": "S", "skills": [], "selected_achievement_ids": ["bogus-id"]}
+                )
+            }
+        )
+        resume = tailor_structured_resume(
+            state, "JD", Contact(), client=cast(GeminiModelClient, client)
+        )
+        assert resume.experience[0].bullets == ["Cut cost 20%"]  # fell back, not empty
 
     def test_no_stories_returns_empty_without_calling_model(self) -> None:
         resume = tailor_structured_resume(

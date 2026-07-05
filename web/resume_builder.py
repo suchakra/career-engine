@@ -56,8 +56,11 @@ class StructuredResume:
 
     @property
     def is_empty(self) -> bool:
-        """True when there's no experience and no summary to show."""
-        return not (self.summary.strip() or self.experience)
+        """True when there's nothing to show (no summary, experience, OR education).
+
+        Education counts — an early-career résumé may be education-only.
+        """
+        return not (self.summary.strip() or self.experience or self.education)
 
 
 def _dates(entry: Entry) -> str:
@@ -68,12 +71,12 @@ def _dates(entry: Entry) -> str:
 
 
 def _bullet_for(story: StarStory) -> str:
-    """A metric-first résumé bullet from a STAR story (the quantified result)."""
-    result = story.result.strip()
-    action = story.action.strip()
-    if result and action and not result[0].isupper():
-        return f"{action.rstrip('.')} — {result}"
-    return result or action
+    """A metric-first résumé bullet from a STAR story — the quantified result.
+
+    The result IS the quantified outcome (the metric), so it leads the bullet;
+    the action is only a fallback when there is no result text.
+    """
+    return story.result.strip() or story.action.strip()
 
 
 def _extract_json_object(text: str) -> dict[str, Any]:
@@ -182,8 +185,10 @@ def tailor_structured_resume(
 
     summary = str(parsed.get("tailored_summary", "")).strip()
     skills = [str(s).strip() for s in (parsed.get("skills") or []) if str(s).strip()]
-    selected = [str(i) for i in (parsed.get("selected_achievement_ids") or [])]
-    # A parse miss shouldn't drop the résumé — fall back to all validated stories.
+    catalog_ids = {c["id"] for c in catalog}
+    # Keep only ids the model returned that actually exist. A parse miss OR a set of
+    # all-invalid ids must NOT drop the résumé — fall back to all validated stories.
+    selected = [str(i) for i in (parsed.get("selected_achievement_ids") or []) if str(i) in catalog_ids]
     if not selected:
         selected = [c["id"] for c in catalog]
 

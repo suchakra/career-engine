@@ -251,18 +251,22 @@ You are given:
   2. A CATALOG of the candidate's achievements — each has an "id", the "role" it
      came from, and the quantified "achievement" text.
 
-Return EXACTLY this JSON:
+Return EXACTLY this JSON shape (valid JSON — no line breaks inside string values):
 
 {
-  "tailored_summary": "2-3 sentence professional summary tuned to THIS role. Lead
-     with scope + strongest quantified impact. No first-person pronouns ('Led',
-     not 'I led'). No fabrication.",
-  "skills": ["8-14 concrete skills / technologies the candidate DEMONSTRABLY has
-     (supported by the catalog) that match the JD's requirements — use the JD's
-     own keywords where the catalog backs them up, for ATS keyword matching"],
-  "selected_achievement_ids": ["the ids of the 5-10 most relevant achievements,
-     most relevant first"]
+  "tailored_summary": "<2-3 sentence professional summary tuned to this role>",
+  "skills": ["<skill>", "<skill>"],
+  "selected_achievement_ids": ["<id>", "<id>"]
 }
+
+Where:
+  - tailored_summary: leads with scope + strongest quantified impact; no first-person
+    pronouns ("Led", not "I led"); no fabrication.
+  - skills: 8-14 concrete skills/technologies the candidate DEMONSTRABLY has
+    (supported by the catalog) that match the JD — use the JD's own keywords where
+    the catalog backs them up (for ATS keyword matching).
+  - selected_achievement_ids: the ids of the 5-10 most relevant achievements, most
+    relevant first.
 
 Rules:
   - Select achievements that map to the JD's functional requirements; prioritize
