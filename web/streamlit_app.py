@@ -308,26 +308,34 @@ def _render_tailor(*, user_id: str, today: str) -> None:
         if a.relevance_note:
             st.caption(f"Why it fits this role: {a.relevance_note}")
 
-    from web.exporter import tailored_to_docx_bytes, tailored_to_pdf_bytes
+    # Render each export ONCE per tailored result (keyed by the JSON), not on every
+    # rerun — the WeasyPrint PDF render in particular is expensive.
+    if st.session_state.get("tailor_export_key") != result:
+        from web.exporter import tailored_to_docx_bytes, tailored_to_pdf_bytes
+
+        st.session_state["tailor_export_key"] = result
+        st.session_state["tailor_export_pdf"] = tailored_to_pdf_bytes(tailored)
+        st.session_state["tailor_export_docx"] = tailored_to_docx_bytes(tailored)
+        st.session_state["tailor_export_md"] = tailored_to_markdown(tailored)
 
     st.divider()
     st.caption("Download")
     c1, c2, c3, c4 = st.columns(4)
     c1.download_button(
         "PDF",
-        data=tailored_to_pdf_bytes(tailored),
+        data=st.session_state["tailor_export_pdf"],
         file_name="tailored_resume.pdf",
         mime="application/pdf",
     )
     c2.download_button(
         "Word (.docx)",
-        data=tailored_to_docx_bytes(tailored),
+        data=st.session_state["tailor_export_docx"],
         file_name="tailored_resume.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
     c3.download_button(
         "Markdown",
-        data=tailored_to_markdown(tailored),
+        data=st.session_state["tailor_export_md"],
         file_name="tailored_resume.md",
         mime="text/markdown",
     )

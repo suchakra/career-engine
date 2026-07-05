@@ -28,7 +28,9 @@ __all__ = [
 
 # Autoescaped HTML template (default=True escapes EVERY variable — model output is
 # rendered as inert text, never markup). Print-optimized, single-column, ATS-safe.
-_PDF_TEMPLATE = """<!DOCTYPE html>
+# The environment + compiled template are module-level (constant), so the UI path
+# doesn't rebuild/recompile them on every call.
+_PDF_TEMPLATE_SRC = """<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8" />
 <title>{{ name or "Tailored résumé" }}</title>
 <style>
@@ -54,11 +56,13 @@ _PDF_TEMPLATE = """<!DOCTYPE html>
 </body></html>
 """
 
+_ENV = Environment(autoescape=select_autoescape(default=True, default_for_string=True))
+_PDF_TEMPLATE = _ENV.from_string(_PDF_TEMPLATE_SRC)  # compiled once at import
+
 
 def tailored_to_pdf_bytes(tailored: TailoredResume, *, name: str = "") -> bytes:
     """Render a tailored résumé to PDF bytes (WeasyPrint; autoescaped HTML)."""
-    env = Environment(autoescape=select_autoescape(default=True, default_for_string=True))
-    html_str = env.from_string(_PDF_TEMPLATE).render(
+    html_str = _PDF_TEMPLATE.render(
         name=name, summary=tailored.summary, achievements=tailored.achievements
     )
     import weasyprint
