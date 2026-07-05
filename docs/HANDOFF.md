@@ -40,11 +40,29 @@ résumé** — contact header · JD-aligned skills · **experience grouped by ro
 → `Entry`) · education, downloadable as PDF/DOCX/MD, with the internal "why it fits" removed. Built in
 `web/resume_builder.py` (deterministic assembly + one model call for selection/summary/skills) +
 `web/resume_render.py`; the flat `web/tailor.py`/`web/exporter.py` were removed.
-**▶ NEXT (Phase 5 remaining):** persist **Contact** (extend `tools/resume_parser.py` and/or a profile
-form → likely +minor contract bump — today it's a per-session UI form); **5B** save-as-tracked-application
-(→ dashboard + 14-day sweep); **5C** one structured renderer for master+tailored; 4E highlight (+minor);
-pre-GA /security-review. Also awaiting the user's grill re-test on a fresh session (checkpoint loop
-unreproducible; regression test PR #25).
+**▶ ACTIVE (branch `feat/discovery-a2a`) — CAPSTONE DELIVERABLE, due 2026-07-06 11:59pm PT.**
+Pivot to a **two-agent (A2A) job-discovery** feature for the Kaggle capstone (concepts: Multi-agent · MCP ·
+Agent skills · Security/HITL · Deployability · Antigravity). Design = the definitive spec (this session's
+long "Multi-Agent Async Architecture Spec" message), **marrying Gemini's eval concepts with best-practice
+SaaS** (my judgment is the guide; structured contracts over prose; reuse existing models).
+**Deliverable cut (today; rest = roadmap):** stateful **Primary** (Groomer/Tailor, Pro) ⇄ stateless
+**Scout** (Fetcher, Flash) **in-process** with the typed `EvaluationDiff` contract; real **MCP server**
+(separate process, live no-key source e.g. Remotive/HN-Algolia) exposing `search_jobs`+`fetch_jd`;
+**bounded loop MAX_ITERATIONS=3**; deterministic ledger HARD_REJECT + agentic eval → `match_status`+
+`ai_rationale`; commit ACCEPTED/SOFT_REJECT to Firestore (idempotent `job_id`); **CLI `career-engine
+discover`** demo; **on-demand Tailor reuses the deployed tailor**. Roadmap: async worker+spin-down, network
+A2A, Podman sandbox, full HITL dashboard (TTL/override), multi-user.
+**DONE this session:** contract **v2.5.0** ontology committed on the branch — `JobOpportunity`,
+`EvaluationDiff`, `ScoutDirective`, `SessionPreferences`, `InteractionLedger`, enums, `make_job_id()` +
+tests (`tests/test_discovery_schema.py`), 509 green.
+**NEXT build order:** (1) MCP server `mcp/job_server.py` (FastMCP, live source) + tests → (2) Scout agent
+(`agents/scout.py`, Flash, calls MCP) → (3) Primary evaluator + bounded loop (`agents/primary.py`, Pro,
+ledger+rubric → EvaluationDiff) → (4) CLI `discover` wiring + Firestore ledger persist → (5) reuse Tailor.
+**PACKAGING (protected, own session Mon eve):** 5-min video, writeup, README + architecture diagram (~40+
+pts; can be drafted in parallel by a designer/communicator). **Rule: nothing risky Monday; capture demo
+footage EOD Sunday.**
+**Deferred (pre-capstone Phase 5):** persist Contact (+minor); 5B save-as-application; 5C one renderer;
+4E highlight; pre-GA /security-review; grill re-test (checkpoint loop unreproducible, PR #25).
 
 - **Live dev URL:** https://career-engine-dev-app-ontyg6kaja-uc.a.run.app. Project `gen-lang-client-0513394764`, region us-central1.
 - **CI/CD (works):** `gh workflow run deploy.yml --ref master -f environment=dev` → keyless WIF → docker build+push → `terraform apply`. State in GCS bucket `gen-lang-client-0513394764-tfstate` (prefix `envs/dev`). Repo *variables* drive it (GCP_PROJECT_ID/WIF_PROVIDER/DEPLOY_SA/TF_STATE_BUCKET/AR_LOCATION/CE_AUTH_*).
