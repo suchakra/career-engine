@@ -108,6 +108,20 @@ def test_saves_real_structured_resume_json() -> None:
     assert parsed["experience"][0]["org"] == "Acme"
 
 
+def test_save_does_not_mutate_the_loaded_workspace_in_place() -> None:
+    # A store may return a cached/shared instance; the save must copy-on-write so a
+    # failed save can't leak the new application into the caller's held reference.
+    store = _FakeStore()
+    original = UserWorkspace()
+    store.save("u1", original)  # _FakeStore returns this exact instance from load()
+    save_tailored_application(
+        store, user_id="u1", company="A", job_title="X",
+        jd_text="", tailored_resume_json="{}", applied_on="2026-07-05",
+    )
+    assert original.applications == []          # untouched
+    assert len(store.load("u1").applications) == 1  # persisted copy has it
+
+
 def test_each_save_is_a_distinct_application() -> None:
     store = _FakeStore()
     a = save_tailored_application(

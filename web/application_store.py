@@ -96,8 +96,14 @@ def save_tailored_application(
         applied_on=applied_on,
     )
     workspace = store.load(user_id)
-    workspace.applications.append(application)
-    store.save(user_id, workspace)
+    # Build an updated copy rather than mutating the loaded instance in place: if a
+    # store returns a cached/shared workspace, an in-place append would leak the new
+    # application even when the subsequent save fails. (pending_actions is carried
+    # through unchanged.)
+    updated = workspace.model_copy(
+        update={"applications": [*workspace.applications, application]}
+    )
+    store.save(user_id, updated)
     return application
 
 
