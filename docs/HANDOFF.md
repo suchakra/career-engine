@@ -1,13 +1,14 @@
 # CareerEngine — Session Handoff / Resume Point
 
 ## 👉 YOU ARE HERE (updated 2026-07-05)
-**`master` at contract v2.6.0 (4E → v2.7.0 in review on PR #34, not yet merged). Web app DEPLOYED & LIVE on Cloud Run (dev):
-Google login + BYOK web grill + résumé upload + Portfolio Workbench + real ATS Tailor. `make check` green.**
-**Product work — Phase 5 sequence, nearly done:** ✅ Phase 6 A2A discovery (PR #30, `contract-v2.5.0`);
+**`master` at contract v2.7.0. Web app DEPLOYED & LIVE on Cloud Run (dev): Google login + BYOK web grill +
+résumé upload + Portfolio Workbench + real ATS Tailor (+ pin-for-tailoring, master résumé download,
+save-as-application). `make check` green (585 tests).**
+**Product work — Phase 5 sequence:** ✅ Phase 6 A2A discovery (PR #30, `contract-v2.5.0`);
 ✅ 5B save-as-application (PR #31); ✅ persist-Contact (PR #32, `contract-v2.6.0`); ✅ 5C one renderer +
-master résumé download (PR #33); 🟡 4E pin-for-tailoring (`Entry.highlighted`, **v2.7.0**) on PR #34
-(in review). **Only remaining Phase 5 item: pre-GA /security-review** (web OIDC login + BYOK key storage +
-deployer-SA roles). Capstone packaging (video/writeup/README/diagram) is user-owned and deferred.
+master résumé download (PR #33); ✅ 4E pin-for-tailoring (PR #34, `contract-v2.7.0`). **Only remaining Phase 5
+item: pre-GA /security-review** (web OIDC login + BYOK key storage + deployer-SA roles) — in progress.
+Capstone packaging (video/writeup/README/diagram) is user-owned and deferred.
 
 **Latest this session:**
 - **DURABLE WEB SESSIONS (data-loss root cause fixed):** the web grill was on `InMemorySessionService`
