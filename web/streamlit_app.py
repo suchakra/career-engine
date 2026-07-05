@@ -267,12 +267,31 @@ def _resolve_jd_text(url: str, pasted: str, *, client: Any) -> str:
     return pasted
 
 
+def _contact_from_session() -> Any:
+    """Build a Contact from the session-state fields set by the contact form."""
+    from web.resume_builder import Contact
+
+    ss = st.session_state
+    links = [x.strip() for x in str(ss.get("contact_links", "")).split(",") if x.strip()]
+    return Contact(
+        name=str(ss.get("contact_name", "")).strip(),
+        email=str(ss.get("contact_email", "")).strip(),
+        phone=str(ss.get("contact_phone", "")).strip(),
+        location=str(ss.get("contact_location", "")).strip(),
+        links=links,
+    )
+
+
 def _render_tailor(*, user_id: str, today: str) -> None:
-    """Tailor the user's portfolio to a job description — pasted OR scraped from a
-    posting URL — then produce the tailored résumé with multi-format download."""
+    """Tailor the portfolio to a JD (pasted OR scraped) into a real, ATS-safe résumé."""
     from cli.app import _install_model_client
     from integration.model_client import GeminiModelClient, ModelAPIError
-    from web.tailor import build_tailored_resume_json, parse_tailored, tailored_to_markdown
+    from web.resume_builder import tailor_structured_resume
+    from web.resume_render import (
+        structured_to_docx_bytes,
+        structured_to_markdown,
+        structured_to_pdf_bytes,
+    )
 
     st.title("Tailor a résumé")
     key = _resolve_byok_key(user_id)
@@ -283,10 +302,22 @@ def _render_tailor(*, user_id: str, today: str) -> None:
         )
         return
 
+    ss = st.session_state
+    with st.expander("Your contact details (résumé header)", expanded=not ss.get("contact_name")):
+        ss["contact_name"] = st.text_input("Full name", value=ss.get("contact_name", ""))
+        cc1, cc2 = st.columns(2)
+        ss["contact_email"] = cc1.text_input("Email", value=ss.get("contact_email", ""))
+        ss["contact_phone"] = cc2.text_input("Phone", value=ss.get("contact_phone", ""))
+        ss["contact_location"] = st.text_input("Location", value=ss.get("contact_location", ""))
+        ss["contact_links"] = st.text_input(
+            "Links (LinkedIn, GitHub, portfolio — comma-separated)",
+            value=ss.get("contact_links", ""),
+        )
+
     st.caption(
-        "Give a job posting URL or paste the description — we select and reframe your "
-        "strongest grilled achievements for this role. (Stronger results the more "
-        "you've grilled; tailoring is never blocked.)"
+        "Give a job posting URL or paste the description — we build a real, ATS-safe "
+        "résumé: JD-aligned skills + your strongest quantified achievements grouped by "
+        "role. (Stronger the more you've grilled; tailoring is never blocked.)"
     )
     jd_url = st.text_input("Job posting URL (optional)", placeholder="https://…/careers/123")
     jd = st.text_area("…or paste the job description", height=200, placeholder="Paste the JD text…")
@@ -297,22 +328,34 @@ def _render_tailor(*, user_id: str, today: str) -> None:
         if not jd_text:
             st.warning("Paste a job description or a readable job-posting URL to tailor against.")
         else:
-            # Drop any previous result so a failed run can't render a stale résumé.
-            st.session_state.pop("tailor_result", None)
+            for stale in ("tailor_resume", "tailor_pdf", "tailor_docx", "tailor_md"):
+                ss.pop(stale, None)  # a failed run must not render a prior résumé
             state = _load_discovery_state(user_id=user_id, today=today)
             try:
-                with st.spinner("Tailoring to this role…"):
-                    st.session_state["tailor_result"] = build_tailored_resume_json(
-                        state, jd_text, client=client
+                with st.spinner("Building your tailored résumé…"):
+                    built = tailor_structured_resume(
+                        state, jd_text, _contact_from_session(), client=client
                     )
+                    # Render exports into locals first (WeasyPrint PDF is expensive
+                    # per rerun) and commit all session keys ATOMICALLY, so a render
+                    # failure can't leave grill_resume set without its export bytes.
+                    pdf, docx, md = (
+                        structured_to_pdf_bytes(built),
+                        structured_to_docx_bytes(built),
+                        structured_to_markdown(built),
+                    )
+                ss["tailor_resume"], ss["tailor_pdf"], ss["tailor_docx"], ss["tailor_md"] = (
+                    built, pdf, docx, md
+                )
             except ModelAPIError as exc:
                 st.error(f"Couldn't tailor just now: {exc}")
+            except Exception as exc:  # rendering/backend hiccup — degrade, don't crash
+                st.error(f"Couldn't build the résumé just now: {exc}")
 
-    result = st.session_state.get("tailor_result")
-    if not result:
+    resume = ss.get("tailor_resume")
+    if resume is None:
         return
-    tailored = parse_tailored(result)
-    if tailored.is_empty:
+    if resume.is_empty:
         st.warning(
             "Nothing to tailor yet — grill a few experiences first (so there are "
             "quantified achievements to select from), then try again."
@@ -320,53 +363,46 @@ def _render_tailor(*, user_id: str, today: str) -> None:
         return
 
     st.divider()
-    if tailored.summary:
-        st.subheader("Summary")
-        st.write(tailored.summary)
-    st.subheader("Selected achievements")
-    for a in tailored.achievements:
-        st.markdown(f"**{a.headline}**")
-        if a.full_text:
-            st.write(a.full_text)
-        if a.relevance_note:
-            st.caption(f"Why it fits this role: {a.relevance_note}")
-
-    # Render each export ONCE per tailored result (keyed by the JSON), not on every
-    # rerun — the WeasyPrint PDF render in particular is expensive.
-    if st.session_state.get("tailor_export_key") != result:
-        from web.exporter import tailored_to_docx_bytes, tailored_to_pdf_bytes
-
-        st.session_state["tailor_export_key"] = result
-        st.session_state["tailor_export_pdf"] = tailored_to_pdf_bytes(tailored)
-        st.session_state["tailor_export_docx"] = tailored_to_docx_bytes(tailored)
-        st.session_state["tailor_export_md"] = tailored_to_markdown(tailored)
+    st.subheader(resume.contact.name or "Your tailored résumé")
+    contact_line = " · ".join(
+        p.strip()
+        for p in (resume.contact.email, resume.contact.phone, resume.contact.location,
+                  *resume.contact.links)
+        if p.strip()
+    )
+    if contact_line:
+        st.caption(contact_line)
+    if resume.summary:
+        st.write(resume.summary)
+    if resume.skills:
+        st.markdown("**Skills:** " + " · ".join(resume.skills))
+    if resume.experience:
+        st.markdown("#### Experience")
+        for role in resume.experience:
+            head = " — ".join(p for p in (role.title, role.org) if p)
+            st.markdown(f"**{head}**" + (f"  ·  {role.dates}" if role.dates else ""))
+            for bullet in role.bullets:
+                st.markdown(f"- {bullet}")
+    if resume.education:
+        st.markdown("#### Education")
+        for role in resume.education:
+            head = " — ".join(p for p in (role.title, role.org) if p)
+            st.markdown(f"- {head}" + (f" ({role.dates})" if role.dates else ""))
 
     st.divider()
     st.caption("Download")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.download_button(
-        "PDF",
-        data=st.session_state["tailor_export_pdf"],
-        file_name="tailored_resume.pdf",
-        mime="application/pdf",
+    d1, d2, d3 = st.columns(3)
+    d1.download_button(
+        "PDF", data=ss["tailor_pdf"], file_name="resume.pdf", mime="application/pdf"
     )
-    c2.download_button(
+    d2.download_button(
         "Word (.docx)",
-        data=st.session_state["tailor_export_docx"],
-        file_name="tailored_resume.docx",
+        data=ss["tailor_docx"],
+        file_name="resume.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
-    c3.download_button(
-        "Markdown",
-        data=st.session_state["tailor_export_md"],
-        file_name="tailored_resume.md",
-        mime="text/markdown",
-    )
-    c4.download_button(
-        "JSON",
-        data=result,
-        file_name="tailored_resume.json",
-        mime="application/json",
+    d3.download_button(
+        "Markdown", data=ss["tailor_md"], file_name="resume.md", mime="text/markdown"
     )
 
 
