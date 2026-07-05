@@ -134,6 +134,48 @@ the web app. Ordered so each slice is independently shippable:
 and read what was recorded per experience, add a remembered project under a long tenure, and start a grill
 targeted at that specific experience — without any contract break for 4A–4D.
 
+### Phase 5 — Tailoring & résumé quality  *(NEXT; the output must be a REAL résumé)*
+Status: **planned, not started.** The Grill → Portfolio → Tailor loop ships (PRs #26/#27/#28: tailor by
+paste/URL → PDF/DOCX/MD/JSON), but the **output is not yet a real résumé** — see live feedback
+(2026-07-05, `demo_output/example.md`): a summary paragraph + ~5 "talking points" (headline + expanded
+text + an internal *"why it fits"* note), with **no contact header, no role/company/date structure, no
+skills section, no education** — not an ATS-parseable document.
+
+- **5A — Real, ATS-safe résumé output (HIGH — the headline gap).**
+  Research and adopt a standard **ATS-safe** structure (reverse-chronological, single-column, standard
+  section headings) and restructure the finalize + tailor output to a proper résumé schema:
+  - **Contact header** (name, email, phone, location, LinkedIn). Needs a source — extend
+    `tools/resume_parser.py` to capture contact from the uploaded résumé and/or add a small profile form.
+    (Likely an additive `Contact`/`Profile` model → MINOR contract bump.)
+  - **Professional summary** (already produced).
+  - **Skills** section, **keyword-aligned to the JD** — ATS ranks on keyword match, so surface the
+    JD's hard skills the candidate actually has.
+  - **Experience grouped BY ROLE** — company · title · location · dates, with the STAR bullets under each.
+    Reuse `StarStory.entry_id` → `Entry` to reconstruct real work history instead of a flat achievement
+    list. This is the core fix: bullets must live under their employer/role, chronologically.
+  - **Education / certifications** sections (already captured as EDUCATION entries).
+  - **Drop the internal `_Why it fits_`** from the document (keep it, at most, as a separate on-screen
+    explanation — it is not résumé content).
+  - **Selection/leveling** — a Sr. Eng Manager résumé must not lead with a volunteering/hackathon bullet;
+    weight by seniority + JD relevance.
+  - Update the **PDF/DOCX/Markdown** renderers (`web/exporter.py`, `tools/pdf_renderer.py`) to this
+    structure so all formats emit a real résumé.
+- **5B — Save as a tracked application.** Tailor → record the JD + tailored résumé as an `Application`
+  on the `UserWorkspace` → shows in the dashboard "Tracked applications" and enters the 14-day
+  follow-up sweep. Closes the apply → track → follow-up loop. (Reuses existing `Application` model; no
+  contract change.)
+- **5C — One structured renderer for master + tailored.** The master PDF currently renders from
+  `extracted_star_stories`, not the finalized JSON; render both master and tailored from the same
+  structured résumé so formatting is consistent.
+- **(from Phase 4) 4E — Highlight/pin an experience** for tailoring priority — additive-MINOR contract bump.
+- **Pre-GA `/security-review`** (web OIDC login + paid BYOK-key storage + broad deployer-SA roles) —
+  the required review flagged in [SECURITY.md](../docs/SECURITY.md) before real users / GA.
+
+**Exit criteria:** tailoring produces a document a recruiter/ATS would accept as a real résumé — contact
+header, JD-aligned skills, reverse-chronological experience grouped by role with quantified bullets,
+education — downloadable as PDF/DOCX/MD, with the internal reasoning removed; and a tailored résumé can be
+saved as a tracked application.
+
 ### Phase N — opportunistic value-adds (wanted; NOT v1-blocking; build when feasible)
 - **Outcome learning (positive-reinforcement)** ([ARCHITECTURE.md §8.1](ARCHITECTURE.md)): async-learn,
   per user + per job type, which résumé format/wording correlated with **reaching interview** — positive

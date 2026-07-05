@@ -35,11 +35,14 @@ additive-minor contract bump); pre-GA **/security-review**; custom domain.
 **Tailor** (paste JD **or job-posting URL** → tailored résumé → **PDF / Word / Markdown / JSON** export) →
 dashboard/meter. Ship changes with the [`ship-change`](../skills/ship-change/SKILL.md) skill.
 
-**Open follow-ups (unbuilt):** Tailor "save as tracked application" (ties into dashboard + 14-day sweep);
-make the *master* PDF also consume tailored/finalized JSON (currently renders from stories); **4E**
-highlight/pin (needs additive-minor contract bump); pre-GA **/security-review**; custom domain. Also
-awaiting the user's grill re-test on a fresh session (checkpoint loop could not be reproduced; regression
-test in PR #25).
+**▶ NEXT: Phase 5 — Tailoring & résumé quality** (see [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md)).
+Headline gap from live feedback (`demo_output/example.md`): the tailored output is a summary + ~5 talking
+points with internal "why it fits" notes — **NOT a real ATS-safe résumé** (no contact header, no
+role/company/date structure, no skills/education). 5A real résumé output (reuse `StarStory.entry_id`→`Entry`
+to group bullets under roles; JD-aligned skills; drop "why it fits"; contact via parser/profile → likely
++minor) · 5B save-as-tracked-application · 5C one structured renderer for master+tailored · 4E highlight
+(+minor) · pre-GA /security-review. Also awaiting the user's grill re-test on a fresh session (checkpoint
+loop unreproducible; regression test PR #25).
 
 - **Live dev URL:** https://career-engine-dev-app-ontyg6kaja-uc.a.run.app. Project `gen-lang-client-0513394764`, region us-central1.
 - **CI/CD (works):** `gh workflow run deploy.yml --ref master -f environment=dev` → keyless WIF → docker build+push → `terraform apply`. State in GCS bucket `gen-lang-client-0513394764-tfstate` (prefix `envs/dev`). Repo *variables* drive it (GCP_PROJECT_ID/WIF_PROVIDER/DEPLOY_SA/TF_STATE_BUCKET/AR_LOCATION/CE_AUTH_*).
