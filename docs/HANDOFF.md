@@ -98,8 +98,26 @@ literal `mcp/` + `agents/` paths sketched earlier) — a top-level `mcp/` dir wo
 
 **▶ ALL 5 BUILD STEPS DONE.** The demoable slice is complete: `career-engine discover` runs the live
 two-agent A2A loop (Scout ⇄ MCP ⇄ Primary) → ranked matches + rationale → idempotent persist → optional
-Tailor. Remaining before submission = **PACKAGING** (video + writeup + README + architecture diagram) and
-docs reconciliation (PROGRESS/ARCHITECTURE §A2A). Safety-net floor (deployed grill→tailor) untouched.
+Tailor. Safety-net floor (deployed grill→tailor) untouched.
+
+**▶▶ RESUME HERE NEXT SESSION (2026-07-05, session budget hit; tree CLEAN, all committed):**
+The A2A build is DONE + pushed on `feat/discovery-a2a` → **PR #30** open
+(https://github.com/suchakra/career-engine/pull/30). **Two review gates were in flight when the session
+ended:** (a) a **Sonnet subagent review** was spawned (background — its result is NOT captured in docs; it may
+be lost on reset, so re-spawn if no verdict is visible); (b) **Copilot** review requested on PR #30.
+**Exact next actions, in order:**
+1. Read PR #30 review comments: `gh api repos/suchakra/career-engine/pulls/30/comments` and the Copilot
+   review; if no Sonnet verdict survived, re-run a Sonnet review of `git diff master...feat/discovery-a2a`.
+2. Address any MUST-FIX/SHOULD-FIX (re-run `make check`, currently **559 green**), push.
+3. Squash-merge: `gh pr merge 30 --squash --delete-branch`; then **tag `contract-v2.5.0`** + push tag.
+4. Deploy is OPTIONAL (discover is a **CLI** demo, recorded from terminal — no redeploy needed; honors
+   "nothing risky Monday"). The deployed web floor is unaffected.
+5. **PACKAGING** (user-owned, Mon eve): video + writeup + README + architecture diagram. User is running
+   NotebookLM on the docs to draft script/diagram/writeup/README — **review those drafts against the code so
+   nothing overclaims.** Best source set for NotebookLM: `docs/ARCHITECTURE.md` §15, `docs/DISCOVERY_DEMO.md`
+   (verified demo runbook — commands to record), this file, and the PR #30 body.
+**Deferred (not blocking submission):** README "Job Discovery" section (20-pt docs), network/stdio A2A,
+Podman sandbox, async worker, full HITL dashboard, multi-user isolation. **Submission due 2026-07-06 11:59pm PT.**
 **PACKAGING (protected, own session Mon eve):** 5-min video, writeup, README + architecture diagram (~40+
 pts; can be drafted in parallel by a designer/communicator). **Rule: nothing risky Monday; capture demo
 footage EOD Sunday.**
