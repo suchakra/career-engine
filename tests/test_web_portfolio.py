@@ -229,6 +229,13 @@ class TestRenderPortfolio:
         assert seen == [(str(e1.entry_id), False)]
 
     def test_no_pin_button_without_callback(self) -> None:
+        # Pass on_grill_entry so a button IS rendered — then prove the pin button
+        # specifically is absent (not just that no buttons exist at all).
         st = FakeSt()
-        render_portfolio(build_portfolio_view(CareerEngineState(work_timeline=[_entry("A")])), st=st)
+        render_portfolio(
+            build_portfolio_view(CareerEngineState(work_timeline=[_entry("A")])),
+            st=st,
+            on_grill_entry=lambda _eid: None,
+        )
+        assert any(label == "Grill me about this" for label, _ in st.buttons)
         assert not any("tailoring priority" in label for label, _ in st.buttons)

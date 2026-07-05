@@ -175,13 +175,19 @@ def _set_entry_highlight(*, user_id: str, entry_id: str, highlighted: bool) -> N
     if service is None:
         st.warning("Couldn't reach your saved portfolio just now — try again in a moment.")
         return
-    set_entry_highlight(
-        service,
-        app_name=get_settings().app_name,
-        user_id=user_id,
-        entry_id=entry_id,
-        highlighted=highlighted,
-    )
+    try:
+        result = set_entry_highlight(
+            service,
+            app_name=get_settings().app_name,
+            user_id=user_id,
+            entry_id=entry_id,
+            highlighted=highlighted,
+        )
+    except Exception:
+        st.warning("Couldn't update that just now — try again in a moment.")
+        return
+    if result is None:
+        st.warning("Couldn't find that experience to update — refresh and try again.")
 
 
 def _render_add_experience_form(*, user_id: str, today: str) -> None:

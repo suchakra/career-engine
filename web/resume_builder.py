@@ -223,6 +223,7 @@ def tailor_structured_resume(
     # prioritized them. Pinned first, then the model's picks, deduped.
     highlighted_entry_ids = {str(e.entry_id) for e in state.work_timeline if e.highlighted}
     if highlighted_entry_ids:
+        # StarStory.entry_id is already a str per schema; no coercion needed.
         story_entry = {str(s.story_id): s.entry_id for s in state.extracted_star_stories}
         pinned = [c["id"] for c in catalog if story_entry.get(c["id"], "") in highlighted_entry_ids]
         selected = list(dict.fromkeys([*pinned, *selected]))

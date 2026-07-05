@@ -77,9 +77,11 @@ class TestEntryRoundTrip:
             source="resume",
             bullets=["Led a team of 8 engineers.", "Reduced p99 latency by 70%."],
             status=EntryStatus.GRILLED,
+            highlighted=True,
         )
         reconstructed = _roundtrip(original)
         assert original == reconstructed
+        assert reconstructed.highlighted is True
 
     def test_entry_with_empty_end_date_means_present(self) -> None:
         """Empty end_date is the 'present' sentinel and round-trips correctly."""
@@ -95,6 +97,7 @@ class TestEntryRoundTrip:
         assert entry.source == "manual"
         assert entry.bullets == []
         assert entry.org == ""
+        assert entry.highlighted is False
 
     def test_all_experience_types_roundtrip(self) -> None:
         """All ExperienceType values survive round-trip."""

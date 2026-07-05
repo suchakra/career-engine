@@ -157,7 +157,10 @@ def render_portfolio(
         st.info(view.empty_text)
         return
 
-    st.caption("Everything recorded about you, by experience. Read-only.")
+    st.caption(
+        "Everything recorded about you, by experience. Pin the ones you want the "
+        "Tailor to always prioritize."
+    )
     for entry in view.entries:
         st.divider()
         pin = "📌 " if entry.highlighted else ""

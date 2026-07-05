@@ -1,7 +1,7 @@
 # CareerEngine — Session Handoff / Resume Point
 
 ## 👉 YOU ARE HERE (updated 2026-07-05)
-**`master` at contract v2.7.0 (4E on PR #34 in-flight). Web app DEPLOYED & LIVE on Cloud Run (dev):
+**`master` at contract v2.6.0 (4E → v2.7.0 in review on PR #34, not yet merged). Web app DEPLOYED & LIVE on Cloud Run (dev):
 Google login + BYOK web grill + résumé upload + Portfolio Workbench + real ATS Tailor. `make check` green.**
 **Product work — Phase 5 sequence, nearly done:** ✅ Phase 6 A2A discovery (PR #30, `contract-v2.5.0`);
 ✅ 5B save-as-application (PR #31); ✅ persist-Contact (PR #32, `contract-v2.6.0`); ✅ 5C one renderer +
