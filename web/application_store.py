@@ -69,8 +69,13 @@ def save_tailored_application(
     """Append a tailored résumé as a tracked application and persist it.
 
     Loads the workspace, appends the new :class:`Application`, and saves — a
-    read-modify-write that reuses the existing workspace document (so it coexists
-    with the async sweep's pending actions). Returns the created application.
+    read-modify-write over the whole document. It preserves the existing
+    ``applications`` and ``pending_actions`` it read, but the underlying store does
+    a full-document ``set`` with no transaction, so a concurrent writer (e.g. the
+    async ``pending_action_sweep``) that commits between this load and save would be
+    overwritten. Acceptable on the single-user demo (``max_instances=1``); a
+    transactional/``ArrayUnion`` write is the multi-user hardening (ARCHITECTURE §8).
+    Returns the created application.
 
     Args:
         store: Sync workspace store (real or test double).

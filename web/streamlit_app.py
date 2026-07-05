@@ -16,9 +16,12 @@ delegate rendering to :func:`web.dashboard.render_dashboard`. No workflow logic 
 from __future__ import annotations
 
 from datetime import date
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import streamlit as st
+
+if TYPE_CHECKING:
+    from web.resume_builder import StructuredResume
 
 from schema import CareerEngineState, UserWorkspace
 from web.dashboard import build_dashboard_view, render_dashboard
@@ -348,9 +351,12 @@ def _render_tailor(*, user_id: str, today: str) -> None:
                     built, pdf, docx, md
                 )
                 # Keep the JD text + reset any prior save state so this tailored
-                # résumé can be recorded as a tracked application (5B).
+                # résumé can be recorded as a tracked application (5B). Also clear
+                # the save-form inputs so a re-tailor doesn't prefill the previous
+                # application's company/title.
                 ss["tailor_jd_text"] = jd_text
-                ss.pop("tailor_saved_app", None)
+                for stale_save in ("tailor_saved_app", "save_app_company", "save_app_title"):
+                    ss.pop(stale_save, None)
             except ModelAPIError as exc:
                 st.error(f"Couldn't tailor just now: {exc}")
             except Exception as exc:  # rendering/backend hiccup — degrade, don't crash
@@ -412,7 +418,7 @@ def _render_tailor(*, user_id: str, today: str) -> None:
     _render_save_application(user_id=user_id, today=today, resume=resume)
 
 
-def _render_save_application(*, user_id: str, today: str, resume: Any) -> None:
+def _render_save_application(*, user_id: str, today: str, resume: StructuredResume) -> None:
     """Record the tailored résumé as a tracked application (5B).
 
     Writes an ``Application`` onto the user's workspace so it shows in the
@@ -447,7 +453,7 @@ def _render_save_application(*, user_id: str, today: str, resume: Any) -> None:
                 company=company,
                 job_title=job_title,
                 jd_text=ss.get("tailor_jd_text", ""),
-                tailored_resume_json=resume.model_dump_json(),
+                tailored_resume_json=resume.to_json(),
                 applied_on=today,
             )
             label = " — ".join(p for p in (app.company, app.job_title) if p) or "application"

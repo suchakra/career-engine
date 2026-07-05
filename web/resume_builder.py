@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from integration.model_client import GeminiModelClient
@@ -61,6 +61,14 @@ class StructuredResume:
         Education counts — an early-career résumé may be education-only.
         """
         return not (self.summary.strip() or self.experience or self.education)
+
+    def to_json(self) -> str:
+        """Serialise to JSON (persisted as an Application's ``tailored_resume_json``).
+
+        ``StructuredResume`` is a dataclass (not a Pydantic model), so it has no
+        ``model_dump_json``; this is the canonical serialization seam.
+        """
+        return json.dumps(asdict(self))
 
 
 def _dates(entry: Entry) -> str:

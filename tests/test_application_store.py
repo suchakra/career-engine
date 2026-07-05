@@ -6,8 +6,11 @@ with no GCP.
 
 from __future__ import annotations
 
-from schema import Application, ApplicationStatus, UserWorkspace
+import json
+
+from schema import Application, ApplicationStatus, PendingAction, UserWorkspace
 from web.application_store import build_application, save_tailored_application
+from web.resume_builder import Contact, RoleBlock, StructuredResume
 
 
 class _FakeStore:
@@ -58,7 +61,11 @@ def test_save_appends_and_persists() -> None:
 def test_save_coexists_with_existing_applications_and_pending_actions() -> None:
     store = _FakeStore()
     existing = Application(company="Old Co", job_title="Eng", applied_on="2026-06-01")
-    store.save("u1", UserWorkspace(applications=[existing]))
+    # A pending action from the async sweep must survive the read-modify-write.
+    store.save(
+        "u1",
+        UserWorkspace(applications=[existing], pending_actions=[PendingAction(reason="follow up")]),
+    )
 
     save_tailored_application(
         store,
@@ -71,6 +78,34 @@ def test_save_coexists_with_existing_applications_and_pending_actions() -> None:
     )
     ws = store.load("u1")
     assert [a.company for a in ws.applications] == ["Old Co", "New Co"]
+    assert len(ws.pending_actions) == 1 and ws.pending_actions[0].reason == "follow up"
+
+
+def test_saves_real_structured_resume_json() -> None:
+    # Exercise the ACTUAL serialization path the UI uses (StructuredResume.to_json),
+    # not a string literal — this is what caught the model_dump_json() bug.
+    resume = StructuredResume(
+        contact=Contact(name="Ada", email="ada@example.com", links=["https://x/ada"]),
+        summary="Fractional CTO.",
+        skills=["AWS", "MCP"],
+        experience=[RoleBlock(title="CTO", org="Acme", dates="2020 - present", bullets=["Led X."])],
+        education=[],
+    )
+    store = _FakeStore()
+    app = save_tailored_application(
+        store,
+        user_id="u1",
+        company="Acme",
+        job_title="CTO",
+        jd_text="JD",
+        tailored_resume_json=resume.to_json(),
+        applied_on="2026-07-05",
+    )
+    # The persisted JSON is valid and round-trips the résumé content.
+    parsed = json.loads(app.tailored_resume_json)
+    assert parsed["contact"]["name"] == "Ada"
+    assert parsed["skills"] == ["AWS", "MCP"]
+    assert parsed["experience"][0]["org"] == "Acme"
 
 
 def test_each_save_is_a_distinct_application() -> None:
