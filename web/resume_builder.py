@@ -228,5 +228,6 @@ __all__ = [
     "RoleBlock",
     "StructuredResume",
     "assemble_resume",
+    "master_structured_resume",
     "tailor_structured_resume",
 ]

@@ -248,7 +248,10 @@ def _render_master_resume_download(*, user_id: str, state: CareerEngineState) ->
         "Your full résumé from everything you've grilled — all quantified achievements, "
         "grouped by role. Same format as a tailored résumé, just not aimed at one JD."
     )
-    if st.button("Build my master résumé"):
+    if st.button("Build my master résumé", key="master_resume_build"):
+        # Clear any prior build up front so a failed rebuild can't leave stale
+        # downloads on screen (mirrors the tailor flow).
+        ss.pop("master_resume_files", None)
         contact = Contact()
         try:
             from database.workspace_store import FirestoreWorkspaceStore
