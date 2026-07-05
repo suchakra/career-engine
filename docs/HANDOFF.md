@@ -55,6 +55,12 @@ A2A, Podman sandbox, full HITL dashboard (TTL/override), multi-user.
 **DONE this session:** contract **v2.5.0** ontology committed on the branch — `JobOpportunity`,
 `EvaluationDiff`, `ScoutDirective`, `SessionPreferences`, `InteractionLedger`, enums, `make_job_id()` +
 tests (`tests/test_discovery_schema.py`), 509 green.
+**EVAL CRITERIA (user's real prefs — use as default `SessionPreferences` + Primary test fixture; later a UI
+form per customer):** target_roles = Fractional Technology Leadership / consulting / highly-autonomous
+Principal-level eng (e.g. via BitCrafty Inc.). nice_to_haves (soft) = AWS infra (SAP-C02-level), multi-agent
+AI orchestration (ADK/LangGraph/MCP), containerized sandboxing (Podman/Linux), agile-startup / autonomous-
+pipeline teams. dealbreakers (HARD_REJECT) = traditional W2 middle-management; deeply bureaucratic
+enterprise; rigid 100% on-site; pure maintenance-only roles. (Plus already-applied from the ledger.)
 **NEXT build order:** (1) MCP server `mcp/job_server.py` (FastMCP, live source) + tests → (2) Scout agent
 (`agents/scout.py`, Flash, calls MCP) → (3) Primary evaluator + bounded loop (`agents/primary.py`, Pro,
 ledger+rubric → EvaluationDiff) → (4) CLI `discover` wiring + Firestore ledger persist → (5) reuse Tailor.
