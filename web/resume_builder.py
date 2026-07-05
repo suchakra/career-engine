@@ -146,6 +146,24 @@ def assemble_resume(
     )
 
 
+def master_structured_resume(
+    state: CareerEngineState, *, contact: Contact | None = None
+) -> StructuredResume:
+    """Assemble the user's MASTER résumé — every quantified achievement, no JD tailoring.
+
+    The same :class:`StructuredResume` schema and renderer as the tailored résumé (5C):
+    all validated stories (no ``selected_story_ids``), grouped by role, with the
+    profile summary. Skills are left to the tailored pass (they are JD-aligned there).
+    """
+    return assemble_resume(
+        state,
+        contact=contact or Contact(),
+        summary=state.professional_summary,
+        skills=[],
+        selected_story_ids=None,
+    )
+
+
 def tailor_structured_resume(
     state: CareerEngineState,
     jd_text: str,
@@ -210,5 +228,6 @@ __all__ = [
     "RoleBlock",
     "StructuredResume",
     "assemble_resume",
+    "master_structured_resume",
     "tailor_structured_resume",
 ]

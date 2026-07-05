@@ -223,7 +223,81 @@ def _render_portfolio(*, user_id: str, today: str) -> None:
         _jump_grill_to_entry(user_id=user_id, entry_id=entry_id)
 
     render_portfolio(build_portfolio_view(state), st=st, on_grill_entry=_grill_entry)
+    _render_master_resume_download(user_id=user_id, state=state)
     _render_add_experience_form(user_id=user_id, today=today)
+
+
+def _render_master_resume_download(*, user_id: str, state: CareerEngineState) -> None:
+    """Download the MASTER résumé — every quantified achievement, no JD tailoring (5C).
+
+    Uses the SAME structured schema + renderer as the Tailor, so master and tailored
+    résumés are formatting-consistent. Rendering is gated behind a button (WeasyPrint
+    PDF is expensive) and cached in session_state, mirroring the Tailor flow.
+    """
+    from web.resume_builder import Contact, master_structured_resume
+    from web.resume_render import (
+        structured_to_docx_bytes,
+        structured_to_markdown,
+        structured_to_pdf_bytes,
+    )
+
+    ss = st.session_state
+    st.divider()
+    st.subheader("Your master résumé")
+    st.caption(
+        "Your full résumé from everything you've grilled — all quantified achievements, "
+        "grouped by role. Same format as a tailored résumé, just not aimed at one JD."
+    )
+    if st.button("Build my master résumé", key="master_resume_build"):
+        # Clear any prior build up front so a failed rebuild can't leave stale
+        # downloads on screen (mirrors the tailor flow).
+        ss.pop("master_resume_files", None)
+        contact = Contact()
+        try:
+            from database.workspace_store import FirestoreWorkspaceStore
+            from web.profile_store import load_profile
+
+            p = load_profile(FirestoreWorkspaceStore(), user_id=user_id)
+            contact = Contact(
+                name=p.name, email=p.email, phone=p.phone, location=p.location, links=p.links
+            )
+        except Exception:
+            pass  # no saved contact → header just omits it
+        try:
+            with st.spinner("Building your master résumé…"):
+                resume = master_structured_resume(state, contact=contact)
+                if resume.is_empty:
+                    ss.pop("master_resume_files", None)
+                    st.warning(
+                        "Nothing to build yet — grill a few experiences into quantified "
+                        "achievements first, then come back."
+                    )
+                else:
+                    ss["master_resume_files"] = (
+                        structured_to_pdf_bytes(resume),
+                        structured_to_docx_bytes(resume),
+                        structured_to_markdown(resume),
+                    )
+        except Exception as exc:  # render/backend hiccup — degrade, don't crash
+            st.error(f"Couldn't build it just now: {exc}")
+
+    files = ss.get("master_resume_files")
+    if files:
+        pdf, docx, md = files
+        c1, c2, c3 = st.columns(3)
+        c1.download_button(
+            "PDF", data=pdf, file_name="master_resume.pdf", mime="application/pdf", key="master_pdf"
+        )
+        c2.download_button(
+            "Word (.docx)",
+            data=docx,
+            file_name="master_resume.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            key="master_docx",
+        )
+        c3.download_button(
+            "Markdown", data=md, file_name="master_resume.md", mime="text/markdown", key="master_md"
+        )
 
 
 def _resolve_byok_key(user_id: str) -> str | None:
