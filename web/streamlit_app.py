@@ -268,7 +268,8 @@ def _resolve_jd_text(url: str, pasted: str, *, client: Any) -> str:
 
 
 def _render_tailor(*, user_id: str, today: str) -> None:
-    """Tailor the user's portfolio to a pasted job description (produce + download)."""
+    """Tailor the user's portfolio to a job description — pasted OR scraped from a
+    posting URL — then produce the tailored résumé with multi-format download."""
     from cli.app import _install_model_client
     from integration.model_client import GeminiModelClient, ModelAPIError
     from web.tailor import build_tailored_resume_json, parse_tailored, tailored_to_markdown
