@@ -83,8 +83,15 @@ literal `mcp/` + `agents/` paths sketched earlier) — a top-level `mcp/` dir wo
   computes `next_directive`). `PrimaryAgent.discover()` = MAX_ITERATIONS=3 loop, dedupes by `job_id`,
   refines directive (excludes missed companies), stops at `desired_total` or the cap. Tests
   `tests/test_primary.py`. **551 green.**
-- (4) CLI `discover` wiring (`career-engine discover`) + Firestore ledger persist (idempotent `job_id`) →
-  (5) reuse the deployed Tailor on a chosen accepted job.
+- ✅ **(4) CLI `discover` DONE** — `career-engine discover [--count N --max-iterations M --firestore]`
+  (`main.py` thin cmd → `discovery/cli.py`). `run_discover` (testable, offline) runs a pre-wired Primary,
+  prints ACCEPTED/FOR-REVIEW with rationale, persists accepted via a `LedgerStore`; `discover_command`
+  (IO seam) resolves auth, hydrates the ledger, wires Scout+ModelEvaluator. `discovery/store.py`:
+  `InMemoryLedgerStore` (default) + sync `FirestoreLedgerStore` (`discovered_jobs/{uid}/jobs/{job_id}`,
+  idempotent, no secrets). `discovery/preferences.py`: `default_session_preferences()` = the operator's
+  real EVAL CRITERIA. Tests `tests/test_ledger_store.py` + `tests/test_discovery_loop_cli.py`. **557 green;
+  LIVE end-to-end run against real Remotive succeeded** (3 iters, ranked output, idempotent persist).
+- (5) reuse the deployed Tailor on a chosen accepted job (next).
 **PACKAGING (protected, own session Mon eve):** 5-min video, writeup, README + architecture diagram (~40+
 pts; can be drafted in parallel by a designer/communicator). **Rule: nothing risky Monday; capture demo
 footage EOD Sunday.**
