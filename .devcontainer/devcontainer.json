@@ -19,5 +19,5 @@
       ]
     }
   },
-  "postCreateCommand": "if [ -n \"$GIT_USER_EMAIL\" ]; then git config --global user.email \"$GIT_USER_EMAIL\"; fi && if [ -n \"$GIT_USER_NAME\" ]; then git config --global user.name \"$GIT_USER_NAME\"; fi && if [ -n \"$GIT_SIGNING_KEY\" ]; then git config --global user.signingkey \"$GIT_SIGNING_KEY\"; fi && if [ -n \"$GIT_COMMIT_GPGSIGN\" ]; then git config --global commit.gpgsign \"$GIT_COMMIT_GPGSIGN\"; fi"
+  "postCreateCommand": "if [ -n \"$GIT_USER_EMAIL\" ]; then git config --global user.email \"$GIT_USER_EMAIL\"; fi; if [ -n \"$GIT_USER_NAME\" ]; then git config --global user.name \"$GIT_USER_NAME\"; fi; if [ -n \"$GIT_SIGNING_KEY\" ]; then git config --global user.signingkey \"$GIT_SIGNING_KEY\"; fi; if [ -n \"$GIT_COMMIT_GPGSIGN\" ]; then git config --global --bool commit.gpgsign \"$GIT_COMMIT_GPGSIGN\"; fi"
 }
