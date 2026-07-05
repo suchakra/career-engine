@@ -308,16 +308,31 @@ def _render_tailor(*, user_id: str, today: str) -> None:
         if a.relevance_note:
             st.caption(f"Why it fits this role: {a.relevance_note}")
 
-    md = tailored_to_markdown(tailored)
-    c1, c2 = st.columns(2)
+    from web.exporter import tailored_to_docx_bytes, tailored_to_pdf_bytes
+
+    st.divider()
+    st.caption("Download")
+    c1, c2, c3, c4 = st.columns(4)
     c1.download_button(
-        "⬇️ Download (Markdown)",
-        data=md,
+        "PDF",
+        data=tailored_to_pdf_bytes(tailored),
+        file_name="tailored_resume.pdf",
+        mime="application/pdf",
+    )
+    c2.download_button(
+        "Word (.docx)",
+        data=tailored_to_docx_bytes(tailored),
+        file_name="tailored_resume.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+    c3.download_button(
+        "Markdown",
+        data=tailored_to_markdown(tailored),
         file_name="tailored_resume.md",
         mime="text/markdown",
     )
-    c2.download_button(
-        "⬇️ Download (JSON)",
+    c4.download_button(
+        "JSON",
         data=result,
         file_name="tailored_resume.json",
         mime="application/json",

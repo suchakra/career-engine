@@ -20,6 +20,8 @@ dependencies = [
     # Chrome because it needs no browser/display server in the Linux devcontainer.
     # See ARCHITECTURE.md §7 deviation note (logged in PROGRESS.md).
     "weasyprint==69.0",
+    # DOCX résumé export (editable Word output alongside PDF/Markdown).
+    "python-docx==1.2.0",
     # Web frontend (Phase 2; installed now so the import stub type-checks)
     "streamlit==1.58.0",
     # Streamlit native OIDC auth (st.login/st.user) needs Authlib
