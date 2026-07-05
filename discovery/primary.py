@@ -270,13 +270,11 @@ def evaluate_batch(
     """
     survivors: list[JobOpportunity] = []
     hard_reject_companies: set[str] = set()
-    hard_rejected = 0
     for job in jobs:
         reason = hard_reject_reason(job, prefs, ledger)
         if reason is None:
             survivors.append(job)
             continue
-        hard_rejected += 1
         if job.metadata.company.strip():
             hard_reject_companies.add(job.metadata.company.strip())
 
@@ -299,7 +297,9 @@ def evaluate_batch(
             if job.metadata.company.strip():
                 reject_companies.add(job.metadata.company.strip())
 
-    if accepted and not soft and hard_rejected == 0:
+    # APPROVE when every survivor was accepted (hard-rejects are dropped, not a
+    # downgrade signal); PARTIAL when some survivors were soft-rejected.
+    if accepted and not soft:
         batch_status = ScoutBatchStatus.APPROVE_BATCH
     elif accepted:
         batch_status = ScoutBatchStatus.PARTIAL_ACCEPT

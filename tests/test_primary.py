@@ -115,6 +115,7 @@ class TestEvaluateBatch:
         diff = self._diff([_job("c", desc="AWS + MCP")])
         assert diff.accepted_jobs[0].match_status is MatchStatus.ACCEPTED
         assert diff.accepted_jobs[0].ai_rationale
+        assert diff.status is ScoutBatchStatus.APPROVE_BATCH
 
     def test_status_partial_accept_when_mixed(self) -> None:
         diff = self._diff([_job("d", desc="AWS"), _job("e", title="Barista", desc="coffee")])

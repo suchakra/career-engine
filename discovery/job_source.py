@@ -203,6 +203,10 @@ def search_jobs(
     for raw in raw_jobs:
         if not isinstance(raw, dict):
             continue
+        # Without a stable external id, make_job_id would hash an empty string and
+        # collapse every id-less posting onto one job_id → dedup + ledger collisions.
+        if not str(raw.get("id", "")).strip():
+            continue
         job = _to_job(raw)
         if job.job_id in seen or not _passes_filters(job, directive):
             continue

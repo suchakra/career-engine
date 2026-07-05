@@ -233,6 +233,7 @@ def discover(
     """
     from discovery.cli import discover_command
     from integration.model_client import ModelAPIError
+    from tools.web_scraper import ScraperError
 
     try:
         discover_command(
@@ -247,6 +248,11 @@ def discover(
         from cli.app import format_model_api_error
 
         click.echo(format_model_api_error(exc, use_firestore=firestore), err=True)
+        sys.exit(1)
+    except ScraperError as exc:
+        # A live job-source fetch failed (network / non-2xx / SSRF-blocked URL) —
+        # guide the user instead of dumping a traceback.
+        click.echo(f"\n⚠️  Couldn't reach the job source: {exc}", err=True)
         sys.exit(1)
 
 

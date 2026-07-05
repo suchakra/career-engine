@@ -115,6 +115,19 @@ class TestFiltering:
         jobs = search_jobs(ScoutDirective(query="x"), fetch_json=lambda _u: {})
         assert jobs == []
 
+    def test_postings_without_external_id_are_skipped(self) -> None:
+        # An id-less posting would hash to the same job_id as any other id-less one
+        # (make_job_id of an empty string) → collision. Such items must be dropped.
+        payload = {
+            "jobs": [
+                {"title": "No ID A", "company_name": "A", "description": "AWS"},
+                {"id": 7, "title": "Has ID", "company_name": "B", "description": "AWS"},
+                {"id": "", "title": "Blank ID", "company_name": "C", "description": "AWS"},
+            ]
+        }
+        jobs = search_jobs(ScoutDirective(query="x", desired_count=5), fetch_json=lambda _u: payload)
+        assert [j.metadata.company for j in jobs] == ["B"]
+
 
 class TestSearchUrl:
     def test_query_is_url_encoded_and_host_fixed(self) -> None:
