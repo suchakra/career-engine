@@ -35,6 +35,7 @@ v2.4.0 change summary (additive, backward-compatible):
 
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Literal
@@ -567,3 +568,171 @@ class UpgradeRequired(BaseModel):
         default_factory=lambda: datetime.now(UTC),
         description="UTC timestamp of signal emission",
     )
+
+
+# ── Discovery: two-agent (A2A) job sourcing ontology (v2.5.0) ─────────────────
+#
+# The typed contract for the decoupled Primary (stateful Groomer/Tailor) ⇄ Scout
+# (stateless Fetcher) loop. The Scout fetches JobOpportunity objects via the MCP
+# server; the Primary evaluates them against the user's preferences + ledger and
+# returns an EvaluationDiff (accepted / soft-rejected + the next Scout directive).
+# All inter-agent messages are validated Pydantic models — never free-text — so the
+# A2A boundary stays clean whether the transport is in-process or the A2A protocol.
+
+
+class WorkModel(StrEnum):
+    """Where a role is performed (a common hard dealbreaker axis)."""
+
+    REMOTE = "remote"
+    HYBRID = "hybrid"
+    ONSITE = "onsite"
+    UNKNOWN = "unknown"
+
+
+class EmploymentType(StrEnum):
+    """Engagement type of a job posting (fractional/contract vs W2 full-time)."""
+
+    FULL_TIME = "full_time"
+    CONTRACT = "contract"
+    FRACTIONAL = "fractional"
+    PART_TIME = "part_time"
+    UNKNOWN = "unknown"
+
+
+class MatchStatus(StrEnum):
+    """The Primary Agent's classification of a job against the user's rubric."""
+
+    ACCEPTED = "accepted"
+    """Matches all core criteria."""
+    SOFT_REJECT = "soft_reject"
+    """Fails a preference but is not a dealbreaker — kept for user review."""
+    HARD_REJECT = "hard_reject"
+    """Violates the ledger (already applied) or an absolute dealbreaker — dropped."""
+
+
+class ScoutBatchStatus(StrEnum):
+    """The Primary's verdict on a batch, carried on the EvaluationDiff."""
+
+    APPROVE_BATCH = "approve_batch"
+    PARTIAL_ACCEPT = "partial_accept"
+    REJECT_BATCH = "reject_batch"
+
+
+class SessionPreferences(BaseModel):
+    """The evaluation rubric for a discovery session (gathered at intake).
+
+    ``dealbreakers`` are absolute (→ HARD_REJECT); ``nice_to_haves`` are soft
+    (a miss → SOFT_REJECT, kept for review). No secrets; per-session, not durable.
+    """
+
+    model_config = ConfigDict(frozen=False)
+
+    target_roles: list[str] = Field(default_factory=list, description="Roles being targeted this session")
+    dealbreakers: list[str] = Field(
+        default_factory=list, description="Absolute exclusions (e.g. 'W2 only', 'on-site', 'no cloud')"
+    )
+    nice_to_haves: list[str] = Field(
+        default_factory=list, description="Soft preferences (a miss is a SOFT_REJECT, not a drop)"
+    )
+    contract_version: str = Field(default=CONTRACT_VERSION)
+
+
+class InteractionLedger(BaseModel):
+    """Historical state that gates duplicate processing (hydrated from the workspace).
+
+    Enables idempotent HARD_REJECT of jobs the user already applied to or companies
+    they've dismissed, so the background loop never re-surfaces them.
+    """
+
+    model_config = ConfigDict(frozen=False)
+
+    already_applied_ids: list[str] = Field(
+        default_factory=list, description="job_ids already applied to (HARD_REJECT on match)"
+    )
+    rejected_companies: list[str] = Field(
+        default_factory=list, description="Companies the user has dismissed (case-insensitive match)"
+    )
+    contract_version: str = Field(default=CONTRACT_VERSION)
+
+
+class JobMetadata(BaseModel):
+    """Structured, filterable facts about a posting (separate from the raw text)."""
+
+    model_config = ConfigDict(frozen=False)
+
+    title: str = Field(default="", description="Role title")
+    company: str = Field(default="", description="Hiring organisation")
+    work_model: WorkModel = Field(default=WorkModel.UNKNOWN)
+    employment_type: EmploymentType = Field(default=EmploymentType.UNKNOWN)
+    location: str = Field(default="", description="Location string, if any")
+    url: str = Field(default="", description="Source URL of the posting")
+
+
+class JobOpportunity(BaseModel):
+    """A fetched job posting — the Scout's output and the DB ledger entity.
+
+    ``job_id`` is a stable content hash (source + external id) for **idempotency**:
+    the background worker can crash/restart without duplicating records. The Primary
+    fills ``match_status`` + ``ai_rationale`` during evaluation (empty from the Scout).
+    """
+
+    model_config = ConfigDict(frozen=False)
+
+    job_id: str = Field(description="Stable idempotency hash (source + external id)")
+    metadata: JobMetadata = Field(default_factory=JobMetadata)
+    raw_description: str = Field(default="", description="Full JD text payload")
+    match_status: MatchStatus | None = Field(
+        default=None, description="Set by the Primary Agent during evaluation"
+    )
+    ai_rationale: str = Field(
+        default="", description="Primary Agent's one-line explanation of the classification"
+    )
+    contract_version: str = Field(default=CONTRACT_VERSION)
+
+
+class ScoutDirective(BaseModel):
+    """A structured search instruction from the Primary to the (stateless) Scout.
+
+    Structured (not free prose) so refinement across loop iterations is deterministic
+    and testable. Every directive is self-contained — the Scout keeps no memory.
+    """
+
+    model_config = ConfigDict(frozen=False)
+
+    query: str = Field(default="", description="Free-text search query / role focus")
+    include_keywords: list[str] = Field(default_factory=list)
+    exclude_keywords: list[str] = Field(default_factory=list)
+    exclude_companies: list[str] = Field(default_factory=list)
+    desired_count: int = Field(default=5, ge=1, description="Target number of fresh matches")
+    adjustment_note: str = Field(
+        default="", description="Human-readable steer for the next fetch (e.g. 'drop Director, add fractional')"
+    )
+    contract_version: str = Field(default=CONTRACT_VERSION)
+
+
+class EvaluationDiff(BaseModel):
+    """The Primary Agent's A2A response for one loop iteration.
+
+    Carries the classified batch (accepted + soft-rejected are persisted; hard-rejects
+    are dropped) plus the ``next_directive`` for the Scout when the quota is unmet.
+    ``next_directive is None`` signals the loop is satisfied and terminates.
+    """
+
+    model_config = ConfigDict(frozen=False)
+
+    status: ScoutBatchStatus = Field(description="Verdict on this batch")
+    accepted_jobs: list[JobOpportunity] = Field(default_factory=list)
+    soft_rejected_jobs: list[JobOpportunity] = Field(default_factory=list)
+    next_directive: ScoutDirective | None = Field(
+        default=None, description="Refined directive for the next fetch; None → loop done"
+    )
+    contract_version: str = Field(default=CONTRACT_VERSION)
+
+
+def make_job_id(source: str, external_id: str) -> str:
+    """Stable idempotency hash for a posting: sha256(source|external_id), 16 hex chars.
+
+    Same posting → same id across worker restarts, so the ledger never dupes.
+    """
+    digest = hashlib.sha256(f"{source.strip().lower()}|{external_id.strip()}".encode()).hexdigest()
+    return digest[:16]
