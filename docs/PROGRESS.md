@@ -112,6 +112,11 @@ Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.
 ---
 
 ## Decisions log (append-only)
+- 2026-07-05 — **Tailor follow-ups shipped.** (PR #27) multi-format export: `web/exporter.py` renders
+  the tailored résumé to **PDF** (WeasyPrint + autoescaped module-level template) and **DOCX**
+  (`python-docx==1.2.0`); Tailor view offers PDF/Word/Markdown/JSON (rendered once per result). (PR #28)
+  **JD-by-URL**: Tailor accepts a job-posting URL, scraped via the SSRF-guarded `scrape_job_description`
+  (falls back to pasted text). No contract change (500 tests).
 - 2026-07-04 — **Web Tailor shipped** (PR #26). In-app JD → tailored résumé: `web/tailor.py`
   reuses `finalize_master_resume_node` → `tailor_node` (assembles a master from current validated
   stories if the grill isn't finalized; never marks the session COMPLETE, so tailoring is never
