@@ -285,6 +285,53 @@ def _contact_from_session() -> Any:
     )
 
 
+def _prefill_contact_from_profile(user_id: str) -> None:
+    """Seed the contact form from the persisted profile, once per session.
+
+    Best-effort: a missing profile or backend hiccup leaves the form empty rather
+    than blocking. ``setdefault`` means in-session edits are never clobbered.
+    """
+    ss = st.session_state
+    if ss.get("_contact_prefilled"):
+        return
+    ss["_contact_prefilled"] = True
+    try:
+        from database.workspace_store import FirestoreWorkspaceStore
+        from web.profile_store import load_profile
+
+        profile = load_profile(FirestoreWorkspaceStore(), user_id=user_id)
+    except Exception:
+        return
+    ss.setdefault("contact_name", profile.name)
+    ss.setdefault("contact_email", profile.email)
+    ss.setdefault("contact_phone", profile.phone)
+    ss.setdefault("contact_location", profile.location)
+    ss.setdefault("contact_links", ", ".join(profile.links))
+
+
+def _persist_contact_profile(user_id: str) -> None:
+    """Persist the current contact form to the user's profile (best-effort).
+
+    So the header isn't re-entered next session. Never blocks tailoring — a
+    persistence failure is swallowed (the résumé is already built either way).
+    """
+    try:
+        from database.workspace_store import FirestoreWorkspaceStore
+        from schema import UserProfile
+        from web.profile_store import save_profile
+
+        c = _contact_from_session()
+        save_profile(
+            FirestoreWorkspaceStore(),
+            user_id=user_id,
+            profile=UserProfile(
+                name=c.name, email=c.email, phone=c.phone, location=c.location, links=c.links
+            ),
+        )
+    except Exception:
+        pass
+
+
 def _render_tailor(*, user_id: str, today: str) -> None:
     """Tailor the portfolio to a JD (pasted OR scraped) into a real, ATS-safe résumé."""
     from cli.app import _install_model_client
@@ -306,6 +353,7 @@ def _render_tailor(*, user_id: str, today: str) -> None:
         return
 
     ss = st.session_state
+    _prefill_contact_from_profile(user_id)
     with st.expander("Your contact details (résumé header)", expanded=not ss.get("contact_name")):
         ss["contact_name"] = st.text_input("Full name", value=ss.get("contact_name", ""))
         cc1, cc2 = st.columns(2)
@@ -357,6 +405,8 @@ def _render_tailor(*, user_id: str, today: str) -> None:
                 ss["tailor_jd_text"] = jd_text
                 for stale_save in ("tailor_saved_app", "save_app_company", "save_app_title"):
                     ss.pop(stale_save, None)
+                # Remember the contact header so it's pre-filled next session.
+                _persist_contact_profile(user_id)
             except ModelAPIError as exc:
                 st.error(f"Couldn't tailor just now: {exc}")
             except Exception as exc:  # rendering/backend hiccup — degrade, don't crash
