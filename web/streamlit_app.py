@@ -247,6 +247,26 @@ def _resolve_byok_key(user_id: str) -> str | None:
     return None
 
 
+def _resolve_jd_text(url: str, pasted: str, *, client: Any) -> str:
+    """Resolve the JD text: scrape the URL if given (SSRF-guarded), else use pasted text.
+
+    A URL that can't be fetched/cleaned surfaces a warning and falls back to any
+    pasted text, so the user is never hard-blocked.
+    """
+    if url:
+        from tools.web_scraper import ScraperError, scrape_job_description
+
+        try:
+            with st.spinner("Fetching the job posting…"):
+                scraped = scrape_job_description(url, client=client)
+            if scraped.strip():
+                return scraped.strip()
+            st.warning("That URL had no readable job text — paste the description instead.")
+        except ScraperError as exc:
+            st.warning(f"Couldn't read that URL ({exc}). Paste the description instead.")
+    return pasted
+
+
 def _render_tailor(*, user_id: str, today: str) -> None:
     """Tailor the user's portfolio to a pasted job description (produce + download)."""
     from cli.app import _install_model_client
@@ -263,24 +283,26 @@ def _render_tailor(*, user_id: str, today: str) -> None:
         return
 
     st.caption(
-        "Paste a job description — we select and reframe your strongest grilled "
-        "achievements for this role. (Stronger results the more you've grilled; "
-        "tailoring is never blocked.)"
+        "Give a job posting URL or paste the description — we select and reframe your "
+        "strongest grilled achievements for this role. (Stronger results the more "
+        "you've grilled; tailoring is never blocked.)"
     )
-    jd = st.text_area("Job description", height=220, placeholder="Paste the JD text here…")
+    jd_url = st.text_input("Job posting URL (optional)", placeholder="https://…/careers/123")
+    jd = st.text_area("…or paste the job description", height=200, placeholder="Paste the JD text…")
     if st.button("Tailor my résumé", type="primary"):
-        if not jd.strip():
-            st.warning("Paste a job description to tailor against.")
+        client = GeminiModelClient(api_key=key)
+        _install_model_client(client)
+        jd_text = _resolve_jd_text(jd_url.strip(), jd.strip(), client=client)
+        if not jd_text:
+            st.warning("Paste a job description or a readable job-posting URL to tailor against.")
         else:
             # Drop any previous result so a failed run can't render a stale résumé.
             st.session_state.pop("tailor_result", None)
             state = _load_discovery_state(user_id=user_id, today=today)
-            client = GeminiModelClient(api_key=key)
-            _install_model_client(client)
             try:
                 with st.spinner("Tailoring to this role…"):
                     st.session_state["tailor_result"] = build_tailored_resume_json(
-                        state, jd.strip(), client=client
+                        state, jd_text, client=client
                     )
             except ModelAPIError as exc:
                 st.error(f"Couldn't tailor just now: {exc}")
