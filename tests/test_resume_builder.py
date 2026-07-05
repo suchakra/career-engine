@@ -16,6 +16,7 @@ from tests.test_integration import ScriptedNodeClient
 from web.resume_builder import (
     Contact,
     assemble_resume,
+    master_structured_resume,
     tailor_structured_resume,
 )
 
@@ -46,6 +47,36 @@ def _story(entry: Entry, result: str) -> StarStory:
         story_id=uuid4(), entry_id=str(entry.entry_id), pillar="delivery",
         result=result, metrics_validated=True,
     )
+
+
+class TestMasterStructuredResume:
+    def test_includes_all_validated_stories_and_profile_summary(self) -> None:
+        job, edu = _job(), _edu()
+        s1, s2 = _story(job, "Cut p99 latency 40%"), _story(job, "Shipped billing v2")
+        state = CareerEngineState(
+            work_timeline=[job, edu],
+            extracted_star_stories=[s1, s2],
+            professional_summary="Staff engineer.",
+        )
+        resume = master_structured_resume(state, contact=Contact(name="Sam"))
+        assert resume.summary == "Staff engineer."
+        assert resume.contact.name == "Sam"
+        assert len(resume.experience) == 1
+        assert len(resume.experience[0].bullets) == 2  # all validated stories, no JD selection
+        assert len(resume.education) == 1
+        assert resume.skills == []  # skills are JD-aligned in the tailored pass only
+
+    def test_empty_when_no_validated_stories(self) -> None:
+        assert master_structured_resume(CareerEngineState()).is_empty
+
+    def test_default_contact_is_blank(self) -> None:
+        job = _job()
+        state = CareerEngineState(
+            work_timeline=[job],
+            extracted_star_stories=[_story(job, "Result")],
+            professional_summary="S",
+        )
+        assert master_structured_resume(state).contact == Contact()
 
 
 class TestAssembleResume:
