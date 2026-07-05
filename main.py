@@ -200,7 +200,25 @@ def tailor(
     default=False,
     help="Persist accepted jobs to Firestore (idempotent by job_id).",
 )
-def discover(desired_total: int, max_iterations: int, firestore: bool) -> None:
+@click.option(
+    "--tailor-session",
+    default=None,
+    help="Completed grill SESSION_ID to tailor toward the top match (closes discover → tailor).",
+)
+@click.option(
+    "--output-pdf",
+    "-o",
+    type=click.Path(path_type=pathlib.Path),
+    default=None,
+    help="Optional path for the tailored PDF (only with --tailor-session).",
+)
+def discover(
+    desired_total: int,
+    max_iterations: int,
+    firestore: bool,
+    tailor_session: str | None,
+    output_pdf: pathlib.Path | None,
+) -> None:
     """Run the two-agent job-discovery loop over a live job source.
 
     The stateless Scout fetches postings through the MCP job server; the stateful
@@ -221,6 +239,8 @@ def discover(desired_total: int, max_iterations: int, firestore: bool) -> None:
             use_firestore=firestore,
             desired_total=desired_total,
             max_iterations=max_iterations,
+            tailor_session=tailor_session,
+            output_pdf=output_pdf,
             out=click.echo,
         )
     except ModelAPIError as exc:

@@ -8,8 +8,8 @@ so the full loop → print → persist path is exercised without auth or network
 
 from __future__ import annotations
 
-from discovery.cli import run_discover
-from discovery.primary import PrimaryAgent
+from discovery.cli import run_discover, select_top_match
+from discovery.primary import DiscoveryResult, PrimaryAgent
 from discovery.scout import Scout
 from discovery.store import InMemoryLedgerStore
 from schema import (
@@ -87,6 +87,16 @@ async def test_run_discover_is_idempotent_across_runs() -> None:
     assert result.accepted == []
     assert result.hard_rejected_count == 2
     assert "No new opportunities" in "\n".join(lines)
+
+
+def test_select_top_match_picks_first_accepted() -> None:
+    top = _job("1", desc="AWS")
+    result = DiscoveryResult(accepted=[top, _job("2", desc="MCP")])
+    assert select_top_match(result) is top
+
+
+def test_select_top_match_none_when_no_accepted() -> None:
+    assert select_top_match(DiscoveryResult(soft_rejected=[_job("9")])) is None
 
 
 async def test_run_discover_handles_empty_source() -> None:

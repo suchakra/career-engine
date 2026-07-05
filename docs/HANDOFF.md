@@ -91,7 +91,15 @@ literal `mcp/` + `agents/` paths sketched earlier) — a top-level `mcp/` dir wo
   idempotent, no secrets). `discovery/preferences.py`: `default_session_preferences()` = the operator's
   real EVAL CRITERIA. Tests `tests/test_ledger_store.py` + `tests/test_discovery_loop_cli.py`. **557 green;
   LIVE end-to-end run against real Remotive succeeded** (3 iters, ranked output, idempotent persist).
-- (5) reuse the deployed Tailor on a chosen accepted job (next).
+- ✅ **(5) Tailor reuse DONE** — `discover --tailor-session <SID> [-o pdf]` closes the loop: the top ACCEPTED
+  job's cleaned `raw_description` is fed straight into the existing/deployed `run_tailor_command` (no new
+  résumé code). `select_top_match(result)` picks the first strong match; without the flag, discover prints a
+  ready-to-run `career-engine tailor …` hint. Tests added. **559 green.**
+
+**▶ ALL 5 BUILD STEPS DONE.** The demoable slice is complete: `career-engine discover` runs the live
+two-agent A2A loop (Scout ⇄ MCP ⇄ Primary) → ranked matches + rationale → idempotent persist → optional
+Tailor. Remaining before submission = **PACKAGING** (video + writeup + README + architecture diagram) and
+docs reconciliation (PROGRESS/ARCHITECTURE §A2A). Safety-net floor (deployed grill→tailor) untouched.
 **PACKAGING (protected, own session Mon eve):** 5-min video, writeup, README + architecture diagram (~40+
 pts; can be drafted in parallel by a designer/communicator). **Rule: nothing risky Monday; capture demo
 footage EOD Sunday.**
