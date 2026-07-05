@@ -35,14 +35,16 @@ additive-minor contract bump); pre-GA **/security-review**; custom domain.
 **Tailor** (paste JD **or job-posting URL** → tailored résumé → **PDF / Word / Markdown / JSON** export) →
 dashboard/meter. Ship changes with the [`ship-change`](../skills/ship-change/SKILL.md) skill.
 
-**▶ NEXT: Phase 5 — Tailoring & résumé quality** (see [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md)).
-Headline gap from live feedback (`demo_output/example.md`): the tailored output is a summary + ~5 talking
-points with internal "why it fits" notes — **NOT a real ATS-safe résumé** (no contact header, no
-role/company/date structure, no skills/education). 5A real résumé output (reuse `StarStory.entry_id`→`Entry`
-to group bullets under roles; JD-aligned skills; drop "why it fits"; contact via parser/profile → likely
-+minor) · 5B save-as-tracked-application · 5C one structured renderer for master+tailored · 4E highlight
-(+minor) · pre-GA /security-review. Also awaiting the user's grill re-test on a fresh session (checkpoint
-loop unreproducible; regression test PR #25).
+**Phase 5 in progress.** **5A DONE & deployed** (PR #29): the tailored output is now a **real ATS-safe
+résumé** — contact header · JD-aligned skills · **experience grouped by role** (via `StarStory.entry_id`
+→ `Entry`) · education, downloadable as PDF/DOCX/MD, with the internal "why it fits" removed. Built in
+`web/resume_builder.py` (deterministic assembly + one model call for selection/summary/skills) +
+`web/resume_render.py`; the flat `web/tailor.py`/`web/exporter.py` were removed.
+**▶ NEXT (Phase 5 remaining):** persist **Contact** (extend `tools/resume_parser.py` and/or a profile
+form → likely +minor contract bump — today it's a per-session UI form); **5B** save-as-tracked-application
+(→ dashboard + 14-day sweep); **5C** one structured renderer for master+tailored; 4E highlight (+minor);
+pre-GA /security-review. Also awaiting the user's grill re-test on a fresh session (checkpoint loop
+unreproducible; regression test PR #25).
 
 - **Live dev URL:** https://career-engine-dev-app-ontyg6kaja-uc.a.run.app. Project `gen-lang-client-0513394764`, region us-central1.
 - **CI/CD (works):** `gh workflow run deploy.yml --ref master -f environment=dev` → keyless WIF → docker build+push → `terraform apply`. State in GCS bucket `gen-lang-client-0513394764-tfstate` (prefix `envs/dev`). Repo *variables* drive it (GCP_PROJECT_ID/WIF_PROVIDER/DEPLOY_SA/TF_STATE_BUCKET/AR_LOCATION/CE_AUTH_*).
