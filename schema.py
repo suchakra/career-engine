@@ -397,8 +397,28 @@ class PendingAction(BaseModel):
     )
 
 
+class UserProfile(BaseModel):
+    """The user's résumé-header identity, persisted so it isn't re-entered.
+
+    Sourced from what the user types in the Tailor contact form (and, later, from
+    résumé parsing). Contains only self-provided contact details — no secrets, no
+    BYOK key. Optional/empty for a new user.
+    """
+
+    model_config = ConfigDict(frozen=False)
+
+    name: str = Field(default="", description="Full name for the résumé header")
+    email: str = Field(default="", description="Contact email")
+    phone: str = Field(default="", description="Contact phone")
+    location: str = Field(default="", description="Location string (e.g. 'Remote · US')")
+    links: list[str] = Field(
+        default_factory=list, description="Profile links (LinkedIn, GitHub, portfolio)"
+    )
+    contract_version: str = Field(default=CONTRACT_VERSION)
+
+
 class UserWorkspace(BaseModel):
-    """Per-user portfolio document: tracked applications + pending actions.
+    """Per-user portfolio document: tracked applications + pending actions + profile.
 
     Persisted keyed by user_id (identity via context, per the contract rule —
     not stored on the model). Stamped with CONTRACT_VERSION like every
@@ -414,6 +434,10 @@ class UserWorkspace(BaseModel):
     pending_actions: list[PendingAction] = Field(
         default_factory=list,
         description="Outstanding follow-up markers (written by the async sweep)",
+    )
+    profile: UserProfile = Field(
+        default_factory=UserProfile,
+        description="Persisted résumé-header identity (additive v2.6.0)",
     )
     contract_version: str = Field(
         default=CONTRACT_VERSION,

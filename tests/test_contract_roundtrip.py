@@ -37,6 +37,7 @@ from schema import (
     PhaseStatus,
     StarStory,
     UpgradeRequired,
+    UserProfile,
     UserWorkspace,
     discovery_completeness,
     recent_window_complete,
@@ -226,11 +227,11 @@ class TestCareerEngineStateRoundTrip:
         reconstructed = _roundtrip(original)
         assert original == reconstructed
 
-    def test_state_carries_contract_version_250(self) -> None:
-        """CareerEngineState must be stamped with CONTRACT_VERSION == "2.5.0"."""
+    def test_state_carries_contract_version_260(self) -> None:
+        """CareerEngineState must be stamped with CONTRACT_VERSION == "2.6.0"."""
         state = CareerEngineState()
         assert state.contract_version == CONTRACT_VERSION
-        assert CONTRACT_VERSION == "2.5.0"
+        assert CONTRACT_VERSION == "2.6.0"
 
     def test_coverage_confirmed_defaults_false_and_roundtrips(self) -> None:
         """coverage_confirmed (v2.1.0) defaults to False and round-trips."""
@@ -647,9 +648,9 @@ class TestCapabilityEnum:
 class TestContractVersion:
     """Tests to ensure CONTRACT_VERSION is semver-formatted and consistent."""
 
-    def test_contract_version_is_250(self) -> None:
-        """CONTRACT_VERSION must be exactly "2.5.0" (discovery A2A ontology bump)."""
-        assert CONTRACT_VERSION == "2.5.0"
+    def test_contract_version_is_260(self) -> None:
+        """CONTRACT_VERSION must be exactly "2.6.0" (UserProfile additive bump)."""
+        assert CONTRACT_VERSION == "2.6.0"
 
     def test_contract_version_is_semver(self) -> None:
         """CONTRACT_VERSION must be a valid semver string (MAJOR.MINOR.PATCH)."""
@@ -668,6 +669,8 @@ class TestContractVersion:
         assert state.contract_version == CONTRACT_VERSION
         assert msg.contract_version == CONTRACT_VERSION
         assert signal.contract_version == CONTRACT_VERSION
+        assert UserProfile().contract_version == CONTRACT_VERSION
+        assert UserWorkspace().contract_version == CONTRACT_VERSION
 
 
 # ── AccessMode (config) ───────────────────────────────────────────────────────
@@ -761,11 +764,13 @@ class TestWorkspaceRoundTrip:
         ws = UserWorkspace(
             applications=[Application(company="Acme", applied_on="2026-06-01")],
             pending_actions=[PendingAction(application_id="x", created_on="2026-06-30")],
+            profile=UserProfile(name="Ada", email="ada@x.io", links=["https://x/ada"]),
         )
         rt = _roundtrip(ws)
         assert rt == ws
         assert len(rt.applications) == 1
         assert len(rt.pending_actions) == 1
+        assert rt.profile.name == "Ada" and rt.profile.links == ["https://x/ada"]
 
     def test_userworkspace_is_contract_stamped(self) -> None:
         """UserWorkspace carries CONTRACT_VERSION like every persisted document."""

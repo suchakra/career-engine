@@ -1,4 +1,8 @@
-"""Tests for the discovery (two-agent A2A) ontology — schema.py v2.5.0."""
+"""Tests for the discovery (two-agent A2A) ontology in schema.py (introduced v2.5.0).
+
+Contract-version assertions here read ``CONTRACT_VERSION`` dynamically, so this
+suite is not pinned to a specific version.
+"""
 
 from __future__ import annotations
 

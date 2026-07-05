@@ -1,7 +1,13 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-04)
-**`master` at contract v2.4.0. Web app DEPLOYED & LIVE on Cloud Run (dev): real Google login + interactive BYOK web grill + résumé upload + Portfolio Workbench (sidebar nav, portfolio view, add-experience, steerable grill), via keyless GitHub Actions CI/CD (WIF). 467 tests; tree clean; `make check` + `make tf-check` + CI green.**
+## 👉 YOU ARE HERE (updated 2026-07-05)
+**`master` at contract v2.5.0 (v2.6.0 in-flight on PR #32). Web app DEPLOYED & LIVE on Cloud Run (dev):
+Google login + BYOK web grill + résumé upload + Portfolio Workbench + real ATS Tailor. `make check` green.**
+**Product work in progress — Phase 5 sequence:** ✅ Phase 6 two-agent A2A discovery merged (PR #30, tag
+`contract-v2.5.0`); ✅ 5B save-as-tracked-application merged (PR #31); 🟡 persist-Contact (`UserProfile`,
+**v2.6.0**) on PR #32 (Sonnet PASS + Copilot addressed, awaiting merge). **Next in sequence:** 5C one
+structured renderer (master+tailored) → 4E highlight/pin (+minor) → pre-GA /security-review. Capstone
+packaging (video/writeup/README/diagram) is user-owned and deferred.
 
 **Latest this session:**
 - **DURABLE WEB SESSIONS (data-loss root cause fixed):** the web grill was on `InMemorySessionService`
