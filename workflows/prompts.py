@@ -238,6 +238,42 @@ are education, not employment.
 Return ONLY valid JSON.  No markdown, no commentary.
 """
 
+# ── Structured tailor prompt (Phase 5A: real, ATS-safe résumé) ────────────────
+
+STRUCTURED_TAILOR_SYSTEM_PROMPT: str = """\
+You are tailoring a candidate's real, quantified achievements to a specific job
+description to produce the tailored CONTENT of an ATS-safe résumé. The résumé's
+STRUCTURE (experience grouped by role, education) is assembled separately — your
+job is selection, a summary, and skills.
+
+You are given:
+  1. A JOB DESCRIPTION.
+  2. A CATALOG of the candidate's achievements — each has an "id", the "role" it
+     came from, and the quantified "achievement" text.
+
+Return EXACTLY this JSON:
+
+{
+  "tailored_summary": "2-3 sentence professional summary tuned to THIS role. Lead
+     with scope + strongest quantified impact. No first-person pronouns ('Led',
+     not 'I led'). No fabrication.",
+  "skills": ["8-14 concrete skills / technologies the candidate DEMONSTRABLY has
+     (supported by the catalog) that match the JD's requirements — use the JD's
+     own keywords where the catalog backs them up, for ATS keyword matching"],
+  "selected_achievement_ids": ["the ids of the 5-10 most relevant achievements,
+     most relevant first"]
+}
+
+Rules:
+  - Select achievements that map to the JD's functional requirements; prioritize
+    quantified impact and seniority-appropriate scope. For a senior/manager role,
+    do NOT surface minor volunteering/hackathon items over substantive work.
+  - Skills MUST be real (supported by the catalog) — never invent skills, metrics,
+    or achievements the candidate hasn't shown.
+  - Use only ids that appear in the catalog.
+  - Return ONLY valid JSON.  No markdown, no commentary.
+"""
+
 # ── Discovery turn prompt (v2.0.0) ────────────────────────────────────────────
 
 DISCOVERY_SYSTEM_PROMPT: str = """\

@@ -1,0 +1,126 @@
+"""Tests for the structured, ATS-safe résumé builder (web/resume_builder.py)."""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Iterator
+from typing import cast
+from uuid import uuid4
+
+import pytest
+
+import workflows.nodes as nodes
+from integration.model_client import GeminiModelClient
+from schema import CareerEngineState, Entry, EntryStatus, ExperienceType, StarStory
+from tests.test_integration import ScriptedNodeClient
+from web.resume_builder import (
+    Contact,
+    assemble_resume,
+    tailor_structured_resume,
+)
+
+
+@pytest.fixture(autouse=True)
+def _restore_factory() -> Iterator[None]:
+    original = nodes._client_factory
+    yield
+    nodes._client_factory = original
+
+
+def _job() -> Entry:
+    return Entry(
+        type=ExperienceType.FULL_TIME, title="Staff Engineer", org="Acme",
+        start_date="2020", end_date="2023", status=EntryStatus.GRILLED,
+    )
+
+
+def _edu() -> Entry:
+    return Entry(
+        type=ExperienceType.EDUCATION, title="BSc Computer Science", org="MIT",
+        start_date="2016", end_date="2020", status=EntryStatus.SUMMARIZED,
+    )
+
+
+def _story(entry: Entry, result: str) -> StarStory:
+    return StarStory(
+        story_id=uuid4(), entry_id=str(entry.entry_id), pillar="delivery",
+        result=result, metrics_validated=True,
+    )
+
+
+class TestAssembleResume:
+    def test_groups_bullets_under_role_and_separates_education(self) -> None:
+        job, edu = _job(), _edu()
+        s1, s2 = _story(job, "Cut p99 latency 40%"), _story(job, "Shipped billing v2")
+        state = CareerEngineState(work_timeline=[job, edu], extracted_star_stories=[s1, s2])
+
+        resume = assemble_resume(state, contact=Contact(name="Sam"), summary="S", skills=["Python"])
+
+        assert len(resume.experience) == 1
+        role = resume.experience[0]
+        assert role.org == "Acme" and role.title == "Staff Engineer"
+        assert role.dates == "2020 - 2023"
+        assert role.bullets == ["Cut p99 latency 40%", "Shipped billing v2"]  # under the role
+        assert [e.org for e in resume.education] == ["MIT"]  # education separated
+        assert resume.education[0].bullets == []
+
+    def test_only_validated_stories_and_work_roles_with_bullets(self) -> None:
+        job = _job()
+        empty_job = Entry(type=ExperienceType.FULL_TIME, title="Intern", org="OldCo")
+        unvalidated = StarStory(entry_id=str(job.entry_id), pillar="p", result="vague", metrics_validated=False)
+        valid = _story(job, "Cut cost 20%")
+        state = CareerEngineState(
+            work_timeline=[job, empty_job], extracted_star_stories=[unvalidated, valid]
+        )
+        resume = assemble_resume(state, contact=Contact(), summary="", skills=[])
+        # empty_job has no validated bullets → omitted; only the validated bullet shows.
+        assert [r.org for r in resume.experience] == ["Acme"]
+        assert resume.experience[0].bullets == ["Cut cost 20%"]
+
+    def test_selected_story_ids_filters_bullets(self) -> None:
+        job = _job()
+        s1, s2 = _story(job, "Kept"), _story(job, "Dropped")
+        state = CareerEngineState(work_timeline=[job], extracted_star_stories=[s1, s2])
+        resume = assemble_resume(
+            state, contact=Contact(), summary="", skills=[], selected_story_ids=[str(s1.story_id)]
+        )
+        assert resume.experience[0].bullets == ["Kept"]
+
+    def test_empty_when_no_stories(self) -> None:
+        resume = assemble_resume(
+            CareerEngineState(work_timeline=[_job()]), contact=Contact(), summary="", skills=[]
+        )
+        assert resume.is_empty is True
+
+
+class TestTailorStructuredResume:
+    def test_selects_and_builds_structured_resume(self) -> None:
+        job = _job()
+        s1 = _story(job, "Cut p99 latency 40%")
+        state = CareerEngineState(work_timeline=[job, _edu()], extracted_star_stories=[s1])
+        client = ScriptedNodeClient(
+            responses={
+                "tailoring a candidate's real": json.dumps(
+                    {
+                        "tailored_summary": "Systems engineer focused on latency.",
+                        "skills": ["Python", "Distributed systems"],
+                        "selected_achievement_ids": [str(s1.story_id)],
+                    }
+                )
+            }
+        )
+        resume = tailor_structured_resume(
+            state, "We need a low-latency engineer.", Contact(name="Sam"),
+            client=cast(GeminiModelClient, client),
+        )
+        assert resume.summary.startswith("Systems engineer")
+        assert resume.skills == ["Python", "Distributed systems"]
+        assert resume.experience[0].bullets == ["Cut p99 latency 40%"]
+        assert resume.education[0].org == "MIT"
+
+    def test_no_stories_returns_empty_without_calling_model(self) -> None:
+        resume = tailor_structured_resume(
+            CareerEngineState(work_timeline=[_job()]), "JD", Contact(),
+            client=cast(GeminiModelClient, ScriptedNodeClient(responses={})),
+        )
+        assert resume.is_empty is True
