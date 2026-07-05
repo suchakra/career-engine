@@ -347,6 +347,10 @@ def _render_tailor(*, user_id: str, today: str) -> None:
                 ss["tailor_resume"], ss["tailor_pdf"], ss["tailor_docx"], ss["tailor_md"] = (
                     built, pdf, docx, md
                 )
+                # Keep the JD text + reset any prior save state so this tailored
+                # résumé can be recorded as a tracked application (5B).
+                ss["tailor_jd_text"] = jd_text
+                ss.pop("tailor_saved_app", None)
             except ModelAPIError as exc:
                 st.error(f"Couldn't tailor just now: {exc}")
             except Exception as exc:  # rendering/backend hiccup — degrade, don't crash
@@ -404,6 +408,53 @@ def _render_tailor(*, user_id: str, today: str) -> None:
     d3.download_button(
         "Markdown", data=ss["tailor_md"], file_name="resume.md", mime="text/markdown"
     )
+
+    _render_save_application(user_id=user_id, today=today, resume=resume)
+
+
+def _render_save_application(*, user_id: str, today: str, resume: Any) -> None:
+    """Record the tailored résumé as a tracked application (5B).
+
+    Writes an ``Application`` onto the user's workspace so it shows in the
+    dashboard and enters the 14-day follow-up sweep. Idempotent per render: once
+    saved, the section shows a confirmation instead of re-adding on rerun.
+    """
+    ss = st.session_state
+    st.divider()
+    saved = ss.get("tailor_saved_app")
+    if saved:
+        st.success(
+            f"Tracked as an application: **{saved}** — see it under **Dashboard** "
+            "(it enters the 14-day follow-up reminder)."
+        )
+        return
+
+    st.caption("Track this as an application")
+    ac1, ac2 = st.columns(2)
+    company = ac1.text_input("Company", key="save_app_company")
+    job_title = ac2.text_input("Role / title", key="save_app_title")
+    if st.button("Save as tracked application"):
+        if not company.strip() and not job_title.strip():
+            st.warning("Add at least a company or a role title so you can find this later.")
+            return
+        try:
+            from database.workspace_store import FirestoreWorkspaceStore
+            from web.application_store import save_tailored_application
+
+            app = save_tailored_application(
+                FirestoreWorkspaceStore(),
+                user_id=user_id,
+                company=company,
+                job_title=job_title,
+                jd_text=ss.get("tailor_jd_text", ""),
+                tailored_resume_json=resume.model_dump_json(),
+                applied_on=today,
+            )
+            label = " — ".join(p for p in (app.company, app.job_title) if p) or "application"
+            ss["tailor_saved_app"] = label
+            st.rerun()
+        except Exception as exc:  # persistence hiccup — surface, don't crash the page
+            st.error(f"Couldn't save the application just now: {exc}")
 
 
 main()
