@@ -61,9 +61,19 @@ Principal-level eng (e.g. via BitCrafty Inc.). nice_to_haves (soft) = AWS infra 
 AI orchestration (ADK/LangGraph/MCP), containerized sandboxing (Podman/Linux), agile-startup / autonomous-
 pipeline teams. dealbreakers (HARD_REJECT) = traditional W2 middle-management; deeply bureaucratic
 enterprise; rigid 100% on-site; pure maintenance-only roles. (Plus already-applied from the ledger.)
-**NEXT build order:** (1) MCP server `mcp/job_server.py` (FastMCP, live source) + tests → (2) Scout agent
-(`agents/scout.py`, Flash, calls MCP) → (3) Primary evaluator + bounded loop (`agents/primary.py`, Pro,
-ledger+rubric → EvaluationDiff) → (4) CLI `discover` wiring + Firestore ledger persist → (5) reuse Tailor.
+**Package naming decision:** the whole two-agent feature lives under **one package `discovery/`** (not the
+literal `mcp/` + `agents/` paths sketched earlier) — a top-level `mcp/` dir would **shadow the installed
+`mcp` SDK** on `sys.path`. So: `discovery/job_source.py`, `discovery/mcp_server.py`, `discovery/scout.py`,
+`discovery/primary.py`.
+**NEXT build order:**
+- ✅ **(1) MCP server DONE** — `discovery/mcp_server.py` (real FastMCP, stdio, `python -m discovery.mcp_server`)
+  exposes `search_jobs` + `fetch_jd`; logic in `discovery/job_source.py` (pure/injectable, **live key-free
+  Remotive source**, SSRF-guarded via the scraper's `_assert_safe_url`, normalises → `JobOpportunity` with
+  `make_job_id`). Tests `tests/test_job_source.py` + `tests/test_mcp_server.py`; `mcp==1.28.1` pinned;
+  `discovery/` added to Makefile gates. **523 green**, live smoke fetched real jobs. (branch, uncommitted→commit next)
+- (2) Scout agent (`discovery/scout.py`, Flash, calls MCP) → (3) Primary evaluator + bounded loop
+  (`discovery/primary.py`, Pro, ledger+rubric → EvaluationDiff) → (4) CLI `discover` wiring + Firestore ledger
+  persist → (5) reuse Tailor.
 **PACKAGING (protected, own session Mon eve):** 5-min video, writeup, README + architecture diagram (~40+
 pts; can be drafted in parallel by a designer/communicator). **Rule: nothing risky Monday; capture demo
 footage EOD Sunday.**
