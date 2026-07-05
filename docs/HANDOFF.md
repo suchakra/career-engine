@@ -71,9 +71,20 @@ literal `mcp/` + `agents/` paths sketched earlier) — a top-level `mcp/` dir wo
   Remotive source**, SSRF-guarded via the scraper's `_assert_safe_url`, normalises → `JobOpportunity` with
   `make_job_id`). Tests `tests/test_job_source.py` + `tests/test_mcp_server.py`; `mcp==1.28.1` pinned;
   `discovery/` added to Makefile gates. **523 green**, live smoke fetched real jobs. (branch, uncommitted→commit next)
-- (2) Scout agent (`discovery/scout.py`, Flash, calls MCP) → (3) Primary evaluator + bounded loop
-  (`discovery/primary.py`, Pro, ledger+rubric → EvaluationDiff) → (4) CLI `discover` wiring + Firestore ledger
-  persist → (5) reuse Tailor.
+- ✅ **(2) Scout DONE** — `discovery/scout.py`: stateless Fetcher; accesses data **only** through the MCP
+  tool surface (`JobToolClient`), never importing `job_source`. `InProcessMcpClient` dispatches through the
+  real FastMCP machinery (`mcp.call_tool`) — a genuine MCP client interaction, key-free + subprocess-free for
+  tests/demo (stdio subprocess transport = roadmap). Tests `tests/test_scout.py`.
+- ✅ **(3) Primary + bounded loop DONE** — `discovery/primary.py`: stateful Evaluator/Orchestrator.
+  Deterministic `hard_reject_reason` gate (ledger already-applied / rejected company / dealbreaker keyword →
+  drop, no model). Injectable `BatchEvaluator`: key-free `HeuristicEvaluator` (default, demoable) vs agentic
+  `ModelEvaluator` (REASONING_HIGH→Pro on BYOK, one batch call, JSON-parsed, **falls back to heuristic on any
+  parse/API error**). Pure `evaluate_batch(...) → EvaluationDiff` (stamps `match_status`+`ai_rationale`,
+  computes `next_directive`). `PrimaryAgent.discover()` = MAX_ITERATIONS=3 loop, dedupes by `job_id`,
+  refines directive (excludes missed companies), stops at `desired_total` or the cap. Tests
+  `tests/test_primary.py`. **551 green.**
+- (4) CLI `discover` wiring (`career-engine discover`) + Firestore ledger persist (idempotent `job_id`) →
+  (5) reuse the deployed Tailor on a chosen accepted job.
 **PACKAGING (protected, own session Mon eve):** 5-min video, writeup, README + architecture diagram (~40+
 pts; can be drafted in parallel by a designer/communicator). **Rule: nothing risky Monday; capture demo
 footage EOD Sunday.**
