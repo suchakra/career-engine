@@ -1141,6 +1141,7 @@ class TestTailorNode:
 
         assert client.calls, "tailor never called the model"
         assert client.calls[-1]["system"] == TAILOR_SYSTEM_PROMPT
+        assert "Additional instructions" not in client.calls[-1]["user"]
 
 
 # ── Purity — same input -> same output, no external mutation ──────────────────

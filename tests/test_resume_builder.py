@@ -245,3 +245,4 @@ class TestTailorStructuredResume:
         )
         assert client.calls, "model was never called"
         assert client.calls[-1]["system"] == STRUCTURED_TAILOR_SYSTEM_PROMPT
+        assert "Additional instructions" not in client.calls[-1]["user"]

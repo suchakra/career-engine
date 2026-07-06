@@ -338,6 +338,9 @@ def build_runner(
             through ``build_discovery_workflow`` to ``tailor_node``.  Appended
             to the *user* prompt so the system prompt rules remain intact.
             Defaults to ``""`` (no extra instructions).
+
+    Returns:
+        google.adk.runners.Runner instance ready to call run_async().
     """
     if session_service is None:
         # InMemorySessionService is an untyped ADK constructor; the cast keeps
