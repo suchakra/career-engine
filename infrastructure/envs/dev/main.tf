@@ -60,8 +60,9 @@ resource "google_project_iam_member" "runtime_datastore" {
 
 # Runtime SA: manage per-user BYOK key secrets ONLY (ce-key-*), scoped via an IAM
 # condition so a compromised instance can't create/rotate other secrets (incl. the
-# OAuth client + cookie secrets). Reads are covered project-wide by the
-# secret_manager module's secretAccessor grant. (Hardening tracked in SECURITY.md.)
+# OAuth client + cookie secrets). Reads of ce-key-* are ALSO scoped (secret_manager
+# module condition); the two OIDC auth secrets are granted per-secret below.
+# (SECURITY.md 2026-07-05 review.)
 resource "google_project_iam_member" "runtime_key_writer" {
   project = var.project_id
   role    = "roles/secretmanager.admin"
@@ -71,6 +72,27 @@ resource "google_project_iam_member" "runtime_key_writer" {
     description = "Limit to per-user BYOK key secrets"
     expression  = "resource.name.startsWith(\"projects/${data.google_project.current.number}/secrets/ce-key-\")"
   }
+}
+
+# The runtime SA must READ the two OIDC auth secrets — Cloud Run mounts them as
+# env vars at container start. Granted PER-SECRET (not project-wide) so the scoped
+# ce-key-* read condition above stays least-privilege: a compromised instance can
+# read users' BYOK keys + these two auth secrets, and nothing else in the project.
+# OPERATOR NOTE: on the first apply that scopes the project-level read, these
+# per-secret grants must propagate before a NEW Cloud Run revision mounts the
+# secrets; the already-running revision keeps its mounted values, so no downtime.
+resource "google_secret_manager_secret_iam_member" "runtime_reads_client_secret" {
+  project   = var.project_id
+  secret_id = module.auth_secrets.client_secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${module.cloud_run.service_account_email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "runtime_reads_cookie_secret" {
+  project   = var.project_id
+  secret_id = module.auth_secrets.cookie_secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${module.cloud_run.service_account_email}"
 }
 
 module "artifact_registry" {
@@ -134,6 +156,7 @@ module "cloud_run" {
 module "secret_manager" {
   source                = "../../modules/secret_manager"
   project_id            = var.project_id
+  project_number        = data.google_project.current.number
   service_account_email = module.cloud_run.service_account_email
 }
 

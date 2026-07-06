@@ -1,6 +1,6 @@
 # CareerEngine — Security posture & review log
 
-> Status: `active` · Last reviewed: 2026-07-02
+> Status: `active` · Last reviewed: 2026-07-05
 > Companion to [ARCHITECTURE.md](ARCHITECTURE.md) §5 (identity & secrets). Status
 > of security work is tracked in [PROGRESS.md](PROGRESS.md); this file is the
 > design truth for the threat model and the review findings ledger.
@@ -68,10 +68,63 @@ ingest surfaces. Two exploitable findings, both fixed on this branch:
 - Secret IDs / Firestore doc paths are keyed by the token `sub` (issuer-controlled,
   charset-restricted), not free-form user input → no path traversal.
 
+### 2026-07-05 — Pre-GA web-auth + BYOK key-storage + IAM review
+Addresses the "Required next review" checklist below. Scope: web OIDC login, BYOK
+key storage + Secret Manager IAM, public Cloud Run ingress, single-user isolation,
+CI/CD deployer. One finding fixed in IaC + one defensive hardening; the rest are
+confirmed OK or tracked as accepted residual risks.
+
+1. **BYOK IAM — runtime SA could read ALL project secrets (MEDIUM). Fixed (IaC).**
+   The Cloud Run runtime SA held `roles/secretmanager.secretAccessor` at the
+   **project level** (`modules/secret_manager`), so a compromised instance could read
+   every secret — including the OAuth **client secret** and session **cookie secret**,
+   not just users' BYOK keys. **Fix:** the module grant is now **conditioned to
+   `ce-key-*`** (read only per-user BYOK keys), mirroring the existing `ce-key-*` write
+   condition; the two OIDC auth secrets the container needs at startup are granted
+   **per-secret** (`google_secret_manager_secret_iam_member`) in the dev env root. Net
+   (dev): the runtime SA can read users' BYOK keys + exactly those two auth secrets, and
+   nothing else. (Prod omits the per-secret auth grants — it doesn't mount those secrets
+   at all — so its runtime SA has only the scoped `ce-key-*` read.) `make tf-check` green
+   (dev + prod). *Operator note:* on the first
+   `apply` that scopes the project-level read, the per-secret grants must propagate
+   before a NEW Cloud Run revision mounts the secrets; the running revision keeps its
+   mounted values, so there is no downtime.
+
+2. **BYOK — `user_id` used to build a secret resource id (defensive hardening).**
+   `user_id` is the OIDC `sub` (Google issues a numeric subject), but
+   `SecretManagerKeyVault._secret_id` now validates it against `[A-Za-z0-9_-]{1,200}`
+   and raises `KeyVaultError` otherwise — belt-and-braces so a malformed/hostile
+   subject can never produce an unexpected or path-like `ce-key-*` id. Tests in
+   `tests/test_key_vault.py::TestUserIdValidation`.
+
+**Confirmed OK (checked this pass):**
+- **`st.user` → `user_id` trust boundary.** Streamlit native OIDC (`st.login`) verifies
+  the Google ID token (Authlib) before populating `st.user`; `_current_user_id` trusts
+  only the verified `sub` claim, never `email`. Redirect URI is pinned via
+  `CE_AUTH_REDIRECT_URI` + the OAuth client config; the client/cookie secrets live only
+  in Secret Manager and are injected as env at startup (never in state/logs).
+- **Revoke/replace** (`KeyVault.delete_key` + "Remove key" UI) fully deletes the secret
+  (idempotent) and no key material is logged or persisted outside Secret Manager.
+- **Public ingress.** The OIDC sweep endpoint is still **not mounted** on the served
+  Streamlit app (no HTTP route), so public ingress never fronts it. (When mounted, split
+  it into a separate `allow_unauthenticated=false` service — tracked below.)
+
+**Residual risks (accepted for the single-user demo; required before multi-user GA):**
+- **Multi-user model-client isolation.** The web grill installs the BYOK client via a
+  process-global factory; dev runs `max_instances=1` (single-user). The real fix is
+  contextvar/thread-local client isolation — required before multi-user GA.
+- **CI/CD deployer SA breadth.** `career-engine-deployer` holds broad admin roles for a
+  full `terraform apply`; curate to least-privilege and add a plan-only identity for PRs.
+- **CMEK / key TTL + rotation reminders** and enabling **Cloud Audit Logs** on Secret
+  Manager access remain future hardening.
+
 ## Required next review — web auth + BYOK key storage (flagged 2026-07-03)
 
-Status: **REVIEW REQUIRED before GA / real users.** New attack surfaces since the
-2026-07-02 review that a dedicated `/security-review` pass must cover:
+Status: **✅ COMPLETED 2026-07-05** — see the "Pre-GA web-auth + BYOK key-storage +
+IAM review" entry above (runtime-SA read scope fixed in IaC + `user_id` validation
+hardening; `st.user` trust boundary, revoke, and public-ingress posture confirmed OK;
+multi-user isolation, deployer-SA curation, CMEK/audit-logs tracked as residual). The
+original checklist that pass covered:
 
 - **Web OIDC login** (`web/streamlit_app.py`, Streamlit `st.login`) — session/cookie
   handling, the OAuth consent scope, redirect-URI pinning, and the `st.user` →
