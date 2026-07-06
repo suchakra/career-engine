@@ -13,6 +13,19 @@ from schema import EmploymentType, JobMetadata, JobOpportunity, MatchStatus, Wor
 from web.jobs import JobsView, build_jobs_view, job_tailor_index, render_jobs
 
 
+class _SelfContext:
+    """Context manager whose __enter__ returns the owning FakeSt instance."""
+
+    def __init__(self, owner: FakeSt) -> None:
+        self._owner = owner
+
+    def __enter__(self) -> FakeSt:
+        return self._owner
+
+    def __exit__(self, *_: object) -> None:
+        pass
+
+
 class FakeSt:
     def __init__(self) -> None:
         self.markdowns: list[str] = []
@@ -43,6 +56,9 @@ class FakeSt:
 
     def button(self, label: str, **kwargs: Any) -> None:
         self.buttons.append((label, kwargs))
+
+    def container(self, **kwargs: Any) -> _SelfContext:
+        return _SelfContext(self)
 
 
 def _job(ext: str, *, title: str, company: str, status: MatchStatus, rationale: str) -> JobOpportunity:
@@ -100,10 +116,31 @@ class TestBuildJobsView:
             soft_rejected=[_job("2", title="Dev", company="Globex", status=MatchStatus.SOFT_REJECT, rationale="maybe")],
         )
         view = build_jobs_view(result, kept_ids={make_job_id("remotive", "2")})
-        assert [c.company for c in view.accepted] == ["Acme", "Globex"]  # Globex promoted
+        # Both Acme and Globex should appear in accepted; sorted by rationale length.
+        # "maybe" (5) > "fit" (3) so Globex sorts first.
+        assert {c.company for c in view.accepted} == {"Acme", "Globex"}
         assert view.for_review == []
-        # The promoted card's status is truthful (ACCEPTED), not the old soft_reject.
-        assert view.accepted[1].status == "accepted"
+        # The promoted card (Globex) has truthful status ACCEPTED, not soft_reject.
+        globex_card = next(c for c in view.accepted if c.company == "Globex")
+        assert globex_card.status == "accepted"
+
+    def test_build_jobs_view_sorts_for_review_by_rationale(self) -> None:
+        # job_B has a shorter rationale than job_A; job_A should appear first.
+        job_a = _job("a", title="Eng A", company="Alpha", status=MatchStatus.SOFT_REJECT, rationale="x" * 50)
+        job_b = _job("b", title="Eng B", company="Beta", status=MatchStatus.SOFT_REJECT, rationale="x" * 10)
+        result = DiscoveryResult(soft_rejected=[job_b, job_a])  # intentionally reversed order
+        view = build_jobs_view(result)
+        assert view.for_review[0].company == "Alpha"  # longer rationale first
+        assert view.for_review[1].company == "Beta"
+
+    def test_build_jobs_view_sorts_accepted(self) -> None:
+        # job_B has a shorter rationale than job_A; job_A should appear first.
+        job_a = _job("a", title="Eng A", company="Alpha", status=MatchStatus.ACCEPTED, rationale="y" * 60)
+        job_b = _job("b", title="Eng B", company="Beta", status=MatchStatus.ACCEPTED, rationale="y" * 5)
+        result = DiscoveryResult(accepted=[job_b, job_a])  # intentionally reversed order
+        view = build_jobs_view(result)
+        assert view.accepted[0].company == "Alpha"  # longer rationale first
+        assert view.accepted[1].company == "Beta"
 
 
 class TestRenderJobs:

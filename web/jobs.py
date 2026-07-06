@@ -117,14 +117,15 @@ def build_jobs_view(
             if not _visible(job):
                 continue
             if job.job_id in kept:
-                # Keep → promote AFTER the originally-accepted jobs, and stamp ACCEPTED
-                # so the card's status field is truthful under "Strong matches".
+                # Keep → promote into accepted; sorting below determines final position.
                 accepted_jobs.append(job.model_copy(update={"match_status": MatchStatus.ACCEPTED}))
             else:
                 review_jobs.append(job)
+        sorted_accepted = sorted(accepted_jobs, key=lambda j: len(j.ai_rationale or ""), reverse=True)
+        sorted_review = sorted(review_jobs, key=lambda j: len(j.ai_rationale or ""), reverse=True)
         return JobsView(
-            accepted=[_card(j) for j in accepted_jobs],
-            for_review=[_card(j) for j in review_jobs],
+            accepted=[_card(j) for j in sorted_accepted],
+            for_review=[_card(j) for j in sorted_review],
             iterations=result.iterations,
             hard_rejected_count=result.hard_rejected_count,
             ran=True,
@@ -132,7 +133,14 @@ def build_jobs_view(
     prior_jobs = prior or []
     # Persisted jobs were all ACCEPTED when stored; keep only ACCEPTED (positive
     # filter, so a stray HARD_REJECT/None/soft never leaks into the strong list).
-    accepted = [_card(j) for j in prior_jobs if j.match_status is MatchStatus.ACCEPTED and _visible(j)]
+    # Sort by rationale length (same proxy used for fresh results) so the best
+    # matches surface first regardless of persistence order.
+    sorted_prior = sorted(
+        (j for j in prior_jobs if j.match_status is MatchStatus.ACCEPTED and _visible(j)),
+        key=lambda j: len(j.ai_rationale or ""),
+        reverse=True,
+    )
+    accepted = [_card(j) for j in sorted_prior]
     return JobsView(accepted=accepted, ran=False)
 
 
@@ -207,14 +215,16 @@ def render_jobs(
 
     if view.accepted:
         st.subheader("✅ Strong matches")
-        for card in view.accepted:
-            st.divider()
-            _render_card(card, st=st, on_tailor=on_tailor, on_reject=on_reject)
+        with st.container(height=420):
+            for card in view.accepted:
+                st.divider()
+                _render_card(card, st=st, on_tailor=on_tailor, on_reject=on_reject)
     if view.for_review:
         st.subheader("🟡 For review")
-        for card in view.for_review:
-            st.divider()
-            _render_card(card, st=st, on_tailor=on_tailor, on_reject=on_reject, on_keep=on_keep)
+        with st.container(height=420):
+            for card in view.for_review:
+                st.divider()
+                _render_card(card, st=st, on_tailor=on_tailor, on_reject=on_reject, on_keep=on_keep)
 
 
 __all__ = ["JobCard", "JobsView", "build_jobs_view", "job_tailor_index", "render_jobs"]
