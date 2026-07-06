@@ -51,6 +51,8 @@ class EntryCard:
     bullets: list[str] = field(default_factory=list)
     stories: list[StoryCard] = field(default_factory=list)
     highlighted: bool = False
+    story_count: int = 0
+    stories_target: int = 3
 
     @property
     def not_grilled_yet(self) -> bool:
@@ -118,6 +120,7 @@ def _entry_card(entry: Entry, stories: list[StarStory]) -> EntryCard:
             for s in stories
         ],
         highlighted=entry.highlighted,
+        story_count=len(stories),
     )
 
 
@@ -171,6 +174,17 @@ def render_portfolio(
         st.caption(f"Status: {entry.status_label}")
         if entry.highlighted:
             st.caption("⭐ Pinned as tailoring priority — always included when tailoring.")
+
+        if entry.story_count == 0:
+            st.caption("No stories yet — click 'Grill me about this' to start.")
+        else:
+            st.progress(
+                min(entry.story_count / entry.stories_target, 1.0),
+                text=(
+                    f"{entry.story_count} stor{'y' if entry.story_count == 1 else 'ies'} recorded"
+                    + (" ✓" if entry.story_count >= entry.stories_target else "")
+                ),
+            )
 
         # Existing resume bullets/notes for this entry (may be present even before
         # any grilling has produced STAR stories).
