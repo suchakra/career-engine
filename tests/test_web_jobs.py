@@ -94,6 +94,17 @@ class TestBuildJobsView:
         assert [c.company for c in view.accepted] == []  # Acme hidden
         assert [c.company for c in view.for_review] == ["Globex"]
 
+    def test_kept_soft_job_promoted_to_accepted(self) -> None:
+        result = DiscoveryResult(
+            accepted=[_job("1", title="CTO", company="Acme", status=MatchStatus.ACCEPTED, rationale="fit")],
+            soft_rejected=[_job("2", title="Dev", company="Globex", status=MatchStatus.SOFT_REJECT, rationale="maybe")],
+        )
+        view = build_jobs_view(result, kept_ids={make_job_id("remotive", "2")})
+        assert [c.company for c in view.accepted] == ["Acme", "Globex"]  # Globex promoted
+        assert view.for_review == []
+        # The promoted card's status is truthful (ACCEPTED), not the old soft_reject.
+        assert view.accepted[1].status == "accepted"
+
 
 class TestRenderJobs:
     def test_empty_shows_info(self) -> None:
@@ -142,6 +153,19 @@ class TestRenderJobs:
         assert len(reject) == 1
         reject[0][1]["on_click"]()
         assert seen == ["Acme"]
+
+    def test_keep_button_on_for_review_only_and_calls_back(self) -> None:
+        result = DiscoveryResult(
+            accepted=[_job("1", title="CTO", company="Acme", status=MatchStatus.ACCEPTED, rationale="fit")],
+            soft_rejected=[_job("2", title="Dev", company="Globex", status=MatchStatus.SOFT_REJECT, rationale="maybe")],
+        )
+        seen: list[str] = []
+        st = FakeSt()
+        render_jobs(build_jobs_view(result), st=st, on_keep=lambda jid: seen.append(jid))
+        keep = [(label, kw) for label, kw in st.buttons if label == "👍 Keep this"]
+        assert len(keep) == 1  # only the for-review card, not the strong match
+        keep[0][1]["on_click"]()
+        assert seen == [make_job_id("remotive", "2")]
 
     def test_no_reject_button_without_callback(self) -> None:
         result = DiscoveryResult(
