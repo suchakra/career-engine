@@ -81,9 +81,11 @@ confirmed OK or tracked as accepted residual risks.
    not just users' BYOK keys. **Fix:** the module grant is now **conditioned to
    `ce-key-*`** (read only per-user BYOK keys), mirroring the existing `ce-key-*` write
    condition; the two OIDC auth secrets the container needs at startup are granted
-   **per-secret** (`google_secret_manager_secret_iam_member`) in the dev env root. Net:
-   the runtime SA can read users' BYOK keys + exactly those two auth secrets, and
-   nothing else. `make tf-check` green (dev + prod). *Operator note:* on the first
+   **per-secret** (`google_secret_manager_secret_iam_member`) in the dev env root. Net
+   (dev): the runtime SA can read users' BYOK keys + exactly those two auth secrets, and
+   nothing else. (Prod omits the per-secret auth grants — it doesn't mount those secrets
+   at all — so its runtime SA has only the scoped `ce-key-*` read.) `make tf-check` green
+   (dev + prod). *Operator note:* on the first
    `apply` that scopes the project-level read, the per-secret grants must propagate
    before a NEW Cloud Run revision mounts the secrets; the running revision keeps its
    mounted values, so there is no downtime.

@@ -481,3 +481,8 @@ class TestUserIdValidation:
             vault.fetch_key("a/b")
         with pytest.raises(KeyVaultError):
             vault.key_exists("a/b")
+
+    def test_malformed_user_id_rejected_on_delete(self) -> None:
+        vault = SecretManagerKeyVault(client=FakeSecretManagerClient())
+        with pytest.raises(KeyVaultError):
+            vault.delete_key("a/b")
