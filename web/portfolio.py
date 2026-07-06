@@ -18,13 +18,24 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from schema import CareerEngineState, Entry, StarStory
+from schema import CareerEngineState, Entry, StarStory, UserProfile
 
 _EMPTY_TEXT = (
     "Nothing recorded yet. Start a **Grill** and your experiences — and the "
     "achievements grilled out of them — will show up here."
 )
 _NOT_GRILLED_TEXT = "Not grilled yet — start a grill to capture achievements here."
+
+
+@dataclass
+class ProfileView:
+    """Display-ready user profile (fully testable without Streamlit)."""
+
+    name: str
+    email: str
+    phone: str
+    location: str
+    links: list[str]
 
 
 @dataclass(frozen=True)
@@ -124,6 +135,100 @@ def _entry_card(entry: Entry, stories: list[StarStory]) -> EntryCard:
     )
 
 
+def build_profile_view(profile: UserProfile) -> ProfileView:
+    """Map a UserProfile into a display-ready ProfileView (pure)."""
+    return ProfileView(
+        name=profile.name,
+        email=profile.email,
+        phone=profile.phone,
+        location=profile.location,
+        links=list(profile.links),
+    )
+
+
+def render_profile_section(
+    view: ProfileView,
+    *,
+    on_save: Callable[[UserProfile], None],
+    st: Any,
+) -> None:
+    """Render an editable Profile section inside a collapsed expander.
+
+    Args:
+        view: Display-ready profile data from :func:`build_profile_view`.
+        on_save: Callback invoked with the updated :class:`~schema.UserProfile`
+            whenever the user saves, adds a link, or removes a link.
+        st: A Streamlit-like module (real ``streamlit`` or a test double).
+    """
+    with st.expander("Profile", expanded=False):
+        st.subheader("Profile")
+
+        # Row 1: name + email
+        col1, col2 = st.columns(2)
+        name_val = col1.text_input("Name", value=view.name, key="profile_name")
+        email_val = col2.text_input("Email", value=view.email, key="profile_email")
+
+        # Row 2: phone + location
+        col3, col4 = st.columns(2)
+        phone_val = col3.text_input("Phone", value=view.phone, key="profile_phone")
+        location_val = col4.text_input("Location", value=view.location, key="profile_location")
+
+        # Links list
+        current_links: list[str] = list(view.links)
+        if current_links:
+            st.caption("Links")
+        for i, link_url in enumerate(current_links):
+            lc1, lc2 = st.columns([4, 1])
+            lc1.write(link_url)
+
+            def _remove(idx: int = i) -> None:
+                updated = [lnk for j, lnk in enumerate(current_links) if j != idx]
+                on_save(
+                    UserProfile(
+                        name=name_val,
+                        email=email_val,
+                        phone=phone_val,
+                        location=location_val,
+                        links=updated,
+                    )
+                )
+
+            lc2.button("\u00d7 Remove", key=f"profile_remove_link_{i}", on_click=_remove)
+
+        # Add-link row
+        nc1, nc2 = st.columns([4, 1])
+        new_link_val = nc1.text_input("New link", value="", key="profile_new_link")
+
+        def _add() -> None:
+            stripped = new_link_val.strip()
+            if stripped:
+                on_save(
+                    UserProfile(
+                        name=name_val,
+                        email=email_val,
+                        phone=phone_val,
+                        location=location_val,
+                        links=[*current_links, stripped],
+                    )
+                )
+
+        nc2.button("Add link", key="profile_add_link", on_click=_add)
+
+        # Save all fields
+        def _save() -> None:
+            on_save(
+                UserProfile(
+                    name=name_val,
+                    email=email_val,
+                    phone=phone_val,
+                    location=location_val,
+                    links=current_links,
+                )
+            )
+
+        st.button("Save changes", key="profile_save", on_click=_save)
+
+
 def build_portfolio_view(state: CareerEngineState) -> PortfolioView:
     """Build the portfolio view-model from the discovery session state (pure).
 
@@ -141,6 +246,8 @@ def render_portfolio(
     st: Any,
     on_grill_entry: Callable[[str], None] | None = None,
     on_toggle_highlight: Callable[[str, bool], None] | None = None,
+    on_save_profile: Callable[[UserProfile], None] | None = None,
+    profile_view: ProfileView | None = None,
 ) -> None:
     """Render the portfolio via an injected ``st``-like module (thin pass-through).
 
@@ -153,7 +260,18 @@ def render_portfolio(
             renderer free of persistence logic (4C).
         on_toggle_highlight: Optional callback for the pin control (4E); receives
             ``(entry_id, new_highlighted)``. The persistence lives in the caller.
+        on_save_profile: Optional callback for the editable Profile section (9C);
+            receives a :class:`~schema.UserProfile`. Omitting it hides the section.
+        profile_view: Pre-built :class:`ProfileView` to display in the editable
+            section. Paired with ``on_save_profile``; ignored when that is None.
+            Defaults to an empty ProfileView when omitted.
     """
+    if on_save_profile is not None:
+        pv = profile_view if profile_view is not None else ProfileView(
+            name="", email="", phone="", location="", links=[]
+        )
+        render_profile_section(pv, on_save=on_save_profile, st=st)
+
     st.title("Your portfolio")
 
     if view.is_empty:
@@ -230,8 +348,11 @@ def render_portfolio(
 __all__ = [
     "EntryCard",
     "PortfolioView",
+    "ProfileView",
     "StoryCard",
     "build_portfolio_view",
+    "build_profile_view",
     "render_portfolio",
+    "render_profile_section",
     "stories_by_entry",
 ]
