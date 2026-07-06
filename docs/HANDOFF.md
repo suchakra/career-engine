@@ -1,27 +1,28 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-06 — Phase 8: 8A+8B+8C+8D COMPLETE)
-**`master` clean @ `8a3067d` · contract v2.8.0 · 646 tests (1 skipped) · no open PRs.**
-**Phases 1–7 + 8A + 8B + 8C + 8D COMPLETE.**
+## 👉 YOU ARE HERE (updated 2026-07-06 — Phase 8: 8A+8B+8C+8D+8G COMPLETE)
+**`master` clean @ `71d80a5` · contract v2.8.0 · 646 tests (1 skipped) · no open PRs.**
+**Phases 1–7 + 8A + 8B + 8C + 8D + 8G COMPLETE.**
 
-**What shipped (this session):**
-- **8D (PR #45):** Multi-user model-client isolation — replaced process-global `_install_model_client`
-  mutation with explicit DI via closure injection at `build_discovery_workflow()` time:
-  - 6 node functions in `workflows/nodes.py` gain `*, _client: ModelClient | None = None`
-  - `build_discovery_workflow(model_factory=None)` — shims become closures; `build_runner(model_factory=None)` threads through
-  - `cli/app.py`, `web/grill_ui.py`, `web/streamlit_app.py` — all 3 `_install_model_client` call sites replaced
-  - 7 dead legacy module-level shims removed (Copilot review fix)
-  - 4 new named isolation tests (646 total). Gemini PASS + Copilot PASS.
+**What shipped (8G — PR #46):**
+- **8G:** Custom domain `career-engine.bitcrafty.cloud` — two new Terraform modules:
+  - `infrastructure/modules/cloud_run_domain_mapping/`: `google_cloud_run_domain_mapping` + `resource_records` output
+  - `infrastructure/modules/cloudflare_dns/`: Cloudflare provider v5+; verification TXT + A/AAAA records; `proxied = false`; `count`-conditional verification resource
+  - `envs/dev/main.tf`: Cloudflare provider + both modules wired; `CE_AUTH_REDIRECT_URI` → `https://${custom_domain}/_stcore/oauth2callback`
+  - `envs/dev/variables.tf`: 4 new vars (`custom_domain`, `cloudflare_zone_id`, `cloudflare_api_token`, `google_domain_verification_txt`); `auth_redirect_uri` removed
+  - `.github/workflows/deploy.yml`: `TF_VAR_auth_redirect_uri` removed (now derived)
+  - Copilot review (4 comments) all addressed: `for_each` key collision fix, `depends_on` Phase-1 apply fix, dead `auth_redirect_uri` refs, `google_domain_verification_txt` made optional
+  - `make tf-check` green. No application code changes.
 
-**▶ NEXT — 8G: Custom domain via Cloudflare + Cloud Run (Terraform-only).**
-Spec in GROOMING.md §8G. Two new Terraform modules: `cloud_run_domain_mapping` + `cloudflare_dns`.
-Needs `TF_VAR_cloudflare_api_token`, `TF_VAR_cloudflare_zone_id`, `TF_VAR_google_domain_verification_txt`.
-Two-phase apply (TXT verification first). After 8G: 8E (deployer-SA), then 8F.
+**Phase 9 UI haul backlog captured:**
+- 13-item backlog (9A–9M) in GROOMING.md §Phase 9.
+- 9A–9K + 9I: Streamlit-compatible, can ship as incremental PRs.
+- 9H, 9M: require Next.js frontend (wait on architecture decision).
 
-**Known follow-up (out of 8D scope):**
-- `web/resume_builder.py::tailor_structured_resume` still calls `set_model_client_factory` directly — pre-existing race; track as 8H or fold into 8E.
-
-**After 8G:** 8E (deployer-SA least-privilege), then 8F (HITL TTL dashboard).
+**▶ NEXT — 8E: Deployer-SA least-privilege (Terraform-only).**
+Spec in GROOMING.md §8E + SECURITY.md "Required next review". Narrow `career-engine-deployer`
+SA from broad project roles to only what Terraform actually needs.
+Alternatively: skip to Phase 9 Streamlit-compatible items (9A–9K) which can ship now.
 
 ---
 *Historical session notes follow (most recent first):*

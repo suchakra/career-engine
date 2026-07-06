@@ -637,7 +637,7 @@ security hygiene that don't block the core product.
 | 8D | Multi-user model-client isolation | Significant | none | ✅ Ready — DI via closure injection (approved 2026-07-06) |
 | 8E | Deployer-SA least-privilege | Terraform-only | none | ◐ Draft (see SECURITY.md for the role list) |
 | 8F | HITL TTL/override dashboard | Medium-new feature | none | ⬜ To groom |
-| 8G | Custom domain via Cloudflare + Cloud Run | Terraform (2 new modules) | 8A (deploy must be live) | ✅ Ready |
+| 8G | Custom domain via Cloudflare + Cloud Run | Terraform (2 new modules) | 8A (deploy must be live) | ✅ SHIPPED (PR #46) |
 
 ---
 
@@ -1148,11 +1148,12 @@ Phase 8 is complete when:
 
 ---
 
-## Phase 9 — Replace Streamlit; proper product UI *(⬜ not groomed — groom after Phase 8 ships)*
+## Phase 9 — Replace Streamlit; proper product UI *(◐ Draft — Phase 8 core shipped; backlog captured)*
 
-> **Status: ⬜ Not started. Not groomed.** Do not build anything in Phase 9 scope until Phase 8
-> is complete and a proper architecture design session has been held. This section is a placeholder
-> to ensure the decision is not lost.
+> **Status: ◐ Draft.** Phase 8 core (8A–8D + 8G) shipped. 8E (deployer-SA) and 8F (HITL TTL
+> dashboard) are lower-priority and can run in parallel with early Phase 9 Streamlit-compatible
+> improvements. Full frontend rewrite still requires a design session (open questions below).
+> Items marked **Streamlit-compatible** can ship as incremental PRs now.
 
 ### Why this phase exists
 
@@ -1198,6 +1199,183 @@ it is not the right tool for a multi-user SaaS:
 4. Streamlit transition: run both in parallel (A/B) or hard cutover?
 5. What does the design system look like? (Color, typography, component library.)
 
-**Do not groom further until Phase 8 ships.** Record any design decisions made before then in
-[ARCHITECTURE.md](ARCHITECTURE.md) under a new §16.
+---
+
+### Phase 9 product backlog (captured 2026-07-06)
+
+Items below are ◐ Draft — not yet launchable build specs. Each entry notes whether it is
+**Streamlit-compatible** (shippable as an incremental PR in the current stack) or requires the
+**Next.js frontend** (waits on the architecture decision). All are ⬜ not started.
+
+| ID | Summary | Size | Compat | Priority |
+|----|---------|------|--------|----------|
+| 9A | Portfolio: delete or edit recorded bullets/STAR stories within an existing entry | M | Streamlit | High |
+| 9B | Portfolio: make "Add experience" CTA prominent + improve the manual-entry form | S | Streamlit | High |
+| 9C | Profile: dedicated editable section for name/email/contact (UserProfile already persisted) | S | Streamlit | High |
+| 9D | Resume: better template — Inter font, proper experience/education layout (not just summary+skills) | M | Streamlit | High |
+| 9E | Jobs: sort rejected/for-review list by decreasing match score; put in a scrollable container | S | Streamlit | Medium |
+| 9F | Jobs: tighten discovery agent initial parameters — current defaults surface too many unrelated results | M | Streamlit | Medium |
+| 9G | Jobs: "Track application" auto-harvests job title + company from JD; pre-fills form (editable) | S | Streamlit | Medium |
+| 9H | Resume download: inline chat window for résumé-specific edits (scoped to this résumé only) | L | Frontend | Medium |
+| 9I | Tailor: "specific instructions" textarea alongside JD (per-application customisation, not persisted) | S | Streamlit | Medium |
+| 9J | Grill checkpoint: copy reminding user they can leave and come back later (async-friendly UX) | XS | Streamlit | High |
+| 9K | Portfolio: per-experience visual progress indicator (% of stories recorded) | S | Streamlit | Medium |
+| 9L | (Stretch) Monthly "what have you done this month" email reminder + in-app prompt | L | Streamlit | Low |
+| 9M | (Stretch) Visual drag-and-drop grid editor for résumé section ordering | XL | Frontend | Low |
+
+---
+
+#### 9A — Delete / edit recorded portfolio details
+
+**What:** Portfolio view is currently read-only. Each recorded bullet or STAR story needs a delete
+action; bullets also need edit-in-place. The `portfolio_store` seam needs two new methods:
+`delete_story(session_id, story_id)` and `update_entry_bullet(session_id, entry_id, idx, text)`.
+The `web/portfolio.py` view-model gains a `deletable: bool = True` flag per item.
+
+**Grooming needed:** Firestore update path (list splice vs. tombstone); confirm-before-delete UX.
+
+---
+
+#### 9B — Add experience: prominent CTA + better form
+
+**What:** `add_manual_entry` (4D) exists but is buried. Move the "Add experience" CTA to the top
+of the Portfolio experience list. In the Next.js UI this becomes a proper modal form. In Streamlit
+it is a layout reorder + possible expander-to-the-top change.
+
+**Grooming needed:** minimal in Streamlit (reorder); full form spec for Next.js.
+
+---
+
+#### 9C — Editable profile section
+
+**What:** `UserProfile` (contract v2.6.0, `web/profile_store.py`) is harvested from the resume
+upload and pre-fills the Tailor contact header. What is missing is a dedicated visible / editable
+**Profile** section — name, email, phone, LinkedIn URL — where users can review and correct the
+values without having to run a tailor first.
+
+**Grooming needed:** nav placement (Portfolio sub-section vs. separate Settings page vs. sidebar
+card); which `UserProfile` fields to expose; validation (email format, URL).
+
+---
+
+#### 9D — Better résumé template
+
+**What:** `templates/classic_resume.html` (WeasyPrint) currently renders a summary block, a thin
+skills section, and education only. Minimum bar: Inter (or embedded system-ui), proper experience
+section (employer / title / dates header + indented bullets), skills as a compact two-column grid,
+education below experience, ATS-friendly margins and line-height.
+
+**Grooming needed:** font strategy (base64-embedded Inter subset vs. system-ui stack — Google Fonts
+CDN does not work in Cloud Run's network context without egress); whether to replace the existing
+`classic_resume.html` or add a second template option selectable at render time.
+
+---
+
+#### 9E — Jobs: sort by match score, scrollable
+
+**What:** Sort the "For review" and dismissed job lists descending by match score so the most
+relevant candidates appear first. Wrap the list in a fixed-height scrollable container.
+
+**Grooming needed:** confirm `JobOpportunity` carries a `match_score` (or equivalent) that
+survives the `LedgerStore` round-trip; if not, add it (additive, minor bump).
+
+---
+
+#### 9F — Tighten discovery agent parameters
+
+**What:** The Scout currently receives broad default preferences that return too many unrelated
+results. Fix on two levels: (a) sharpen the default `SessionPreferences.target_roles` example
+copy so first-time users start with a focused prompt; (b) add a minimum match-score threshold to
+the `PrimaryAgent` hard-reject gate so clearly-mismatched jobs never reach the UI.
+
+**Grooming needed:** threshold value; whether (b) is a config knob in `SessionPreferences` or a
+hardcoded floor; prompt copy for the preferences form placeholder text.
+
+---
+
+#### 9G — "Track application": harvest title + company from JD
+
+**What:** In the "Track this application" form, run a lightweight Flash call on the pasted JD to
+extract job title and company name; pre-fill the form fields (user can edit before saving).
+
+**Grooming needed:** extraction approach (dedicated `/extract-jd-metadata` Flash call vs. regex
+for structured JDs); cost gate (single Flash call per submission is acceptable); fields to extract
+(title, company, optionally location + employment type).
+
+---
+
+#### 9H — Resume download: inline chat for résumé-specific edits
+
+**What:** Below the rendered PDF preview on the download page, add a chat input. Messages are
+scoped to this résumé only (not the global grill). The user can ask "make the summary more
+concise" or "remove the Python bullet"; the `StructuredResume` is patched in-memory and the
+preview re-renders. Changes are not persisted — download the edited version, then discard.
+
+**Grooming needed:** in-memory résumé edit session model; LLM patch strategy (re-run tailor node
+with diff instructions vs. a targeted field-level edit prompt); in Streamlit this is feasible but
+awkward; a proper frontend makes this much cleaner.
+
+---
+
+#### 9I — Tailor: per-application specific instructions
+
+**What:** Add a second optional textarea below the JD input in the Tailor view: "Specific
+instructions for this application (e.g. emphasise cloud experience, use a formal tone, omit
+side projects)." The text is appended to the tailor node's prompt for this run only — not
+persisted. Max ~500 chars to limit token cost.
+
+**Grooming needed:** injection point in `workflows/nodes.py::tailor_node`; whether instructions
+also appear on the download/preview page for reference.
+
+---
+
+#### 9J — Checkpoint: "you can come back later" copy
+
+**What:** At the HITL checkpoint pause (`user_checkpoint_node`), add a short dismissable info
+message: "Your progress is saved — feel free to close the tab and return later. Your stories will
+be right here." No logic change; copy and placement only.
+
+**Grooming needed:** exact copy; dismissable vs. static; above or below the response input.
+
+---
+
+#### 9K — Portfolio: per-experience progress indicator
+
+**What:** Each entry row in the Portfolio list shows a small progress indicator: fraction of
+stories recorded out of an expected target (e.g. 2/5, or a percentage fill bar). Uses existing
+`StarStory` count per entry and `Entry.status`.
+
+**Grooming needed:** definition of "complete" for an entry (a minimum story count? `GRILLED`
+status? `coverage_confirmed`?); visual style (progress bar vs. coloured fraction badge).
+
+---
+
+#### 9L — (Stretch) Monthly achievements reminder
+
+**What:** Cloud Scheduler fires once a month; a sweep job creates a `pending_action` of type
+`monthly_checkin` for each active user; the Dashboard banner renders it as "What have you
+achieved this month? Log it in your portfolio." Optionally also sends an email (SendGrid or
+similar, opt-in only).
+
+**Grooming needed:** email provider and opt-in mechanism; privacy/GDPR notice; whether the
+in-app nudge alone (no email) is the v1 scope.
+
+---
+
+#### 9M — (Stretch) Visual résumé section editor
+
+**What:** Drag-and-drop grid letting users reorder résumé sections (Skills before Education,
+a specific role to the top). Operates on the `StructuredResume` section list before the
+WeasyPrint render. Section ordering stored as a user preference (additive field on
+`UserWorkspace`, minor bump).
+
+**Grooming needed:** only groom after the Next.js frontend architecture decision is made; React
+DnD or similar required; no Streamlit equivalent is practical.
+
+---
+
+**Streamlit-compatible items (9A–9G, 9I–9K) can be groomed and shipped incrementally as
+standalone PRs in the current Streamlit stack.** Write full build specs only when the relevant
+design questions above are answered. Phase 9 frontend rewrite items (9H, 9M) wait on the
+architecture decision (design questions 1–5 above).
 
