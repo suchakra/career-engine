@@ -11,8 +11,21 @@ download (PR #33); ✅ 4E pin-for-tailoring (PR #34, `v2.7.0`); ✅ pre-GA secur
 **✅ Phase 7 COMPLETE — Job Discovery is now a web product feature** ([ARCHITECTURE §15.6](ARCHITECTURE.md)):
 ✅ 7A persisted discovery preferences (`UserWorkspace.discovery_preferences`, **`v2.8.0`**, PR #38);
 ✅ 7B Jobs view (nav + live loop via `run_async` + ranked matches, PR #39); ✅ 7C "Tailor to this job".
-Discovery is now **grill → Jobs → tailor** in the UI (was CLI-only); no engine change. **+ HITL "Not interested"** (dismiss a company; persisted, honored by future runs). Capstone packaging
-(video/writeup/README/diagram) is user-owned and deferred.
+Discovery is now **grill → Jobs → tailor** in the UI (was CLI-only); no engine change.
+**✅ Post-Phase-7 roadmap (this session):** ✅ HITL **"Not interested"** — dismiss a company, persisted +
+hard-rejected on future runs (PR #40, atomic Firestore `ArrayUnion`); ✅ **real out-of-process MCP transport**
+`StdioMcpClient` — spawns the server as a separate process over stdio, both transports raise identically on
+tool errors (PR #41; §15.5); ✅ HITL **"Keep this"** — promote a for-review match to saved (PR #42). Also made
+`web/streamlit_app.py` **import-safe** (`main()` gated on `streamlit.runtime.exists()`) → handlers are now
+unit-testable. **638 tests + 1 skipped (opt-in live stdio).**
+**▶ NEXT roadmap (design-first, lower priority):** wire the async pending-action-sweep HTTP endpoint (Cloud
+Scheduler 404s today); deployer-SA least-privilege curation; **multi-user model-client isolation** (the
+process-global factory in `workflows/nodes.py` can bleed one user's BYOK key into another's inference under
+concurrency — needs a careful design given the `run_async` background-loop; **do NOT autonomously refactor
+the working grill/jobs/tailor floor**). Full HITL override/TTL dashboard; remote/network A2A; Podman sandbox.
+Capstone packaging (video/writeup/README/diagram) is user-owned and deferred.
+**Doc-accuracy note for the submission (`demo_output/`):** the MCP-separate-process claim is now TRUE (PR #41);
+the **async-sweep-as-live** claim still needs softening (sweep is built+tested but NOT wired/running — Scheduler 404s).
 
 **Latest this session:**
 - **DURABLE WEB SESSIONS (data-loss root cause fixed):** the web grill was on `InMemorySessionService`
