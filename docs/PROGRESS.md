@@ -3,7 +3,7 @@
 > Single source of truth for **what's done vs. pending**. Update this at the end of every work
 > session / sub-agent run. Keep entries terse. Legend: ✅ done · 🟡 in progress · ⬜ not started · 🚫 blocked.
 
-Last updated: **2026-07-06** — *Phases 1–7 COMPLETE + post-Phase-7 work: HITL "Not interested" (PR #40), real `StdioMcpClient` out-of-process transport (PR #41), HITL "Keep this" (PR #42), `streamlit_app.py` import-safe. **639 tests (1 skipped)**. master clean, contract v2.8.0. Phase 8 (operational hardening) groomed — see [GROOMING.md §Phase 8](GROOMING.md). ⚠️ Deploy gap: the Cloud Run dev app has not been redeployed since PRs #38–42; Jobs UI is in code but not live yet. **Review chain updated:** Gemini 2.5 Pro (pre-push) + Copilot (PR) replaces old Sonnet/Opus chain.*
+Last updated: **2026-07-06** — *8A (redeploy dev, no code) dispatched via `deploy.yml` (run `28810378381`). 8B (dashboard "Find jobs" CTA) shipped: `DashboardView.can_find_jobs`, `render_dashboard` button, 2 new tests — PR #43 squash-merged. **640 tests (1 skipped)**. master clean @ `1d299cd`, contract v2.8.0. Review chain: Gemini 2.5 Pro (pre-push) + Copilot (PR).*
 
 ---
 
@@ -22,7 +22,7 @@ Last updated: **2026-07-06** — *Phases 1–7 COMPLETE + post-Phase-7 work: HIT
 | Phase 4 — Portfolio Workbench | ✅ (4E deferred) | 4A sidebar nav (**PR #15**), 4B portfolio view (**#16**), 4C+4D steerable grill + add-experience seam (**#17**) — all shipped & **deployed** to dev, Copilot-reviewed, **no contract change**. 4E highlight/pin deferred (needs +minor bump). [GROOMING.md](GROOMING.md) Phase 4 / [ARCHITECTURE.md §14](ARCHITECTURE.md) / D10. |
 | Phase 6 — Two-agent (A2A) job discovery (capstone) | ✅ merged (packaging pending) | **Merged to master via PR #30, tagged `contract-v2.5.0`, 560 tests.** Sonnet review PASS + Copilot addressed. Ontology (`JobOpportunity`/`EvaluationDiff`/…) → real FastMCP server `discovery/mcp_server.py` over a live key-free source → stateless `Scout` (MCP client) → stateful `PrimaryAgent` (deterministic hard-reject gate + injectable agentic evaluator + bounded MAX_ITERATIONS=3 loop → `EvaluationDiff`) → `career-engine discover` + idempotent `LedgerStore` → Tailor reuse. LIVE end-to-end run verified. **Pending:** PACKAGING only (video/writeup/README/diagram — user-owned). Spec [ARCHITECTURE.md §15](ARCHITECTURE.md); demo [DISCOVERY_DEMO.md](DISCOVERY_DEMO.md). |
 | Phase 7 — Job Discovery web surface | ✅ COMPLETE | **7A** (PR #38, **contract v2.8.0**): `UserWorkspace.discovery_preferences` + `web/preferences_store.py`. **7B** (PR #39): Jobs nav view — `web/jobs.py`, `web/jobs_runner.py`, `_render_jobs` in `streamlit_app.py`. **7C**: "Tailor to this job." Post-7: HITL "Not interested" (PR #40), `StdioMcpClient` (PR #41), HITL "Keep this" (PR #42). ⚠️ Deploy gap — Jobs is wired in code; Cloud Run dev app needs Phase 8A redeploy. |
-| Phase 8 — Operational hardening | ⬜ not started | 8A redeploy (no code), 8B dashboard "Find jobs" CTA, 8C sweep endpoint wiring, 8D model-client isolation (design-first), 8E deployer-SA least-privilege, 8F HITL TTL/override dashboard, 8G custom domain. Groomed in [GROOMING.md §Phase 8](GROOMING.md). |
+| Phase 8 — Operational hardening | 🟡 in progress | ✅ 8A redeploy dispatched · ✅ 8B dashboard "Find jobs" CTA (PR #43) · ⬜ 8C sweep wiring · ⬜ 8D model-client isolation · ⬜ 8E deployer-SA · ⬜ 8F HITL TTL · ⬜ 8G custom domain. Groomed in [GROOMING.md §Phase 8](GROOMING.md). |
 | Phase 9 — Replace Streamlit; proper product UI | ⬜ not groomed | Current UI is scaffolding/glue. Phase 9 = FastAPI backend + proper frontend (Next.js or similar) + freemium/platform-key tier. Streamlit `max_instances=1` is the single biggest ceiling for multi-user growth. Groom after Phase 8 ships. |
 
 ---
@@ -93,14 +93,15 @@ Spec: [ARCHITECTURE.md §12](ARCHITECTURE.md) · roadmap: [REFINED_PROJECT_PLAN.
 - ✅ **2E** capstone packaging — `docs/CAPSTONE_RUNBOOK.md` (reproducible runbook + proof-point→evidence map + honest tradeoffs) + `skills/cloud_ops/SKILL.md`.
 - 🟡 Exit criteria: `make check` (381) + `make tf-check` green (deterministic); `make deploy` needs GCP creds; web+CLI share state via the workspace repo. **Deferred thin wiring:** streamlit discovery-session load for the meter; sweep Cloud Run HTTP endpoint + IdP frontend token exchange. All under Sonnet gate (in progress) before push.
 
-## Phase 8 — Operational hardening *(groomed; not started)*
+## Phase 8 — Operational hardening *(groomed; in progress)*
 
 All tickets fully groomed in [GROOMING.md §Phase 8](GROOMING.md). Build them in order:
 
-- ⬜ **8A** Redeploy to dev — no code change; ships PRs #38–42 to Cloud Run so the Jobs nav is visible live.
-  Command: `gh workflow run deploy.yml --ref master -f environment=dev`
-- ⬜ **8B** Dashboard "Find jobs" CTA — add a third action button in `web/dashboard.py` (alongside Grill /
-  Tailor) so the Jobs view is reachable without knowing to look in the sidebar.
+- ✅ **8A** Redeploy to dev — `gh workflow run deploy.yml --ref master -f environment=dev` dispatched
+  (workflow run `28810378381`). Ships PRs #38–42 to Cloud Run; Jobs nav visible live after deploy.
+- ✅ **8B** Dashboard "Find jobs" CTA — `DashboardView.can_find_jobs: bool = True`, `render_dashboard`
+  emits "Find jobs" button routing to `session_state["view"] = "jobs"`, 2 named tests, Gemini PASS.
+  PR #43 squash-merged; master @ `1d299cd`. **640 tests (1 skipped).**
 - ⬜ **8C** Wire the pending-action sweep — `jobs/sweep_endpoint.py` exists + is tested but Cloud Scheduler
   404s because nothing mounts it. Chosen approach: add `career-engine sweep` CLI command + Terraform Cloud
   Run Job + updated Scheduler job (no HTTP server needed).

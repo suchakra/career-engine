@@ -1,8 +1,8 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-06 — handoff to Copilot; Phase 8 grooming session)
-**`master` clean · contract v2.8.0 · 639 tests (1 skipped: opt-in live stdio) · no open PRs.**
-**Phases 1–7 COMPLETE.** Everything through PR #42 is on master and `make check` green.
+## 👉 YOU ARE HERE (updated 2026-07-06 — Phase 8 in progress: 8A+8B shipped)
+**`master` clean @ `1d299cd` · contract v2.8.0 · 640 tests (1 skipped) · no open PRs.**
+**Phases 1–7 + 8A + 8B COMPLETE.**
 
 **What shipped:**
 - Phases 1–5: core grill → tailor loop, web app, portfolio workbench, ATS-safe résumé, security review.
@@ -10,22 +10,21 @@
 - Phase 7 (PRs #38–39, v2.8.0): discovery as a web product feature — Jobs nav view, persisted rubric,
   ranked matches, "Tailor to this job" hand-off, HITL "Not interested" (PR #40), real out-of-process
   `StdioMcpClient` (PR #41), HITL "Keep this" (PR #42), `streamlit_app.py` made import-safe.
+- **8A** (no code): Cloud Run dev redeployed — `gh workflow run deploy.yml --ref master -f environment=dev`
+  dispatched (run `28810378381`); Jobs UI now live at https://career-engine-dev-app-ontyg6kaja-uc.a.run.app
+- **8B** (PR #43): `DashboardView.can_find_jobs: bool = True` + "Find jobs" button in `render_dashboard`
+  routing to `session_state["view"] = "jobs"`. 2 new named tests. Gemini PASS → squash-merged.
 
-**⚠️ Deploy gap (most immediate action):** The Jobs view + all HITL controls (PRs #38–42) are **fully
-wired in the codebase** — `web/navigation.py` has the "Jobs" nav item, `web/streamlit_app.py` has the
-full `_render_jobs` routing + handler, `web/jobs.py` + `web/jobs_runner.py` are complete — but the
-**Cloud Run dev app has NOT been redeployed** since these PRs merged. The live URL shows an older build.
-Redeploy command: `gh workflow run deploy.yml --ref master -f environment=dev`
-
-**▶ NEXT — Phase 8 (operational hardening).** All tickets are groomed in [GROOMING.md §Phase 8](GROOMING.md).
-Priority order: (1) 8A redeploy → unblocks UI verification; (2) 8B dashboard "Find jobs" CTA; (3) 8C
-wire sweep endpoint (Cloud Run Job approach); (4) 8D multi-user model-client isolation (**design-first,
-do NOT touch the grill/jobs/tailor floor without a written design — `_client_factory` in `workflows/nodes.py`
-is process-global and can bleed BYOK keys under concurrency**); (5) 8E deployer-SA least-privilege;
-(6) 8G custom domain via Cloudflare + Cloud Run; (7) 8F HITL TTL/override dashboard.
-**Phase 9 (after Phase 8):** replace Streamlit with FastAPI + proper frontend + free-tier model —
-not groomed yet; see [GROOMING.md §Phase 9](GROOMING.md) for the placeholder and design questions.
-Capstone packaging (video/writeup/README/diagram) is user-owned and deferred.
+**▶ NEXT — 8C: Wire the pending-action sweep (Cloud Run Job approach).**
+Spec in [GROOMING.md §8C](GROOMING.md). Key scope:
+- `main.py`: add `career-engine sweep` CLI command
+- `jobs/sweep_cli.py` (NEW): `resolve_sweep_store()` + `run_sweep_command()`
+- `tests/test_sweep_cli.py` (NEW): at minimum a unit test for the CLI handler
+- `infrastructure/modules/cloud_run_job/` (NEW Terraform module): Cloud Run Job resource
+- `infrastructure/envs/dev/main.tf`: wire the new module + update Scheduler job target
+PAUSE conditions (subagent must stop and check with user): if `jobs/pending_action_sweep.py` needs
+any changes (should be pure — zero changes expected); if `google_cloud_run_v2_job` Terraform resource
+unavailable in the pinned provider version.
 
 **Doc-accuracy note for the submission (`demo_output/`):** the MCP-separate-process claim is now TRUE (PR #41);
 the **async-sweep-as-live** claim still needs softening (sweep is built+tested but NOT wired/running — Scheduler 404s).
