@@ -606,6 +606,13 @@ are untouched). The web surface adds only: a persisted rubric (`UserWorkspace.di
 hands the posting's JD to the existing Tailor (`job_tailor_index` → the keyed JD input). So discovery is now
 **grill → jobs → tailor** in the UI, not a terminal-only demo.
 
+**HITL steering (post-Phase-7):** each job also has a **"Not interested"** action that dismisses the company —
+it disappears from the current view immediately (session hide-set) and is persisted to the ledger
+(`LedgerStore.add_rejected_company`, first writer to `InteractionLedger.rejected_companies`; Firestore uses an
+atomic `ArrayUnion`). The Primary's deterministic hard-reject gate already consumes that set, so **future**
+runs (CLI and web) never re-surface a dismissed company. This is the first slice of the discovery HITL
+controls (full accept/override/TTL dashboard remains roadmap).
+
 ### 15.5 Deliberate deviations (deadline-safe cut; roadmap noted)
 - **Package named `discovery/`**, not the literal `mcp/`+`agents/` paths first sketched — a top-level `mcp/`
   dir would shadow the installed `mcp` SDK on `sys.path`. One feature, one package.

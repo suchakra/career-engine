@@ -85,6 +85,15 @@ class TestBuildJobsView:
         view = build_jobs_view(None, prior=[])
         assert view.is_empty is True
 
+    def test_hidden_companies_filtered(self) -> None:
+        result = DiscoveryResult(
+            accepted=[_job("1", title="CTO", company="Acme", status=MatchStatus.ACCEPTED, rationale="fit")],
+            soft_rejected=[_job("2", title="Dev", company="Globex", status=MatchStatus.SOFT_REJECT, rationale="maybe")],
+        )
+        view = build_jobs_view(result, hidden_companies={"acme"})  # case-insensitive
+        assert [c.company for c in view.accepted] == []  # Acme hidden
+        assert [c.company for c in view.for_review] == ["Globex"]
+
 
 class TestRenderJobs:
     def test_empty_shows_info(self) -> None:
@@ -121,6 +130,26 @@ class TestRenderJobs:
         st = FakeSt()
         render_jobs(build_jobs_view(result), st=st)
         assert not any(label == "Tailor résumé to this" for label, _ in st.buttons)
+
+    def test_reject_button_calls_callback_with_company(self) -> None:
+        result = DiscoveryResult(
+            accepted=[_job("1", title="CTO", company="Acme", status=MatchStatus.ACCEPTED, rationale="fit")]
+        )
+        seen: list[str] = []
+        st = FakeSt()
+        render_jobs(build_jobs_view(result), st=st, on_reject=lambda co: seen.append(co))
+        reject = [(label, kw) for label, kw in st.buttons if "Not interested" in label]
+        assert len(reject) == 1
+        reject[0][1]["on_click"]()
+        assert seen == ["Acme"]
+
+    def test_no_reject_button_without_callback(self) -> None:
+        result = DiscoveryResult(
+            accepted=[_job("1", title="CTO", company="Acme", status=MatchStatus.ACCEPTED, rationale="fit")]
+        )
+        st = FakeSt()
+        render_jobs(build_jobs_view(result), st=st)
+        assert not any("Not interested" in label for label, _ in st.buttons)
 
 
 def test_jobs_view_default_is_empty() -> None:

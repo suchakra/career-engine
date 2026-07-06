@@ -11,7 +11,7 @@ download (PR #33); ✅ 4E pin-for-tailoring (PR #34, `v2.7.0`); ✅ pre-GA secur
 **✅ Phase 7 COMPLETE — Job Discovery is now a web product feature** ([ARCHITECTURE §15.6](ARCHITECTURE.md)):
 ✅ 7A persisted discovery preferences (`UserWorkspace.discovery_preferences`, **`v2.8.0`**, PR #38);
 ✅ 7B Jobs view (nav + live loop via `run_async` + ranked matches, PR #39); ✅ 7C "Tailor to this job".
-Discovery is now **grill → Jobs → tailor** in the UI (was CLI-only); no engine change. Capstone packaging
+Discovery is now **grill → Jobs → tailor** in the UI (was CLI-only); no engine change. **+ HITL "Not interested"** (dismiss a company; persisted, honored by future runs). Capstone packaging
 (video/writeup/README/diagram) is user-owned and deferred.
 
 **Latest this session:**
