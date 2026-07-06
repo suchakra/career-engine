@@ -34,6 +34,7 @@ class DashboardView:
     application_count: int
     can_tailor: bool = True  # discovery is a nudge, never a gate
     can_start_grill: bool = True
+    can_find_jobs: bool = True  # always rendered; never gated
     pending_actions_detail: list[dict[str, str]] = field(default_factory=list)
 
 
@@ -72,6 +73,7 @@ def build_dashboard_view(
         application_count=len(workspace.applications),
         can_tailor=True,
         can_start_grill=True,
+        can_find_jobs=True,
         pending_actions_detail=pending_detail,
     )
 
@@ -125,4 +127,8 @@ def render_dashboard(view: DashboardView, *, st: Any) -> None:
     st.button(
         "Tailor a resume",
         on_click=lambda: st.session_state.__setitem__("view", "tailor"),
+    )
+    st.button(
+        "Find jobs",
+        on_click=lambda: st.session_state.__setitem__("view", "jobs"),
     )

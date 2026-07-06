@@ -1,18 +1,37 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-06)
-**`master` at contract v2.8.0. Web app DEPLOYED & LIVE on Cloud Run (dev): Google login + BYOK web grill +
-résumé upload + Portfolio Workbench + real ATS Tailor (+ pin-for-tailoring, master résumé download,
-save-as-application). `make check` green.**
-**Phase 5 COMPLETE + security-reviewed:** ✅ Phase 6 A2A discovery (PR #30, `v2.5.0`); ✅ 5B
-save-as-application (PR #31); ✅ persist-Contact (PR #32, `v2.6.0`); ✅ 5C one renderer + master résumé
-download (PR #33); ✅ 4E pin-for-tailoring (PR #34, `v2.7.0`); ✅ pre-GA security review (PR #35);
-✅ config `.env` fix (PR #37).
-**✅ Phase 7 COMPLETE — Job Discovery is now a web product feature** ([ARCHITECTURE §15.6](ARCHITECTURE.md)):
-✅ 7A persisted discovery preferences (`UserWorkspace.discovery_preferences`, **`v2.8.0`**, PR #38);
-✅ 7B Jobs view (nav + live loop via `run_async` + ranked matches, PR #39); ✅ 7C "Tailor to this job".
-Discovery is now **grill → Jobs → tailor** in the UI (was CLI-only); no engine change. **+ HITL "Not interested"** (dismiss a company; persisted, honored by future runs). Capstone packaging
-(video/writeup/README/diagram) is user-owned and deferred.
+## 👉 YOU ARE HERE (updated 2026-07-06 — handoff to Copilot; Phase 8 grooming session)
+**`master` clean · contract v2.8.0 · 639 tests (1 skipped: opt-in live stdio) · no open PRs.**
+**Phases 1–7 COMPLETE.** Everything through PR #42 is on master and `make check` green.
+
+**What shipped:**
+- Phases 1–5: core grill → tailor loop, web app, portfolio workbench, ATS-safe résumé, security review.
+- Phase 6 (PR #30, v2.5.0): two-agent A2A job discovery (`career-engine discover` CLI).
+- Phase 7 (PRs #38–39, v2.8.0): discovery as a web product feature — Jobs nav view, persisted rubric,
+  ranked matches, "Tailor to this job" hand-off, HITL "Not interested" (PR #40), real out-of-process
+  `StdioMcpClient` (PR #41), HITL "Keep this" (PR #42), `streamlit_app.py` made import-safe.
+
+**⚠️ Deploy gap (most immediate action):** The Jobs view + all HITL controls (PRs #38–42) are **fully
+wired in the codebase** — `web/navigation.py` has the "Jobs" nav item, `web/streamlit_app.py` has the
+full `_render_jobs` routing + handler, `web/jobs.py` + `web/jobs_runner.py` are complete — but the
+**Cloud Run dev app has NOT been redeployed** since these PRs merged. The live URL shows an older build.
+Redeploy command: `gh workflow run deploy.yml --ref master -f environment=dev`
+
+**▶ NEXT — Phase 8 (operational hardening).** All tickets are groomed in [GROOMING.md §Phase 8](GROOMING.md).
+Priority order: (1) 8A redeploy → unblocks UI verification; (2) 8B dashboard "Find jobs" CTA; (3) 8C
+wire sweep endpoint (Cloud Run Job approach); (4) 8D multi-user model-client isolation (**design-first,
+do NOT touch the grill/jobs/tailor floor without a written design — `_client_factory` in `workflows/nodes.py`
+is process-global and can bleed BYOK keys under concurrency**); (5) 8E deployer-SA least-privilege;
+(6) 8G custom domain via Cloudflare + Cloud Run; (7) 8F HITL TTL/override dashboard.
+**Phase 9 (after Phase 8):** replace Streamlit with FastAPI + proper frontend + free-tier model —
+not groomed yet; see [GROOMING.md §Phase 9](GROOMING.md) for the placeholder and design questions.
+Capstone packaging (video/writeup/README/diagram) is user-owned and deferred.
+
+**Doc-accuracy note for the submission (`demo_output/`):** the MCP-separate-process claim is now TRUE (PR #41);
+the **async-sweep-as-live** claim still needs softening (sweep is built+tested but NOT wired/running — Scheduler 404s).
+
+---
+*Historical session notes follow (most recent first):*
 
 **Latest this session:**
 - **DURABLE WEB SESSIONS (data-loss root cause fixed):** the web grill was on `InMemorySessionService`
@@ -249,31 +268,31 @@ time, and its `scripts/deploy_and_verify.sh` automates the merge+deploy+verify t
 [`wait-for-pr-review`](../skills/wait-for-pr-review/SKILL.md) skill to block for Copilot's review instead
 of hand-rolling a poll loop.
 
-**The standard per-change loop (every code change goes through this):**
-1. **Opus builds** the change in-context on a fresh branch (`fix/…`, `feat/…`).
-2. **`make check` green** (ruff + mypy --strict + pytest) — plus `make tf-check` for infra.
-3. **Sonnet reviews** the diff as an independent gate (re-runs the gates, reads the diff, returns
-   PASS / CHANGES REQUESTED). Opus does not self-declare done; address CHANGES REQUESTED and re-review.
-   *(For small/surgical changes this may be an Opus self-review; a Sonnet subagent review is the norm
-   for anything non-trivial or state-machine/contract-touching.)*
-4. **PR created** (`gh pr create`), then **Copilot review requested** on the PR
+**The standard per-change loop (every code change goes through this) — updated 2026-07-06:**
+1. **Subagent builds** the change on a fresh branch (`fix/…`, `feat/…`). Subagents are Sonnet
+   by default; worktree-isolated for large changes (`isolation: "worktree"`).
+2. **`make check` green** (ruff + mypy --strict + pytest) — plus `make tf-check` for infra changes.
+   Subagent must not declare done unless gates pass.
+3. **Gemini 2.5 Pro reviews** the diff as an independent gate — launched as a separate review subagent
+   (`model: "Gemini 2.5 Pro (Google)"`). Reviewer re-runs gates, reads the diff, returns
+   PASS / CHANGES REQUESTED with a reason list. Address CHANGES REQUESTED and re-review before pushing.
+   *(Replaces the old Sonnet/Opus review step — Claude subscription ended.)*
+4. **PR created** (`gh pr create`), then **Copilot review requested**
    (`gh api --method POST repos/{owner}/{repo}/pulls/N/requested_reviewers -f
-   'reviewers[]=copilot-pull-request-reviewer[bot]'`; it surfaces as login `Copilot`).
+   'reviewers[]=copilot-pull-request-reviewer[bot]'`; surfaces as login `Copilot`).
 5. **Address Copilot comments** (fix + reply), CI green.
 6. **Squash-merge** (`gh pr merge N --squash --delete-branch`).
 7. **Deploy** (`gh workflow run deploy.yml --ref master -f environment=dev`) + verify HTTP 200 live.
 8. **Reconcile docs** in the same session (PROGRESS/HANDOFF/etc.).
 
-So: **Opus builds → Sonnet reviews → PR → Copilot reviews → address → merge → deploy.** Two independent
-review gates (Sonnet + Copilot) plus CI. This whole loop is a strong candidate to become a coded skill
-(see the skills discussion) — it is executed by hand on every change today.
-- **Alternative (large, file-disjoint work): Sonnet builds in worktrees, Opus reviews** (`model: "sonnet"`,
-  `isolation: "worktree"`). Use when workstreams are big and don't share files.
+So: **Subagent builds → Gemini 2.5 Pro reviews → PR → Copilot reviews → address → merge → deploy.**
+Two independent review gates (Gemini + Copilot) plus CI.
+- **For large, file-disjoint work:** launch parallel Sonnet subagents in worktrees; Gemini 2.5 Pro
+  reviews each branch independently before its PR.
 - No agent self-declares done; only a review PASS ticks `docs/PROGRESS.md`. The reviewer independently
-  re-runs gates and reads the diff (don't trust the report).
+  re-runs gates and reads the diff.
 - **master must stay green after every commit** (`make check`; `make tf-check` for infra). Contract
   changes require a `CONTRACT_VERSION` bump + tag after review PASS.
-- Commit trailer: `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
 
 ## Known gotchas
 - **Shared-env mypy coupling:** gates depend on installed packages; `make check` on master is the source
