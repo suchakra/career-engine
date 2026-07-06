@@ -678,6 +678,16 @@ def _render_tailor(*, user_id: str, today: str) -> None:
         key="tailor_jd_text_input",
         placeholder="Paste the JD text…",
     )
+    st.text_area(
+        "Specific instructions (optional)",
+        key="tailor_instructions_input",
+        max_chars=500,
+        placeholder=(
+            "e.g. Emphasise cloud infrastructure experience. "
+            "Omit side projects. Use a formal tone."
+        ),
+        help="These instructions apply to this résumé only and are not saved.",
+    )
     if st.button("Tailor my résumé", type="primary"):
         client = GeminiModelClient(api_key=key)
         jd_text = _resolve_jd_text(jd_url.strip(), jd.strip(), client=client)
@@ -687,10 +697,12 @@ def _render_tailor(*, user_id: str, today: str) -> None:
             for stale in ("tailor_resume", "tailor_pdf", "tailor_docx", "tailor_md"):
                 ss.pop(stale, None)  # a failed run must not render a prior résumé
             state = _load_discovery_state(user_id=user_id, today=today)
+            instructions = ss.get("tailor_instructions_input", "")
             try:
                 with st.spinner("Building your tailored résumé…"):
                     built = tailor_structured_resume(
-                        state, jd_text, _contact_from_session(), client=client
+                        state, jd_text, _contact_from_session(), client=client,
+                        _instructions=instructions,
                     )
                     # Render exports into locals first (WeasyPrint PDF is expensive
                     # per rerun) and commit all session keys ATOMICALLY, so a render

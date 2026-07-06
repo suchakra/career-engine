@@ -170,6 +170,7 @@ def tailor_structured_resume(
     contact: Contact,
     *,
     client: GeminiModelClient,
+    _instructions: str = "",
 ) -> StructuredResume:
     """Tailor to a JD and return a real, structured résumé.
 
@@ -206,7 +207,13 @@ def tailor_structured_resume(
         f"JOB DESCRIPTION:\n{jd_text}\n\n"
         f"CANDIDATE ACHIEVEMENTS (catalog):\n{json.dumps(catalog, indent=2)}"
     )
-    raw = client.generate(model_id=model_id_str, system=STRUCTURED_TAILOR_SYSTEM_PROMPT, user=user_prompt)
+    extra = (
+        f"\n\nAdditional instructions from the user (apply to this résumé only):\n"
+        f"{_instructions.strip()}"
+        if _instructions.strip() else ""
+    )
+    effective_system = STRUCTURED_TAILOR_SYSTEM_PROMPT + extra
+    raw = client.generate(model_id=model_id_str, system=effective_system, user=user_prompt)
     parsed = _extract_json_object(raw)
 
     summary = str(parsed.get("tailored_summary", "")).strip()

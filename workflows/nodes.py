@@ -1004,7 +1004,7 @@ def finalize_master_resume_node(state: CareerEngineState, *, _client: ModelClien
     )
 
 
-def tailor_node(state: CareerEngineState, *, _client: ModelClient | None = None) -> CareerEngineState:
+def tailor_node(state: CareerEngineState, *, _client: ModelClient | None = None, _instructions: str = "") -> CareerEngineState:
     """Produce a targeted resume variant from a cleaned job description.
 
     Uses SPEED_FAST capability (Flash baseline).  Reads:
@@ -1033,9 +1033,15 @@ def tailor_node(state: CareerEngineState, *, _client: ModelClient | None = None)
         f"JOB DESCRIPTION (cleaned):\n{jd_text}"
     )
 
+    extra = (
+        f"\n\nAdditional instructions from the user (apply to this résumé only):\n"
+        f"{_instructions.strip()}"
+        if _instructions.strip() else ""
+    )
+    effective_system = TAILOR_SYSTEM_PROMPT + extra
     tailored_text = client.generate(
         model_id=model_id,
-        system=TAILOR_SYSTEM_PROMPT,
+        system=effective_system,
         user=tailor_input,
     )
 
