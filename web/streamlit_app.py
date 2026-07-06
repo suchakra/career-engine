@@ -630,7 +630,6 @@ def _persist_contact_profile(user_id: str) -> None:
 
 def _render_tailor(*, user_id: str, today: str) -> None:
     """Tailor the portfolio to a JD (pasted OR scraped) into a real, ATS-safe résumé."""
-    from cli.app import _install_model_client
     from integration.model_client import GeminiModelClient, ModelAPIError
     from web.resume_builder import tailor_structured_resume
     from web.resume_render import (
@@ -681,7 +680,6 @@ def _render_tailor(*, user_id: str, today: str) -> None:
     )
     if st.button("Tailor my résumé", type="primary"):
         client = GeminiModelClient(api_key=key)
-        _install_model_client(client)
         jd_text = _resolve_jd_text(jd_url.strip(), jd.strip(), client=client)
         if not jd_text:
             st.warning("Paste a job description or a readable job-posting URL to tailor against.")

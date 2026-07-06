@@ -634,7 +634,7 @@ security hygiene that don't block the core product.
 | 8A | Redeploy to dev | Ops (no code) | none | ✅ Ready |
 | 8B | Dashboard "Find jobs" CTA | Tiny (1 file) | 8A ideally first | ✅ Ready |
 | 8C | Wire sweep endpoint (Cloud Run Job) | Medium | 8A (deploy validates) | ✅ Ready |
-| 8D | Multi-user model-client isolation | Significant (design-first) | none (but read the design section) | ◐ Draft — needs user sign-off on the design before implementation |
+| 8D | Multi-user model-client isolation | Significant | none | ✅ Ready — DI via closure injection (approved 2026-07-06) |
 | 8E | Deployer-SA least-privilege | Terraform-only | none | ◐ Draft (see SECURITY.md for the role list) |
 | 8F | HITL TTL/override dashboard | Medium-new feature | none | ⬜ To groom |
 | 8G | Custom domain via Cloudflare + Cloud Run | Terraform (2 new modules) | 8A (deploy must be live) | ✅ Ready |
@@ -771,87 +771,133 @@ DoD:
 
 ---
 
-### ⬜ 8D — Multi-user model-client isolation (design-first)
+### ✅ 8D — Multi-user model-client isolation (DI via closure injection)
 
 > Read first: `workflows/nodes.py` (the `_client_factory` global, `set_model_client_factory`,
-> `_get_model_client`), `web/async_runner.py` (the `run_async` loop), `web/grill_ui.py`
-> (how the web grill injects a BYOK key today).
+> `_get_model_client`, and the 6 node functions that call it), `workflows/discovery_graph.py`
+> (shim functions + `build_discovery_workflow` + `build_runner`), `web/grill_ui.py`
+> (`_install_model_client` call site + how the session/runner is built), `web/streamlit_app.py`
+> (tailor path `_install_model_client` call), `cli/app.py` (`_install_model_client` call sites).
 
 **The problem:** `_client_factory` in `workflows/nodes.py` is a module-level `Callable[[], ModelClient]`
 that `set_model_client_factory()` mutates globally. Any caller that sets it races with every other
 concurrent request. Cloud Run's default concurrency (multiple simultaneous requests per instance) means
 user A's BYOK key can be used to generate user B's résumé content — a privacy and billing violation.
 
-**Proposed design (for user review before coding):**
+**Approved design (2026-07-06): Explicit DI via closure injection at `build_discovery_workflow()`**
+
+The industry-standard explicit DI approach was chosen over ContextVar. Correctness is enforced
+structurally rather than relying on async context propagation — impossible to regress silently.
 
 ```
-ContextVar approach:
+Design:
 
-1. Add to workflows/nodes.py:
-     _factory_ctx: contextvars.ContextVar[Callable[[], ModelClient] | None] = \
-         contextvars.ContextVar("_model_client_factory", default=None)
+1. workflows/nodes.py: Add `_client: ModelClient | None = None` keyword-only parameter to each of
+   the 6 node functions that call `_get_model_client()`. Inside each node:
+     client = _client if _client is not None else _get_model_client()
+   The module-level `_get_model_client()` and `set_model_client_factory()` remain unchanged
+   (used by CLI/tests where there is no concurrency — backward compat).
 
-2. set_model_client_factory_for_context(factory) sets _factory_ctx.set(factory).
-   The existing set_model_client_factory(factory) becomes a module-level-only setter
-   (used by tests + CLI where there is no concurrency) — kept for backward compat.
+2. workflows/discovery_graph.py: Add `model_factory: Callable[[], ModelClient] | None = None`
+   parameter to `build_discovery_workflow()`. Make ALL shim functions closures inside
+   `build_discovery_workflow()` (move them from module level into the function body) — each closure
+   captures `model_factory` and passes `_client=model_factory() if model_factory else None` to the
+   wrapped node call. Only shims for nodes that use _get_model_client need to pass _client; others
+   are unchanged in behaviour but also become closures for consistency.
+   Thread `model_factory` through `build_runner(model_factory=None)` → `build_discovery_workflow()`.
 
-3. _get_model_client() checks _factory_ctx.get() first; falls back to _client_factory().
+3. Call sites — replace _install_model_client with factory-at-build:
+   - web/grill_ui.py: find where the runner is constructed (likely inside _setup_grill_session or
+     similar); pass model_factory=lambda: ss["grill_client"] to build_runner(). Remove the
+     _install_model_client(ss["grill_client"]) per-render call.
+   - web/streamlit_app.py (tailor path ~line 684): pass model_factory to build_runner() instead of
+     calling _install_model_client(client) after the fact.
+   - cli/app.py: pass model_factory=lambda: client to build_runner() instead of calling
+     _install_model_client(). Remove the _install_model_client helper function if no callers remain.
 
-4. In web/async_runner.run_async (or wherever the coroutine is submitted to the
-   background loop): capture ctx = contextvars.copy_context() at submission time, then
-   run the coroutine inside ctx.run(...). This propagates the caller's ContextVar state
-   into the background task.
-   Concretely: replace loop.run_until_complete(coro) with a Future + ctx.run approach,
-   or use asyncio.Task with copy_context() explicitly.
-
-5. web/grill_ui.py calls set_model_client_factory_for_context(byok_factory) before
-   calling run_async.
-
-No contract change. The test helpers that call set_model_client_factory remain unchanged
-(they run serially with no concurrency).
+4. No contract change. Node pure function signatures gain one keyword-only parameter with a default
+   of None — fully backward compatible with all existing call sites and tests.
 ```
-
-⚠️ **This ticket requires the user to review and sign off on the design above before any code is
-written.** The risk is subtle: if `run_async`'s context propagation is wrong, the BYOK key silently
-fails to propagate and every grill falls back to the default (Free) client — a regression harder to
-notice than a crash. Do NOT proceed with implementation until the design is confirmed.
 
 ```text
 You are WS 8D for CareerEngine. Fix the process-global model-client factory so concurrent web users
 cannot bleed BYOK keys across requests.
 
-⚠️ READ THE DESIGN NOTE in GROOMING.md §8D IN FULL before writing any code. Implement exactly the
-ContextVar approach described there — do not improvise.
+READ THE DESIGN NOTE in GROOMING.md §8D IN FULL before writing any code. Implement exactly the
+explicit DI via closure injection approach described there — do NOT use ContextVar or any other
+ambient state mechanism.
 
-Stay in: workflows/nodes.py (add ContextVar, add set_model_client_factory_for_context, update
-_get_model_client), web/async_runner.py (propagate context into background task), web/grill_ui.py
-(call the new context setter), tests/test_nodes.py (new isolation tests).
+Files to read BEFORE writing any code (in this order):
+1. workflows/nodes.py — identify the 6 node functions that call _get_model_client() (grep for
+   "_get_model_client()" to find them); read their current signatures.
+2. workflows/discovery_graph.py — read ALL shim functions and build_discovery_workflow() in full;
+   understand how shims call node functions; read build_runner().
+3. web/grill_ui.py — find _install_model_client call site(s) and how the runner/session is built.
+4. web/streamlit_app.py — find the tailor path _install_model_client call (~line 684) and context.
+5. cli/app.py — find both _install_model_client call sites (~lines 257 and 969) and the helper def.
 
-Scope (strict — do NOT touch grill nodes, graph edges, or any other web/* files):
-- Add _factory_ctx ContextVar to workflows/nodes.py.
-- Add set_model_client_factory_for_context(factory) (context-local override).
-- _get_model_client(): check _factory_ctx.get() first, fall back to _client_factory().
-- web/async_runner.run_async: capture ctx = contextvars.copy_context() before submitting;
-  ensure the coroutine runs within that captured context.
-- web/grill_ui.py: replace any set_model_client_factory call with set_model_client_factory_for_context.
-- Keep the module-level set_model_client_factory for CLI/test backward compat.
+PAUSE CONDITIONS — stop and report back without proceeding if:
+- Any node function has a non-`(state)` positional signature that would require more than adding
+  a `_client=None` keyword arg (e.g. if ADK already passes additional positional args).
+- The shim functions are NOT simple thin wrappers over the pure node functions (e.g. if they
+  already do multi-step logic that would be broken by making them closures).
+- _install_model_client is called in more files than the three listed above.
 
-Acceptance criteria (named tests required):
-- test_context_factory_isolation: two concurrent tasks each setting different factories via
-  set_model_client_factory_for_context get different clients (no bleed).
-- test_context_factory_fallback: a context with no override falls back to the module-level factory.
-- test_run_async_propagates_context: a factory set before run_async() is visible inside the
-  submitted coroutine.
-- Existing tests that use set_model_client_factory() remain green (no regression).
+Scope:
+  workflows/nodes.py:
+  - Add `*, _client: ModelClient | None = None` to each of the 6 node functions that call
+    _get_model_client(). Replace `client = _get_model_client()` with
+    `client = _client if _client is not None else _get_model_client()`.
+  - Keep _get_model_client(), set_model_client_factory(), and _client_factory unchanged.
+
+  workflows/discovery_graph.py:
+  - Add `model_factory: Callable[[], ModelClient] | None = None` to build_discovery_workflow().
+  - Move shim functions from module level into build_discovery_workflow() as closures.
+    Each shim that wraps a node using _client passes `_client=model_factory() if model_factory else None`.
+  - Add `model_factory: Callable[[], ModelClient] | None = None` to build_runner(); thread to
+    build_discovery_workflow(model_factory=model_factory).
+
+  web/grill_ui.py:
+  - Find where build_runner() is called for the grill session. Pass
+    model_factory=lambda: ss.get("grill_client") (where ss = st.session_state) to build_runner().
+  - Remove the per-render _install_model_client(ss["grill_client"]) call.
+
+  web/streamlit_app.py:
+  - Find the tailor path that calls _install_model_client(client). Change it to pass
+    model_factory=lambda: client to build_runner() instead.
+
+  cli/app.py:
+  - In both call sites, replace _install_model_client(model_client) with passing
+    model_factory=lambda: model_client to build_runner().
+  - If _install_model_client has no remaining callers, remove it.
+
+  tests/test_nodes.py (or tests/test_model_client_di.py — new file if test_nodes.py is large):
+  - Add named tests (see acceptance criteria).
+
+Acceptance criteria (named tests required — exact names):
+- test_di_node_uses_explicit_client: call a node function that uses the client (e.g. ingest_node or
+  grill_turn_node equivalent) with an explicit _client=FakeClient(); assert the fake client was called,
+  not _get_model_client(). Use the existing set_model_client_factory() approach to put a sentinel
+  default in, then pass a different _client, and verify the explicit one wins.
+- test_di_node_fallback_to_module_factory: call the same node function WITHOUT _client; assert that
+  the module-level factory is used (set via set_model_client_factory with a sentinel).
+- test_di_two_workflows_isolated: build two workflows via build_discovery_workflow() with different
+  model_factory callables (factory_a, factory_b); invoke the ingest or grill shim from each workflow
+  (by running a full turn or by calling the shim directly); assert factory_a's client is used in
+  workflow A's turn and factory_b's client in workflow B's turn — no bleed.
+- test_build_runner_threads_factory: call build_runner(model_factory=fake_factory); invoke a node
+  turn via the runner; assert fake_factory was called to create the client.
+- Existing tests that use set_model_client_factory() must remain green (no regression).
 
 DoD:
 - make check green.
 - No contract change.
-- No changes to graph nodes, routing logic, or existing API surfaces beyond the new context setter.
+- No changes to graph topology, routing logic, ADK edges, or session/persistence layer.
+- _install_model_client removed from cli/app.py if no callers remain (keep if still used).
 - Gemini 2.5 Pro review PASS (use the review prompt template in GROOMING.md §Phase 8 header;
   address any CHANGES REQUESTED before pushing the branch).
-- Report READY FOR REVIEW with criterion→test mapping and a written explanation of how copy_context
-  propagation was verified.
+- Report READY FOR REVIEW with criterion→test mapping and a table showing: for each of the 3 original
+  _install_model_client call sites, what replaced it.
 ```
 
 ---
