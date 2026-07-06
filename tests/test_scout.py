@@ -20,6 +20,7 @@ from discovery.scout import (
     _jobs_from_raw,
     _search_args,
     _structured_payload,
+    _unwrap_tool_result,
 )
 from schema import JobMetadata, JobOpportunity, ScoutDirective, make_job_id
 
@@ -132,6 +133,27 @@ class TestTransportHelpers:
         from types import SimpleNamespace
 
         assert _structured_payload(SimpleNamespace(structuredContent=None)) is None
+
+    async def test_structured_payload_short_tuple_guarded(self) -> None:
+        # A variant/short tuple must not IndexError.
+        assert _structured_payload(("only-one-element",)) is None
+
+    async def test_unwrap_raises_on_tool_error(self) -> None:
+        # stdio returns isError=True instead of raising — we must raise, not swallow.
+        from types import SimpleNamespace
+
+        with pytest.raises(RuntimeError, match="fetch_jd"):
+            _unwrap_tool_result(SimpleNamespace(isError=True, content="blocked url"), "fetch_jd")
+
+    async def test_unwrap_extracts_on_success(self) -> None:
+        from types import SimpleNamespace
+
+        result = SimpleNamespace(isError=False, structuredContent={"result": [1, 2]})
+        assert _unwrap_tool_result(result, "search_jobs") == [1, 2]
+
+    async def test_unwrap_in_process_tuple_has_no_iserror(self) -> None:
+        # The in-process (content, {"result": …}) tuple has no isError → extracts fine.
+        assert _unwrap_tool_result((["content"], {"result": "jd"}), "fetch_jd") == "jd"
 
 
 @pytest.mark.skipif(

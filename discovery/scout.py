@@ -35,6 +35,9 @@ import sys
 from collections.abc import Sequence
 from typing import Any, Protocol, runtime_checkable
 
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+
 from schema import JobOpportunity, ScoutDirective
 
 
@@ -61,10 +64,27 @@ def _structured_payload(result: Any) -> Any:
     Handles both transports: FastMCP in-process returns ``(content, {"result": …})``;
     the stdio ``ClientSession`` returns a ``CallToolResult`` with ``.structuredContent``.
     """
-    structured = result[1] if isinstance(result, tuple) else getattr(result, "structuredContent", None)
+    if isinstance(result, tuple):
+        structured = result[1] if len(result) > 1 else None  # guard variant tuple shapes
+    else:
+        structured = getattr(result, "structuredContent", None)
     if isinstance(structured, dict) and "result" in structured:
         return structured["result"]
     return structured
+
+
+def _unwrap_tool_result(result: Any, tool_name: str) -> Any:
+    """Raise on a tool error, then extract the structured payload.
+
+    The stdio ``ClientSession.call_tool`` returns a ``CallToolResult`` with
+    ``isError=True`` when the server-side tool raised (it does NOT raise on the
+    client), whereas in-process ``FastMCP.call_tool`` raises directly. Checking
+    ``isError`` here makes both transports fail the same way — instead of the stdio
+    path silently returning ``[]`` / the string ``"None"`` as if the call succeeded.
+    """
+    if getattr(result, "isError", False):
+        raise RuntimeError(f"MCP tool {tool_name!r} failed: {getattr(result, 'content', '')}")
+    return _structured_payload(result)
 
 
 @runtime_checkable
@@ -99,7 +119,7 @@ class InProcessMcpClient:
 
     async def _call(self, name: str, arguments: dict[str, Any]) -> Any:
         """Invoke an MCP tool and return its structured ``result`` payload."""
-        return _structured_payload(await self._app.call_tool(name, arguments))
+        return _unwrap_tool_result(await self._app.call_tool(name, arguments), name)
 
     async def search_jobs(self, directive: ScoutDirective) -> list[JobOpportunity]:
         """Call the ``search_jobs`` MCP tool and revalidate into the contract."""
@@ -126,15 +146,16 @@ class StdioMcpClient:
         self._args = list(args) if args is not None else ["-m", "discovery.mcp_server"]
 
     async def _call(self, name: str, arguments: dict[str, Any]) -> Any:
-        """Spawn the server, initialise a stdio session, call the tool, and extract."""
-        from mcp import ClientSession, StdioServerParameters
-        from mcp.client.stdio import stdio_client
+        """Spawn the server, initialise a stdio session, call the tool, and extract.
 
+        Raises ``RuntimeError`` when the tool reports an error (``CallToolResult
+        .isError``) so a failed fetch surfaces loudly instead of becoming empty/"None".
+        """
         params = StdioServerParameters(command=self._command, args=self._args)
         async with stdio_client(params) as (read, write), ClientSession(read, write) as session:
             await session.initialize()
             result = await session.call_tool(name, arguments)
-        return _structured_payload(result)
+        return _unwrap_tool_result(result, name)
 
     async def search_jobs(self, directive: ScoutDirective) -> list[JobOpportunity]:
         """Call the ``search_jobs`` tool over stdio and revalidate into the contract."""
