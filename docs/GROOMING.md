@@ -1201,181 +1201,801 @@ it is not the right tool for a multi-user SaaS:
 
 ---
 
-### Phase 9 product backlog (captured 2026-07-06)
+### Phase 9 product backlog
 
-Items below are ◐ Draft — not yet launchable build specs. Each entry notes whether it is
-**Streamlit-compatible** (shippable as an incremental PR in the current stack) or requires the
-**Next.js frontend** (waits on the architecture decision). All are ⬜ not started.
+| ID | Summary | Size | Compat | Priority | Grooming |
+|----|---------|------|--------|----------|----------|
+| 9J | Grill checkpoint: copy reminding user they can leave and come back | XS | Streamlit | High | ✅ Ready |
+| 9I | Tailor: "specific instructions" textarea per application | S | Streamlit | High | ✅ Ready |
+| 9B | Portfolio: make "Add experience" CTA prominent at top of entry list | S | Streamlit | High | ✅ Ready |
+| 9C | Profile: dedicated editable section for name/email/contact | S | Streamlit | High | ✅ Ready |
+| 9K | Portfolio: per-experience progress indicator (stories recorded) | S | Streamlit | Medium | ✅ Ready |
+| 9G | Jobs: "Track application" auto-harvests title + company from JD | S | Streamlit | Medium | ✅ Ready |
+| 9E | Jobs: sort for-review list by relevance; scrollable container | S | Streamlit | Medium | ✅ Ready |
+| 9D | Resume: better template — Inter/system-ui, multi-section layout | M | Streamlit | High | ✅ Ready |
+| 9A | Portfolio: delete/edit recorded bullets + STAR stories | M | Streamlit | High | ✅ Ready |
+| 9F | Jobs: tighten discovery parameters + smarter preference defaults | M | Streamlit | Medium | ✅ Ready |
+| 9H | Resume download: inline chat for résumé-specific edits | L | Frontend | Medium | ◐ Draft (frontend decision first) |
+| 9L | (Stretch) Monthly achievements email reminder | L | Streamlit | Low | ◐ Draft (email provider decision first) |
+| 9M | (Stretch) Visual drag-and-drop résumé section editor | XL | Frontend | Low | ◐ Draft (Next.js decision first) |
 
-| ID | Summary | Size | Compat | Priority |
-|----|---------|------|--------|----------|
-| 9A | Portfolio: delete or edit recorded bullets/STAR stories within an existing entry | M | Streamlit | High |
-| 9B | Portfolio: make "Add experience" CTA prominent + improve the manual-entry form | S | Streamlit | High |
-| 9C | Profile: dedicated editable section for name/email/contact (UserProfile already persisted) | S | Streamlit | High |
-| 9D | Resume: better template — Inter font, proper experience/education layout (not just summary+skills) | M | Streamlit | High |
-| 9E | Jobs: sort rejected/for-review list by decreasing match score; put in a scrollable container | S | Streamlit | Medium |
-| 9F | Jobs: tighten discovery agent initial parameters — current defaults surface too many unrelated results | M | Streamlit | Medium |
-| 9G | Jobs: "Track application" auto-harvests job title + company from JD; pre-fills form (editable) | S | Streamlit | Medium |
-| 9H | Resume download: inline chat window for résumé-specific edits (scoped to this résumé only) | L | Frontend | Medium |
-| 9I | Tailor: "specific instructions" textarea alongside JD (per-application customisation, not persisted) | S | Streamlit | Medium |
-| 9J | Grill checkpoint: copy reminding user they can leave and come back later (async-friendly UX) | XS | Streamlit | High |
-| 9K | Portfolio: per-experience visual progress indicator (% of stories recorded) | S | Streamlit | Medium |
-| 9L | (Stretch) Monthly "what have you done this month" email reminder + in-app prompt | L | Streamlit | Low |
-| 9M | (Stretch) Visual drag-and-drop grid editor for résumé section ordering | XL | Frontend | Low |
+### Launch order
 
----
+Run 9J + 9I + 9B in parallel (zero dependencies, tiny/small). Then 9C + 9K + 9G in parallel.
+Then 9E + 9D + 9F + 9A — 9A may depend on a `story_id` contract decision; see PAUSE condition.
 
-#### 9A — Delete / edit recorded portfolio details
-
-**What:** Portfolio view is currently read-only. Each recorded bullet or STAR story needs a delete
-action; bullets also need edit-in-place. The `portfolio_store` seam needs two new methods:
-`delete_story(session_id, story_id)` and `update_entry_bullet(session_id, entry_id, idx, text)`.
-The `web/portfolio.py` view-model gains a `deletable: bool = True` flag per item.
-
-**Grooming needed:** Firestore update path (list splice vs. tombstone); confirm-before-delete UX.
-
----
-
-#### 9B — Add experience: prominent CTA + better form
-
-**What:** `add_manual_entry` (4D) exists but is buried. Move the "Add experience" CTA to the top
-of the Portfolio experience list. In the Next.js UI this becomes a proper modal form. In Streamlit
-it is a layout reorder + possible expander-to-the-top change.
-
-**Grooming needed:** minimal in Streamlit (reorder); full form spec for Next.js.
+PR workflow for every ticket: same as Phase 8:
+```
+new branch → subagent builds → make check green →
+Gemini 2.5 Pro review (PASS or CHANGES REQUESTED → fix → re-review) →
+push → gh pr create → request Copilot review →
+wait with skills/wait-for-pr-review/scripts/wait_for_review.sh --pr <N> →
+address comments → squash-merge → update PROGRESS.md + HANDOFF.md
+```
 
 ---
 
-#### 9C — Editable profile section
+### ✅ 9J — Grill checkpoint: "you can come back later"
 
-**What:** `UserProfile` (contract v2.6.0, `web/profile_store.py`) is harvested from the resume
-upload and pre-fills the Tailor contact header. What is missing is a dedicated visible / editable
-**Profile** section — name, email, phone, LinkedIn URL — where users can review and correct the
-values without having to run a tailor first.
+> Read first: `web/grill_ui.py` — the block that renders when `ss.get("grill_checkpoint")` is
+> truthy (line ~667) and `_confirm_checkpoint` (line ~469).
 
-**Grooming needed:** nav placement (Portfolio sub-section vs. separate Settings page vs. sidebar
-card); which `UserProfile` fields to expose; validation (email format, URL).
+**What:** Pure copy change. When the grill pauses at a checkpoint, show a short informational
+message that the user can leave and return — their progress is saved. No logic change.
 
----
+```text
+You are WS 9J for CareerEngine. Add a short info message at the grill checkpoint
+telling the user they can leave and come back later.
 
-#### 9D — Better résumé template
+Files to read BEFORE writing any code:
+1. web/grill_ui.py — find the block that renders when ss.get("grill_checkpoint") is truthy
+   (grep for grill_checkpoint). Read the full render block and _confirm_checkpoint(). Note
+   exactly what is rendered above and below the confirm button.
 
-**What:** `templates/classic_resume.html` (WeasyPrint) currently renders a summary block, a thin
-skills section, and education only. Minimum bar: Inter (or embedded system-ui), proper experience
-section (employer / title / dates header + indented bullets), skills as a compact two-column grid,
-education below experience, ATS-friendly margins and line-height.
+PAUSE CONDITIONS:
+- If the checkpoint is rendered in a different file than web/grill_ui.py.
+- If there is already any copy about returning later or saving progress.
 
-**Grooming needed:** font strategy (base64-embedded Inter subset vs. system-ui stack — Google Fonts
-CDN does not work in Cloud Run's network context without egress); whether to replace the existing
-`classic_resume.html` or add a second template option selectable at render time.
+Scope:
+  web/grill_ui.py:
+  - In the block guarded by `if ss.get("grill_checkpoint"):`, add this ABOVE the checkpoint
+    summary and confirm button:
+      st.info(
+          "💾 Your progress is automatically saved. Feel free to close this tab and come "
+          "back later — your stories will be right where you left them. Visit **Portfolio** "
+          "to review what has been recorded so far."
+      )
+  - No other changes. Do not modify _confirm_checkpoint or any logic path.
 
----
+  tests/ (one new test):
+  - Find how grill_ui is currently tested (grep for test_grill or look at test_nodes.py /
+    tests/test_integration.py for the fake-st pattern used for UI tests).
+  - test_checkpoint_leave_copy_shown: when grill_checkpoint is set to a non-empty string in
+    session_state, the rendered output includes the text "come back" (or the exact copy above).
+    Use the same fake-st injection pattern as existing grill UI tests.
 
-#### 9E — Jobs: sort by match score, scrollable
+Acceptance criteria (named tests):
+- test_checkpoint_leave_copy_shown: info message is present when checkpoint is active.
+- Existing grill_ui / checkpoint tests remain green.
 
-**What:** Sort the "For review" and dismissed job lists descending by match score so the most
-relevant candidates appear first. Wrap the list in a fixed-height scrollable container.
-
-**Grooming needed:** confirm `JobOpportunity` carries a `match_score` (or equivalent) that
-survives the `LedgerStore` round-trip; if not, add it (additive, minor bump).
-
----
-
-#### 9F — Tighten discovery agent parameters
-
-**What:** The Scout currently receives broad default preferences that return too many unrelated
-results. Fix on two levels: (a) sharpen the default `SessionPreferences.target_roles` example
-copy so first-time users start with a focused prompt; (b) add a minimum match-score threshold to
-the `PrimaryAgent` hard-reject gate so clearly-mismatched jobs never reach the UI.
-
-**Grooming needed:** threshold value; whether (b) is a config knob in `SessionPreferences` or a
-hardcoded floor; prompt copy for the preferences form placeholder text.
-
----
-
-#### 9G — "Track application": harvest title + company from JD
-
-**What:** In the "Track this application" form, run a lightweight Flash call on the pasted JD to
-extract job title and company name; pre-fill the form fields (user can edit before saving).
-
-**Grooming needed:** extraction approach (dedicated `/extract-jd-metadata` Flash call vs. regex
-for structured JDs); cost gate (single Flash call per submission is acceptable); fields to extract
-(title, company, optionally location + employment type).
+DoD:
+- make check green. No contract change. No logic change. Only copy + one test.
+- Gemini 2.5 Pro review PASS (use the review template in GROOMING.md §Phase 8 header).
+- Report READY FOR REVIEW with criterion→test mapping.
+```
 
 ---
 
-#### 9H — Resume download: inline chat for résumé-specific edits
+### ✅ 9I — Tailor: per-application specific instructions
 
-**What:** Below the rendered PDF preview on the download page, add a chat input. Messages are
-scoped to this résumé only (not the global grill). The user can ask "make the summary more
-concise" or "remove the Python bullet"; the `StructuredResume` is patched in-memory and the
-preview re-renders. Changes are not persisted — download the edited version, then discard.
+> Read first: `web/streamlit_app.py` (tailor path, JD textarea around line 678),
+> `workflows/nodes.py::tailor_node` (line ~1007), `workflows/prompts.py::TAILOR_SYSTEM_PROMPT`,
+> `workflows/discovery_graph.py::build_discovery_workflow` (the `_ci_tailor_shim` closure from 8D).
 
-**Grooming needed:** in-memory résumé edit session model; LLM patch strategy (re-run tailor node
-with diff instructions vs. a targeted field-level edit prompt); in Streamlit this is feasible but
-awkward; a proper frontend makes this much cleaner.
+**What:** Add an optional "Specific instructions" textarea below the JD input in the Tailor
+view. Thread the value into `tailor_node` via the same keyword-only DI closure pattern as 8D —
+no contract change, no `CareerEngineState` fields added.
+
+```text
+You are WS 9I for CareerEngine. Add a "specific instructions" textarea to the Tailor
+view and thread it into tailor_node via keyword-only DI (same pattern as 8D _client).
+
+Files to read BEFORE writing any code (in this order):
+1. web/streamlit_app.py — find the tailor path. Locate the JD textarea (key="tailor_jd_text_input",
+   line ~678) and all places build_runner() is called for the tailor flow. Note how tailor_jd_text
+   is read from session_state before the runner call.
+2. workflows/nodes.py::tailor_node (line ~1007) — read full signature and body. Note how
+   TAILOR_SYSTEM_PROMPT is used in the client.generate() call.
+3. workflows/prompts.py — read TAILOR_SYSTEM_PROMPT in full.
+4. workflows/discovery_graph.py — find build_discovery_workflow() and _ci_tailor_shim. Read
+   how the 8D _client closure capture works — you will follow the same pattern.
+
+PAUSE CONDITIONS:
+- If tailor_node is called via a different path than build_runner → build_discovery_workflow
+  → _ci_tailor_shim. Surface the discrepancy.
+- If threading _instructions into the closure would require adding a field to CareerEngineState.
+  STOP: do NOT add state fields. Report and ask.
+- If build_runner is called for the tailor path in more files than web/streamlit_app.py.
+
+Design (follow exactly — do not deviate without asking):
+  1. workflows/nodes.py::tailor_node:
+     - Add `*, _instructions: str = ""` as a keyword-only parameter (after existing _client).
+     - Build effective_system:
+         extra = (
+             f"\n\nAdditional instructions from the user (apply to this résumé only):\n"
+             f"{_instructions.strip()}"
+             if _instructions.strip() else ""
+         )
+         effective_system = TAILOR_SYSTEM_PROMPT + extra
+     - Pass effective_system (not TAILOR_SYSTEM_PROMPT) to client.generate().
+
+  2. workflows/discovery_graph.py::build_discovery_workflow():
+     - Add `tailor_instructions: str = ""` parameter.
+     - Update _ci_tailor_shim closure to pass _instructions=tailor_instructions to tailor_node.
+
+  3. workflows/discovery_graph.py::build_runner():
+     - Add `tailor_instructions: str = ""` parameter.
+     - Thread to build_discovery_workflow(tailor_instructions=tailor_instructions).
+
+  4. web/streamlit_app.py (tailor path):
+     - Add below the JD textarea:
+         st.text_area(
+             "Specific instructions (optional)",
+             key="tailor_instructions_input",
+             max_chars=500,
+             placeholder=(
+                 "e.g. Emphasise cloud infrastructure experience. "
+                 "Omit side projects. Use a formal tone."
+             ),
+             help="These instructions apply to this résumé only and are not saved.",
+         )
+     - Read instructions = ss.get("tailor_instructions_input", "").
+     - Pass tailor_instructions=instructions to build_runner().
+
+Acceptance criteria (named tests — exact names):
+- test_tailor_node_appends_instructions: call tailor_node(state, _instructions="use formal tone");
+  capture the system arg passed to client.generate() and assert it contains "use formal tone".
+- test_tailor_node_empty_instructions_unchanged: call tailor_node(state, _instructions="");
+  assert client.generate() receives exactly TAILOR_SYSTEM_PROMPT (no trailing newline/text).
+- test_build_runner_threads_tailor_instructions: build_runner(tailor_instructions="be concise");
+  run a tailor turn; assert the captured system prompt contains "be concise".
+- Existing tailor tests remain green.
+
+DoD:
+- make check green. No contract change (no CareerEngineState fields added).
+- Gemini 2.5 Pro review PASS.
+- Report READY FOR REVIEW with criterion→test mapping.
+```
 
 ---
 
-#### 9I — Tailor: per-application specific instructions
+### ✅ 9B — Portfolio: prominent "Add experience" CTA
 
-**What:** Add a second optional textarea below the JD input in the Tailor view: "Specific
-instructions for this application (e.g. emphasise cloud experience, use a formal tone, omit
-side projects)." The text is appended to the tailor node's prompt for this run only — not
-persisted. Max ~500 chars to limit token cost.
+> Read first: `web/portfolio.py` (full file), `web/streamlit_app.py` (portfolio route ~line 145),
+> `web/portfolio_store.py::add_manual_entry` (signature only).
 
-**Grooming needed:** injection point in `workflows/nodes.py::tailor_node`; whether instructions
-also appear on the download/preview page for reference.
+**What:** The "Add experience" form from 4D is currently placed below the entry list. Move it to
+the top so it is the first thing a user sees on an empty portfolio. No persistence changes.
 
----
+```text
+You are WS 9B for CareerEngine. Move the "Add experience" form to the top of the Portfolio
+view (before the experience list) so it is immediately discoverable.
 
-#### 9J — Checkpoint: "you can come back later" copy
+Files to read BEFORE writing any code:
+1. web/portfolio.py — read in full. Find exactly where the "Add experience" form/expander
+   currently appears in the renderer. Note the EntryCard dataclass and build_portfolio_view.
+2. web/streamlit_app.py — find the portfolio route (view_name == "portfolio"). Confirm how
+   portfolio.py's renderer is invoked.
 
-**What:** At the HITL checkpoint pause (`user_checkpoint_node`), add a short dismissable info
-message: "Your progress is saved — feel free to close the tab and return later. Your stories will
-be right here." No logic change; copy and placement only.
+PAUSE CONDITIONS:
+- If there is no "Add experience" form in web/portfolio.py (4D may have placed it elsewhere).
+  Surface the location and ask before moving anything.
+- If the form is already at the top of the rendered output.
 
-**Grooming needed:** exact copy; dismissable vs. static; above or below the response input.
+Scope:
+  web/portfolio.py:
+  - In the renderer, move the "Add experience" expander/form so it appears BEFORE the first
+    entry card is rendered, not after. If it is inside an expander, keep the expander closed
+    (expanded=False) by default.
+  - Add a visible label above the expander (outside it):
+      st.caption("Add a role, project, or experience to your portfolio.")
+    so the user sees the affordance without having to expand it.
+  - Do not change the form fields, field validation, or the add_manual_entry call.
+  - Do not change the entry list rendering.
 
----
+  tests/:
+  - test_add_experience_cta_precedes_entry_list: given a PortfolioView with at least one
+    entry, assert the "Add" label string appears before the first entry's company/title in
+    the sequence of render calls captured by the fake-st helper.
 
-#### 9K — Portfolio: per-experience progress indicator
+Acceptance criteria (named tests):
+- test_add_experience_cta_precedes_entry_list: CTA rendered before entry list.
+- Existing portfolio render tests remain green.
 
-**What:** Each entry row in the Portfolio list shows a small progress indicator: fraction of
-stories recorded out of an expected target (e.g. 2/5, or a percentage fill bar). Uses existing
-`StarStory` count per entry and `Entry.status`.
-
-**Grooming needed:** definition of "complete" for an entry (a minimum story count? `GRILLED`
-status? `coverage_confirmed`?); visual style (progress bar vs. coloured fraction badge).
-
----
-
-#### 9L — (Stretch) Monthly achievements reminder
-
-**What:** Cloud Scheduler fires once a month; a sweep job creates a `pending_action` of type
-`monthly_checkin` for each active user; the Dashboard banner renders it as "What have you
-achieved this month? Log it in your portfolio." Optionally also sends an email (SendGrid or
-similar, opt-in only).
-
-**Grooming needed:** email provider and opt-in mechanism; privacy/GDPR notice; whether the
-in-app nudge alone (no email) is the v1 scope.
-
----
-
-#### 9M — (Stretch) Visual résumé section editor
-
-**What:** Drag-and-drop grid letting users reorder résumé sections (Skills before Education,
-a specific role to the top). Operates on the `StructuredResume` section list before the
-WeasyPrint render. Section ordering stored as a user preference (additive field on
-`UserWorkspace`, minor bump).
-
-**Grooming needed:** only groom after the Next.js frontend architecture decision is made; React
-DnD or similar required; no Streamlit equivalent is practical.
+DoD:
+- make check green. No contract change. No persistence change.
+- Gemini 2.5 Pro review PASS.
+- Report READY FOR REVIEW with criterion→test mapping.
+```
 
 ---
 
-**Streamlit-compatible items (9A–9G, 9I–9K) can be groomed and shipped incrementally as
-standalone PRs in the current Streamlit stack.** Write full build specs only when the relevant
-design questions above are answered. Phase 9 frontend rewrite items (9H, 9M) wait on the
-architecture decision (design questions 1–5 above).
+### ✅ 9C — Editable profile section
+
+> Read first: `schema.py::UserProfile` (line ~407: name, email, phone, location, links fields),
+> `web/profile_store.py` (load_profile, save_profile), `web/portfolio.py` (renderer structure),
+> `web/streamlit_app.py` (portfolio route ~line 145, and how load_profile is called ~line 297).
+
+**What:** Add a "Profile" section to the Portfolio view where users can see and edit their saved
+contact info (name, email, phone, location, links). `UserProfile` already exists; this is a UI
+surface only — no schema changes.
+
+```text
+You are WS 9C for CareerEngine. Add an editable Profile section to the Portfolio view
+so users can review and update their contact details without running a Tailor first.
+
+Files to read BEFORE writing any code (in this order):
+1. schema.py::UserProfile (line ~407) — read all fields: name, email, phone, location,
+   links: list[str]. Note it is NOT frozen (mutable) and has a contract_version field.
+2. web/profile_store.py — read load_profile and save_profile in full. Note what store +
+   user_id they need.
+3. web/portfolio.py — read in full. Understand the renderer structure and where the new
+   section should be inserted (top of the page, before the "Add experience" CTA or after).
+4. web/streamlit_app.py — find the portfolio route (~line 145). See how FirestoreWorkspaceStore
+   and user_id are available there. Note that load_profile is already called elsewhere (~line 297).
+
+PAUSE CONDITIONS:
+- If UserProfile fields differ from: name, email, phone, location, links. Surface any diff.
+- If load_profile / save_profile signatures differ from what you expect after reading.
+- If the portfolio route does not have FirestoreWorkspaceStore available without additional
+  imports. Surface and ask.
+
+Scope:
+  web/portfolio.py:
+  - Add dataclass ProfileView(name: str, email: str, phone: str, location: str, links: list[str]).
+  - Add pure function build_profile_view(profile: UserProfile) -> ProfileView.
+  - Add render_profile_section(view: ProfileView, *, on_save: Callable[[UserProfile], None],
+    st: Any) -> None:
+      - st.subheader("Profile")
+      - Two-column layout: name + email in col1/col2, phone + location in col1/col2.
+      - Links: iterate view.links; for each, show the URL text + an "× Remove" button that
+        pops the link and calls on_save immediately. Also show a text_input + "Add link" button
+        to append a new link.
+      - A "Save changes" button that calls on_save(UserProfile(name=..., email=..., ...)).
+      - Keep the section collapsed in an st.expander("Profile", expanded=False) so it does
+        not dominate the page. (Or expanded=True if the view model has no entries — ask the
+        builder to decide.)
+  - Place the Profile expander at the VERY TOP of the portfolio renderer (before the Add
+    experience CTA and the entry list).
+
+  web/streamlit_app.py (portfolio route):
+  - Load profile: profile = load_profile(FirestoreWorkspaceStore(), user_id=user_id)
+    (or reuse if already loaded — check).
+  - Call render_profile_section(build_profile_view(profile), on_save=..., st=st) with
+    on_save=lambda p: save_profile(FirestoreWorkspaceStore(), user_id=user_id, profile=p).
+
+  tests/:
+  - test_build_profile_view_maps_fields: build_profile_view(UserProfile(name="Alice",
+    email="a@b.com", phone="123", location="Remote", links=["https://x.com"])) returns a
+    ProfileView with all matching fields.
+  - test_render_profile_section_calls_on_save: render_profile_section with fake-st; simulate
+    clicking "Save changes"; assert on_save is called with a UserProfile whose name matches the
+    input value.
+  - test_render_profile_section_empty_profile: ProfileView with all empty fields renders
+    without error; no crash on empty links list.
+
+Acceptance criteria (named tests):
+- test_build_profile_view_maps_fields
+- test_render_profile_section_calls_on_save
+- test_render_profile_section_empty_profile
+- Existing profile_store + portfolio tests remain green.
+
+DoD:
+- make check green. No contract change (UserProfile is v2.6.0; no new fields).
+- Gemini 2.5 Pro review PASS.
+- Report READY FOR REVIEW with criterion→test mapping.
+```
+
+---
+
+### ✅ 9K — Portfolio: per-experience progress indicator
+
+> Read first: `web/portfolio.py` (EntryCard dataclass and build_portfolio_view),
+> `schema.py::Entry` (entry_id, status, bullets), `schema.py::StarStory` (entry_id field).
+
+**What:** Show a progress bar per entry in the Portfolio view indicating how many STAR stories
+have been recorded, against a soft target of 3. Read-only; no new persistence.
+
+```text
+You are WS 9K for CareerEngine. Add a per-entry story progress indicator to the
+Portfolio view.
+
+Files to read BEFORE writing any code:
+1. web/portfolio.py — read EntryCard and build_portfolio_view in full. Find how
+   stories_by_entry is built and how story count per entry is derivable.
+2. schema.py::Entry — read entry_id, status, type fields.
+3. schema.py::StarStory — read entry_id (confirms the link to Entry).
+
+PAUSE CONDITIONS:
+- If EntryCard already has a story_count or progress field.
+- If stories_by_entry is not a dict keyed by entry_id in build_portfolio_view.
+
+Design:
+  "Complete" for v1 = 3 STAR stories. progress_fraction = min(story_count / 3, 1.0).
+  Display: after each entry's title/org/dates header line, render:
+    if story_count == 0:
+        st.caption("No stories yet — click 'Grill me about this' to start.")
+    else:
+        st.progress(progress_fraction,
+                    text=f"{story_count} stor{'y' if story_count == 1 else 'ies'} recorded"
+                         + (" ✓" if story_count >= 3 else ""))
+
+Scope:
+  web/portfolio.py:
+  - Add story_count: int = 0 and stories_target: int = 3 to EntryCard.
+  - In build_portfolio_view, populate:
+      story_count=len(stories_by_entry.get(str(entry.entry_id), []))
+    when building each EntryCard.
+  - In the renderer, add the progress display after each entry header as described above.
+
+  tests/:
+  - test_entry_card_story_count_populated: build_portfolio_view with a fixture state where
+    entry A has 2 linked StarStory objects and entry B has 0; assert card for A has
+    story_count=2, card for B has story_count=0.
+  - test_progress_renders_zero_state: EntryCard(story_count=0) → renderer outputs "No stories
+    yet" copy (use fake st).
+  - test_progress_renders_partial: EntryCard(story_count=2, stories_target=3) → renderer
+    calls st.progress with a fraction between 0 and 1 (exclusive).
+  - test_progress_renders_complete: EntryCard(story_count=3, stories_target=3) → st.progress
+    called with fraction=1.0 and text contains "✓".
+
+Acceptance criteria (named tests):
+- test_entry_card_story_count_populated
+- test_progress_renders_zero_state
+- test_progress_renders_partial
+- test_progress_renders_complete
+- Existing portfolio tests remain green.
+
+DoD:
+- make check green. No contract change.
+- Gemini 2.5 Pro review PASS.
+- Report READY FOR REVIEW with criterion→test mapping.
+```
+
+---
+
+### ✅ 9G — "Track application": harvest title + company from JD
+
+> Read first: `web/streamlit_app.py::_render_save_application` (line ~776, read in full),
+> `integration/model_client.py` (ModelClient.generate signature), `schema.py::Application`
+> (company, job_title fields), `models/registry.py` (BULK_CHEAP capability).
+
+**What:** Add a "✨ Extract from JD" button to the "Track application" form. On click, a single
+cheap Flash call parses the pasted JD and pre-fills the company + job title inputs. Fields remain
+fully editable. No cost gate required (single Flash call, < $0.001).
+
+```text
+You are WS 9G for CareerEngine. Add JD metadata extraction to the "Track application"
+form so users don't have to type job title and company manually.
+
+Files to read BEFORE writing any code (in this order):
+1. web/streamlit_app.py::_render_save_application (line ~776) — read in full. Note the
+   form keys: "save_app_company", "save_app_title". Find where the JD text comes from at
+   this call site (look for ss.get("tailor_jd_text") or similar nearby).
+2. integration/model_client.py — read ModelClient.generate(model_id, system, user) signature.
+3. models/registry.py — find how to resolve a model_id for BULK_CHEAP capability.
+4. web/streamlit_app.py — find how model client is resolved for the current user at the
+   tailor/download page (look for _resolve_byok_key or similar client-building code). You
+   need the same pattern to get a client at the _render_save_application call site.
+
+PAUSE CONDITIONS — stop and report before writing any code if:
+- The JD text is NOT available in session_state at the _render_save_application call site
+  (i.e. ss.get("tailor_jd_text") is empty or absent). Surface this: "JD text is not in
+  session_state at the track-application form. Options: (a) pass jd_text as a parameter to
+  _render_save_application; (b) read from a different key. Please clarify."
+- Model client resolution at this call site is not straightforward (requires runner setup).
+  Surface the constraint and ask for the approach.
+- Application.company or .job_title fields do not exist in schema.py.
+
+Design:
+  New pure function (in a new web/jd_utils.py):
+    def extract_jd_metadata(jd_text: str, client: Any, model_id: str) -> tuple[str, str]:
+        """Returns (title, company). Returns ("", "") on any failure."""
+        system = (
+            'Extract the job title and hiring company from the text. '
+            'Return ONLY valid JSON: {"title": "...", "company": "..."}. '
+            'Use empty string for unknown fields.'
+        )
+        try:
+            raw = client.generate(model_id, system, jd_text[:3000])
+            data = json.loads(raw)
+            return str(data.get("title", "")), str(data.get("company", ""))
+        except Exception:
+            return "", ""
+
+  In _render_save_application:
+  - Add a "✨ Extract from job description" button ABOVE the company/title inputs.
+  - On click: resolve client + model_id (BULK_CHEAP); call extract_jd_metadata;
+    if result is non-empty, write to ss["save_app_company"] / ss["save_app_title"] and
+    call st.rerun() to refresh the form with pre-filled values.
+  - If JD text is empty when button is clicked: st.warning("No job description found —
+    paste one in the Tailor tab first.") and do not call the LLM.
+
+  tests/ (for web/jd_utils.py):
+  - test_extract_jd_metadata_returns_title_company: fake client returns
+    '{"title": "SWE", "company": "Acme"}'; assert returns ("SWE", "Acme").
+  - test_extract_jd_metadata_handles_malformed_json: fake client returns "oops";
+    assert returns ("", "") without raising.
+  - test_extract_jd_metadata_truncates_long_jd: jd_text of 4000 chars; assert
+    client.generate() is called with user text of exactly 3000 chars.
+
+Acceptance criteria (named tests):
+- test_extract_jd_metadata_returns_title_company
+- test_extract_jd_metadata_handles_malformed_json
+- test_extract_jd_metadata_truncates_long_jd
+- Existing _render_save_application / application tests remain green.
+
+DoD:
+- make check green. No contract change.
+- Gemini 2.5 Pro review PASS.
+- Report READY FOR REVIEW with criterion→test mapping + note on JD text source resolution.
+```
+
+---
+
+### ✅ 9E — Jobs: sort for-review list by relevance; scrollable container
+
+> Read first: `schema.py::JobOpportunity` (all fields, especially `match_status`, `ai_rationale`),
+> `schema.py::MatchStatus` (enum values), `web/jobs.py` (JobCard, build_jobs_view, render_jobs).
+
+**What:** Sort the "For review" (soft-reject) and accepted job lists by relevance (best first)
+and wrap each in a fixed-height scrollable container. Includes a mandatory PAUSE to surface the
+lack of a numeric score field — the agent must ask before assuming a solution.
+
+```text
+You are WS 9E for CareerEngine. Sort the jobs lists by relevance and add scrollable
+containers to prevent long lists from pushing the page down.
+
+Files to read BEFORE writing any code (in this order):
+1. schema.py::JobOpportunity — read ALL fields. Note match_status (MatchStatus enum) and
+   ai_rationale (str). Check carefully whether there is ANY numeric score or confidence field.
+2. schema.py::MatchStatus — list all enum values.
+3. web/jobs.py — read JobCard dataclass (all fields), build_jobs_view (how for_review and
+   accepted are built), and render_jobs (how the lists are rendered with st.container etc.).
+
+PAUSE CONDITIONS (mandatory — do not proceed past this point without reporting):
+- After reading JobOpportunity: if there is NO numeric score field (only MatchStatus enum),
+  STOP and report exactly:
+    "JobOpportunity has no numeric relevance score — only MatchStatus enum values.
+     The for_review list is all SOFT_REJECT so MatchStatus gives no ordering signal.
+     Options:
+     (a) Sort by len(ai_rationale) descending as a cheap proxy for consideration depth.
+         No contract change. May not reflect actual job quality.
+     (b) Add relevance_score: float | None = None to JobOpportunity — additive, backward-
+         compatible, minor contract bump to v2.9.0. The PrimaryAgent would set it.
+     (c) Keep insertion order (no sort).
+     Please choose before I proceed."
+  Do NOT implement any option without explicit confirmation.
+- If there is already a scroll container or sort in render_jobs.
+
+Assuming user confirms option (a) — sort by rationale length (no contract change):
+  Scope:
+    web/jobs.py::build_jobs_view:
+    - Before building JobCards from soft_reject and accepted lists, sort each by
+      len(job.ai_rationale or "") descending:
+          sorted_review = sorted(result.soft_rejected, key=lambda j: len(j.ai_rationale or ""), reverse=True)
+          sorted_accepted = sorted(result.accepted_jobs, key=lambda j: len(j.ai_rationale or ""), reverse=True)
+      (or the equivalent field names — confirm after reading the source)
+
+    web/jobs.py::render_jobs (or wherever the lists are rendered):
+    - Wrap the for_review card loop:
+          with st.container(height=420):
+              for card in view.for_review:
+                  _render_job_card(card, ...)
+    - Wrap the accepted card loop similarly if len(view.accepted) > 3.
+
+  tests/:
+  - test_build_jobs_view_sorts_for_review_by_rationale: two soft_reject jobs where job_A
+    ai_rationale is longer than job_B; assert job_A card appears first in view.for_review.
+  - test_build_jobs_view_sorts_accepted: same check for accepted list.
+
+Acceptance criteria (named tests):
+- test_build_jobs_view_sorts_for_review_by_rationale
+- test_build_jobs_view_sorts_accepted
+- Existing jobs tests remain green.
+
+DoD:
+- make check green.
+- Contract change only if user confirmed option (b) — in that case bump to v2.9.0 additively
+  and tag; otherwise no contract change.
+- Gemini 2.5 Pro review PASS. Reviewer must confirm the chosen sort option is documented.
+- Report READY FOR REVIEW with chosen option + criterion→test mapping.
+```
+
+---
+
+### ✅ 9D — Better résumé template
+
+> Read first: `templates/classic_resume.html` (read in FULL — all 237 lines),
+> `schema.py::StructuredResume` (all fields), `web/resume_render.py` (full file),
+> `tests/test_resume_render.py`.
+
+**What:** Replace the thin `classic_resume.html` template with a professional multi-section
+layout: Inter/system-ui font, proper experience section with bullets, two-column skills grid,
+clean ATS-friendly margins. Jinja2 variable names unchanged; Python untouched.
+
+```text
+You are WS 9D for CareerEngine. Rewrite templates/classic_resume.html to produce a
+professional, multi-section résumé with Inter/system-ui font and proper layout.
+
+Files to read BEFORE writing any code (in this order):
+1. templates/classic_resume.html — read THE ENTIRE FILE. List every Jinja2 variable
+   ({{ resume.xxx }}, {% for %}, {% if %}) you find. You must not rename or remove any.
+2. schema.py::StructuredResume — read all fields. Confirm each maps to a template variable.
+3. web/resume_render.py — read in full. Note: (a) how the template is loaded (file path,
+   base_url for WeasyPrint), (b) whether WeasyPrint loads external resources (fonts, images)
+   and whether outbound HTTP is expected. Surface anything that could block a web font.
+4. tests/test_resume_render.py — understand the existing test surface.
+
+PAUSE CONDITIONS:
+- If resume_render.py passes a restrictive base_url that would block @font-face or external
+  CSS imports. Surface this: "WeasyPrint base_url is set to X — external font URLs may be
+  blocked. Should I use system-ui only, or embed a font subset?" Do not guess; ask.
+- If StructuredResume has fields used in the template that are not documented in schema.py.
+  List them and ask how to handle.
+- If the template uses Jinja2 `extends` or `macro` features that require other template files.
+
+Font strategy (follow strictly):
+  Use: font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif
+  Do NOT add an @import for Google Fonts (network dependency at render time).
+  Do NOT embed base64 font data (file size concern). system-ui provides a clean sans-serif
+  fallback on all platforms.
+
+Layout spec (implement exactly):
+  - Page: A4 (210mm × 297mm), margins: 15mm top/bottom, 18mm left/right.
+  - Name: 22pt, font-weight 600, no text-transform. Below: one-line contact string
+    (email · phone · location, then links separated by ·). 9pt, color #555.
+  - Section rule: each section heading at 9.5pt, font-weight 600, letter-spacing 1.5px,
+    text-transform uppercase, followed by a 0.5px solid #ccc border-bottom, 4pt margin-bottom.
+  - Sections in order: Summary → Experience → Skills → Education.
+  - Summary: 10pt, color #333, max 5 lines, no label needed if the section heading "Summary"
+    is present.
+  - Experience: each role — company name bold + title normal on one line, dates right-aligned
+    (use flex or table layout); then bullets as <ul> with 9.5pt, 14px line-height, 4px left
+    padding, 3px margin-bottom per item; 8pt gap between roles.
+  - Skills: render as a flex-wrap list of pill spans (background #f0f0f0, border-radius 3px,
+    padding 2px 6px, 9pt, 4px gap).
+  - Education: institution bold + degree normal + dates right-aligned; no bullets.
+  Keep all existing Jinja2 variable references UNCHANGED. Only restructure HTML + CSS.
+
+tests/ (new tests, do not remove existing ones):
+- test_resume_template_has_experience_section: render with a fixture StructuredResume that
+  has one experience entry with one bullet; assert output HTML contains the employer name and
+  the bullet text inside a <li> element.
+- test_resume_template_has_skills_section: rendered HTML contains at least one skill keyword.
+- test_resume_template_has_education_section: rendered HTML contains the degree field value.
+- test_resume_renders_to_pdf_without_error: call render_resume_pdf (or equivalent) with a
+  fixture StructuredResume; assert returns non-empty bytes. (This test exercises WeasyPrint;
+  mark @pytest.mark.slow if the suite defines that marker.)
+
+Acceptance criteria (named tests):
+- test_resume_template_has_experience_section
+- test_resume_template_has_skills_section
+- test_resume_template_has_education_section
+- test_resume_renders_to_pdf_without_error
+- Existing resume_render tests remain green.
+
+DoD:
+- make check green. No Python code changes (template only + tests).
+- Gemini 2.5 Pro review PASS — reviewer confirms valid HTML, clean CSS, no Jinja2 regressions.
+- Report READY FOR REVIEW with: (a) list of preserved Jinja2 variables; (b) font strategy used.
+```
+
+---
+
+### ✅ 9A — Portfolio: delete and edit recorded details
+
+> Read first: `web/portfolio_store.py` (full file — especially `_patch_session`),
+> `schema.py::StarStory` (all fields; check for `story_id`), `schema.py::Entry` (bullets field),
+> `web/portfolio.py` (EntryCard, renderer), `tests/test_portfolio_store.py`.
+
+**What:** Add `delete_star_story` and `update_entry_bullet` to the portfolio-store seam, and
+surface delete + edit-in-place controls in the Portfolio renderer. Includes a mandatory PAUSE if
+`StarStory` has no `story_id` field — the agent must ask before adding one (contract bump).
+
+```text
+You are WS 9A for CareerEngine. Let users delete STAR stories and edit entry bullets
+in the Portfolio view, turning the read-only portfolio into a correctable record.
+
+Files to read BEFORE writing any code (in this order):
+1. schema.py::StarStory — read ALL fields. Check whether a story_id field exists.
+2. schema.py::Entry — read entry_id and bullets: list[str].
+3. schema.py::CareerEngineState — confirm star_stories: list[StarStory] and work_timeline.
+4. web/portfolio_store.py — read the FULL file. Understand _patch_session (the async
+   read-modify-write seam), add_manual_entry, set_entry_highlight. These are your patterns.
+5. web/portfolio.py — read EntryCard and the full renderer. Find where stories and bullets
+   are currently displayed (they are likely inside the entry expansion or card body).
+6. tests/test_portfolio_store.py — understand the test pattern (fake session service).
+
+PAUSE CONDITIONS (mandatory — stop before writing any code):
+- If StarStory does NOT have a story_id field: STOP and report:
+    "StarStory has no story_id. Options:
+     (a) Add story_id: str = Field(default_factory=lambda: str(uuid4())) — additive, minor
+         contract bump to v2.9.0. Existing stories without it get a fresh id on next save.
+     (b) Identify stories by (entry_id, positional index) — fragile if order changes.
+     Please decide before I proceed."
+  Do NOT add story_id without explicit confirmation.
+- If _patch_session signature differs from add_manual_entry's usage pattern.
+- If bullets on Entry is not a direct list[str].
+
+Assuming story_id exists on StarStory (or is added per decision):
+
+  Scope:
+    web/portfolio_store.py:
+    - Add async def _adelete_star_story(session_service, app_name, user_id, story_id: str):
+        load state via session_service; filter out the StarStory whose story_id matches;
+        save back. Idempotent: no-op if story_id not found.
+    - Add sync wrapper: delete_star_story(story_id: str, *, session_id: str | None = None,
+        app_name: str, user_id: str) — follow add_manual_entry's sync-wrapper pattern exactly.
+    - Add async def _aupdate_entry_bullet(session_service, app_name, user_id, entry_id: str,
+        bullet_index: int, new_text: str):
+        load state; find Entry where str(entry.entry_id) == entry_id; update
+        entry.bullets[bullet_index] = new_text.strip(); save back.
+        Guard: if entry not found or bullet_index out of range, log a warning and return.
+    - Add sync wrapper: update_entry_bullet(entry_id, bullet_index, new_text, ...).
+    - Export new functions in __all__.
+
+    web/portfolio.py:
+    - Story delete: next to each StarStory display, add a small "🗑 Delete" button.
+      On click (on_click callback pattern, not st.form), call delete_star_story(...).
+      After deletion, call st.rerun() to refresh.
+    - Bullet edit: next to each bullet text, add a "✎ Edit" button. On click, replace the
+      static text with an st.text_input pre-filled with the current bullet text + a "Save"
+      button. On save, call update_entry_bullet(...) then st.rerun().
+    - Use st.session_state keys to track which bullet is in edit mode (e.g.
+      f"editing_bullet_{entry_id}_{idx}"). Only one bullet editable at a time is acceptable.
+
+    tests/:
+    - test_delete_star_story_removes_from_state: fake session with 2 stories; call
+      delete_star_story for story A's story_id; reload state and assert only story B remains.
+    - test_delete_star_story_idempotent: call delete_star_story with a non-existent story_id;
+      assert state is unchanged and no exception is raised.
+    - test_update_entry_bullet_mutates_correctly: fake session with entry having bullets
+      ["old bullet"]; call update_entry_bullet(entry_id, 0, "new bullet"); reload and assert
+      bullet is "new bullet".
+    - test_update_entry_bullet_out_of_range: bullet_index beyond list length; assert warning
+      is logged and state is unchanged (no IndexError raised).
+    - test_portfolio_renders_delete_story_button: EntryCard with a story; renderer emits a
+      button whose label contains "Delete" or "🗑" (use fake st).
+
+Acceptance criteria (named tests):
+- test_delete_star_story_removes_from_state
+- test_delete_star_story_idempotent
+- test_update_entry_bullet_mutates_correctly
+- test_update_entry_bullet_out_of_range
+- test_portfolio_renders_delete_story_button
+- Existing portfolio_store + portfolio tests remain green.
+
+DoD:
+- make check green.
+- Contract change only if story_id addition confirmed — bump to v2.9.0 additively and tag.
+- Gemini 2.5 Pro review PASS.
+- Report READY FOR REVIEW with: (a) story_id pause-condition resolution; (b) criterion→test map.
+```
+
+---
+
+### ✅ 9F — Tighten discovery parameters + smarter preference defaults
+
+> Read first: `discovery/preferences.py` (default_session_preferences in full),
+> `schema.py::SessionPreferences` (all fields), `web/jobs.py` (render_jobs preferences form),
+> `web/preferences_store.py` (load_discovery_preferences), `web/streamlit_app.py` (jobs route).
+
+**What:** Three layered improvements: (a) better UX copy in the preferences form; (b) smarter
+defaults derived from the user's own portfolio when no preferences are saved yet; (c) expose
+`max_results` as a visible control. The agent must PAUSE before touching `discovery/scout.py`.
+
+```text
+You are WS 9F for CareerEngine. Reduce irrelevant job results by improving the
+preferences UX and initialising first-time defaults from the user's portfolio.
+
+Files to read BEFORE writing any code (in this order):
+1. discovery/preferences.py — read default_session_preferences() in full. Note the current
+   target_roles list (Fractional Technology Leadership, etc.) — these are the operator's own
+   criteria, not generic defaults.
+2. schema.py::SessionPreferences — read ALL fields and descriptions.
+3. web/jobs.py — find render_jobs. Read the preferences form (target_roles, nice_to_haves,
+   dealbreakers inputs). Note current placeholder text (if any) and how preferences are
+   loaded/saved.
+4. web/preferences_store.py — read load_discovery_preferences. Note what it returns for a
+   new user (default_session_preferences()).
+5. web/streamlit_app.py — find the jobs route (~line 148). Check what objects are already
+   loaded there (workspace, session state, user_id). Note whether CareerEngineState or
+   work_timeline is available without an extra backend call.
+6. web/session_loader.py — read try_load_latest_discovery_state signature; understand the
+   cost of calling it at the jobs render site (it hits Firestore).
+
+PAUSE CONDITIONS:
+- If touching discovery/scout.py or discovery/primary.py is needed for any of (a)-(c).
+  STOP: do NOT modify those files without explicit confirmation. Report the constraint.
+- If loading CareerEngineState at the jobs render site would require a new Firestore call
+  that is not already happening. Surface the cost and ask: "Loading state for preference
+  derivation requires an extra Firestore read at the jobs page. Acceptable?" Wait for answer.
+- If SessionPreferences fields differ from: target_roles, nice_to_haves, dealbreakers.
+
+Scope — implement in this exact order; stop and report after each if something is unexpected:
+
+  (a) UX copy improvements in render_jobs (web/jobs.py) — NO logic change:
+  - Add help= text to the target_roles input:
+      "Be specific: 'Senior Product Manager, B2B SaaS' beats 'Product Manager'. List 2–4 roles."
+  - Add help= to nice_to_haves: "Technologies, industries, or company types you prefer."
+  - Add help= to dealbreakers: "Hard requirements only — things you'd truly decline an offer for."
+  - Add placeholder= to each so an empty field shows the guidance immediately.
+
+  (b) Derive initial target_roles from portfolio on first use:
+  - In web/preferences_store.py, add a helper:
+      def derive_initial_roles(state: CareerEngineState) -> list[str]:
+          """Return top-3 most recent Entry titles as initial target_roles suggestions."""
+          sorted_entries = sorted(state.work_timeline,
+                                  key=lambda e: (e.end_date or "9999"), reverse=True)
+          return [e.title for e in sorted_entries[:3] if e.title]
+  - In the jobs route (web/streamlit_app.py), if load_discovery_preferences returns the
+    operator default (i.e. user has never saved preferences — check by comparing to
+    default_session_preferences().target_roles), AND CareerEngineState is loadable:
+      * Load state via try_load_latest_discovery_state (ONLY if confirmed acceptable above).
+      * Call derive_initial_roles(state) and use as the pre-filled value for the target_roles
+        input (NOT saved until user clicks Save — just the widget default value).
+    If state is unavailable, fall back to the operator default — never crash.
+
+  (c) NO scout.py changes in this ticket. Document in the PR that narrowing the scout query
+  is a follow-up (9F-b) requiring a separate design decision.
+
+  tests/:
+  - test_jobs_view_help_text_on_target_roles: render_jobs with fake-st; assert the
+    target_roles input is rendered with a non-empty help= kwarg.
+  - test_derive_initial_roles_top_3: given state with 5 entries (oldest first), assert
+    derive_initial_roles returns the 3 most recent titles.
+  - test_derive_initial_roles_empty_state: state with no work_timeline entries; returns [].
+  - test_jobs_view_fallback_if_no_state: if try_load_latest_discovery_state returns None,
+    the jobs route renders without error using operator defaults.
+
+Acceptance criteria (named tests):
+- test_jobs_view_help_text_on_target_roles
+- test_derive_initial_roles_top_3
+- test_derive_initial_roles_empty_state
+- test_jobs_view_fallback_if_no_state
+- Existing preferences_store + jobs tests remain green.
+
+DoD:
+- make check green. No contract change (SessionPreferences not modified).
+- discovery/scout.py and discovery/primary.py NOT modified.
+- Gemini 2.5 Pro review PASS.
+- Report READY FOR REVIEW with: (a)/(b)/(c) each marked done/skipped + criterion→test mapping.
+```
+
+---
+
+### ◐ 9H — Resume download: inline chat for résumé-specific edits *(frontend decision first)*
+
+Not groomed to build spec. Requires the Next.js / FastAPI architecture decision (design questions
+1–5 above). In Streamlit, an in-memory résumé edit chat is technically feasible but the UX is
+poor (every message requires a rerun). Defer until the frontend is decided.
+
+---
+
+### ◐ 9L — (Stretch) Monthly achievements reminder *(email provider decision first)*
+
+Not groomed to build spec. Depends on: email provider choice (SendGrid, Resend, or GCP Email);
+opt-in / GDPR notice mechanism; and whether the in-app nudge alone (no email) is v1 scope.
+The backend sweep mechanism (Cloud Scheduler → Cloud Run Job → pending_action) already exists
+from 8C. Groom when the email provider is decided.
+
+---
+
+### ◐ 9M — (Stretch) Visual résumé section editor *(Next.js decision first)*
+
+Not groomed to build spec. Requires React DnD or equivalent. No Streamlit equivalent is
+practical. Groom only after the Next.js frontend architecture decision.
+
+---
 
