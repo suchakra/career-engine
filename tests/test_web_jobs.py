@@ -14,7 +14,7 @@ from web.jobs import JobsView, build_jobs_view, job_tailor_index, render_jobs
 
 
 class _SelfContext:
-    """Context manager that returns itself (proxies st methods for container use)."""
+    """Context manager whose __enter__ returns the owning FakeSt instance."""
 
     def __init__(self, owner: FakeSt) -> None:
         self._owner = owner
