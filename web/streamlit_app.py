@@ -93,11 +93,14 @@ def _load_discovery_state(*, user_id: str, today: str) -> CareerEngineState:
 
 def _load_user_profile(user_id: str) -> UserProfile:
     """Load the user's persisted profile (empty for a new user). Monkeypatchable in tests."""
+    from database.firestore_session import ContractVersionError
     from database.workspace_store import FirestoreWorkspaceStore
     from web.profile_store import load_profile
 
     try:
         return load_profile(FirestoreWorkspaceStore(), user_id=user_id)
+    except ContractVersionError:
+        raise  # schema mismatch must not masquerade as empty (lost) profile
     except Exception:
         st.warning("Couldn't load your profile just now — showing empty profile.")
         return UserProfile()
