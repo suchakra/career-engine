@@ -200,6 +200,7 @@ def _render_add_experience_form(*, user_id: str, today: str) -> None:
     from web.portfolio_store import add_manual_entry
 
     type_values = [t.value for t in ExperienceType]
+    st.caption("Add a role, project, or experience to your portfolio.")
     with st.expander("Add an experience or project"):
         st.caption(
             "Spent years somewhere with more projects than your résumé shows? Add one "
@@ -256,6 +257,7 @@ def _render_portfolio(*, user_id: str, today: str) -> None:
     def _toggle_highlight(entry_id: str, highlighted: bool) -> None:
         _set_entry_highlight(user_id=user_id, entry_id=entry_id, highlighted=highlighted)
 
+    _render_add_experience_form(user_id=user_id, today=today)
     render_portfolio(
         build_portfolio_view(state),
         st=st,
@@ -263,7 +265,6 @@ def _render_portfolio(*, user_id: str, today: str) -> None:
         on_toggle_highlight=_toggle_highlight,
     )
     _render_master_resume_download(user_id=user_id, state=state)
-    _render_add_experience_form(user_id=user_id, today=today)
 
 
 def _render_master_resume_download(*, user_id: str, state: CareerEngineState) -> None:

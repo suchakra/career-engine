@@ -7,7 +7,7 @@ by entry, entry↔story attachment, the 'not grilled yet' marker, and empty stat
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 from schema import CareerEngineState, Entry, EntryStatus, ExperienceType, StarStory
 from web.portfolio import (
@@ -239,3 +239,118 @@ class TestRenderPortfolio:
         )
         assert any(label == "Grill me about this" for label, _ in st.buttons)
         assert not any("tailoring priority" in label for label, _ in st.buttons)
+
+
+# ---------------------------------------------------------------------------
+# Integration-level ordering test (9B)
+# ---------------------------------------------------------------------------
+
+
+def test_add_experience_cta_precedes_entry_list(monkeypatch: Any) -> None:
+    """The 'Add' CTA caption and expander appear BEFORE entry subheaders (9B).
+
+    _render_portfolio now calls _render_add_experience_form first, then
+    render_portfolio, so the CTA must land earlier in the widget stream than
+    any entry title rendered by the portfolio view.
+    """
+    import web.streamlit_app as streamlit_app
+
+    log: list[tuple[str, str]] = []
+
+    class _Ctx:
+        """Minimal context manager that silently absorbs nested attribute calls."""
+
+        def __enter__(self) -> _Ctx:
+            return self
+
+        def __exit__(self, *args: Any) -> None:
+            pass
+
+        def __getattr__(self, name: str) -> Any:
+            return lambda *a, **kw: None
+
+    class _RecordingSt:
+        """Fake st that logs caption/subheader/expander/title calls in order."""
+
+        session_state: ClassVar[dict[str, Any]] = {}
+
+        def caption(self, body: str, **kw: Any) -> None:
+            log.append(("caption", body))
+
+        def subheader(self, body: str, **kw: Any) -> None:
+            log.append(("subheader", body))
+
+        def title(self, body: str, **kw: Any) -> None:
+            log.append(("title", body))
+
+        def expander(self, label: str, **kw: Any) -> _Ctx:
+            log.append(("expander", label))
+            return _Ctx()
+
+        def form(self, *args: Any, **kw: Any) -> _Ctx:
+            return _Ctx()
+
+        def info(self, *args: Any, **kw: Any) -> None:
+            pass
+
+        def divider(self, **kw: Any) -> None:
+            pass
+
+        def write(self, *args: Any, **kw: Any) -> None:
+            pass
+
+        def button(self, *args: Any, **kw: Any) -> bool:
+            return False
+
+        def text_input(self, *args: Any, **kw: Any) -> str:
+            return ""
+
+        def text_area(self, *args: Any, **kw: Any) -> str:
+            return ""
+
+        def selectbox(self, label: str, options: Any, index: int = 0, **kw: Any) -> Any:
+            return list(options)[index]
+
+        def form_submit_button(self, *args: Any, **kw: Any) -> bool:
+            return False
+
+        def __getattr__(self, name: str) -> Any:
+            return lambda *a, **kw: None
+
+    fake_st = _RecordingSt()
+
+    entry = Entry(type=ExperienceType.FULL_TIME, title="Staff Engineer", org="Acme")
+    state = CareerEngineState(work_timeline=[entry])
+
+    monkeypatch.setattr(streamlit_app, "st", fake_st)
+    monkeypatch.setattr(
+        streamlit_app, "_load_discovery_state", lambda *, user_id, today: state
+    )
+    monkeypatch.setattr(
+        streamlit_app, "_render_master_resume_download", lambda *, user_id, state: None
+    )
+    monkeypatch.setattr(
+        streamlit_app, "_jump_grill_to_entry", lambda *, user_id, entry_id: None
+    )
+    monkeypatch.setattr(
+        streamlit_app,
+        "_set_entry_highlight",
+        lambda *, user_id, entry_id, highlighted: None,
+    )
+
+    streamlit_app._render_portfolio(user_id="u1", today="2026-07-06")
+
+    cta_idx = next(
+        (i for i, (kind, val) in enumerate(log) if "Add a role" in val),
+        None,
+    )
+    entry_idx = next(
+        (i for i, (kind, val) in enumerate(log) if kind == "subheader" and "Staff Engineer" in val),
+        None,
+    )
+
+    assert cta_idx is not None, f"CTA caption not found in log; log={log}"
+    assert entry_idx is not None, f"Entry subheader not found in log; log={log}"
+    assert cta_idx < entry_idx, (
+        f"CTA (pos {cta_idx}) must precede entry subheader (pos {entry_idx}); log={log}"
+    )
