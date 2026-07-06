@@ -1,13 +1,14 @@
 # CareerEngine — System Architecture
 
 > Status: **active** (design truth for shipped + upcoming work).
-> Last reviewed: 2026-07-05.
+> Last reviewed: 2026-07-06.
 > Build status is **not** canonical here — see [PROGRESS.md](PROGRESS.md). For orientation, Phase 0 +
 > Phase 1 + Phase 1.5 (§12) + Phase 2 (web/infra/async) + Phase 4 (Portfolio Workbench, §14) are built &
-> deployed; **Phase 6 two-agent A2A discovery (§15) merged (contract v2.5.0)**; Phase 5 in progress — 5A
-> (real ATS résumé), 5B (save-as-application), persist-Contact (v2.6.0), 5C (one renderer + master download),
-> and 4E (pin an experience for tailoring priority — `Entry.highlighted`, **latest contract v2.7.0**) are
-> merged; only the pre-GA /security-review remains.
+> deployed; **Phase 6 two-agent A2A discovery (§15) merged (v2.5.0)**; **Phase 5 COMPLETE + pre-GA
+> security-reviewed** (5A real ATS résumé, 5B save-as-application, persist-Contact v2.6.0, 5C one renderer +
+> master download, 4E pin-for-tailoring v2.7.0). **Phase 7 in progress** — Job Discovery web surface: 7A
+> persisted discovery preferences (**latest contract v2.8.0**); 7B/7C (Jobs view + tailor-to-job) pending, at
+> which point §15 gains the web-surface reconciliation.
 > Decisions captured in [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md).
 
 CareerEngine converts raw, multi-decade career histories into quantified, STAR-formatted

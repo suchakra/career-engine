@@ -446,6 +446,16 @@ class UserWorkspace(BaseModel):
         default_factory=UserProfile,
         description="Persisted résumé-header identity (additive v2.6.0)",
     )
+    # Forward-ref to SessionPreferences (defined later in the discovery section;
+    # the annotation is lazy via `from __future__ import annotations`).
+    # UserWorkspace.model_rebuild() below that class resolves it. The lambda is
+    # load-bearing: `default_factory=SessionPreferences` (bare name) would raise
+    # NameError here — the future import stringifies annotations, NOT default-value
+    # expressions, and the name isn't bound yet. Do not "simplify" it.
+    discovery_preferences: SessionPreferences = Field(
+        default_factory=lambda: SessionPreferences(),
+        description="Persisted job-discovery rubric (additive v2.8.0)",
+    )
     contract_version: str = Field(
         default=CONTRACT_VERSION,
         description="Schema version; consumers refuse on major-version mismatch",
@@ -653,7 +663,8 @@ class SessionPreferences(BaseModel):
     """The evaluation rubric for a discovery session (gathered at intake).
 
     ``dealbreakers`` are absolute (→ HARD_REJECT); ``nice_to_haves`` are soft
-    (a miss → SOFT_REJECT, kept for review). No secrets; per-session, not durable.
+    (a miss → SOFT_REJECT, kept for review). No secrets. Persisted per user on
+    ``UserWorkspace.discovery_preferences`` (v2.8.0) so it isn't re-entered.
     """
 
     model_config = ConfigDict(frozen=False)
@@ -666,6 +677,11 @@ class SessionPreferences(BaseModel):
         default_factory=list, description="Soft preferences (a miss is a SOFT_REJECT, not a drop)"
     )
     contract_version: str = Field(default=CONTRACT_VERSION)
+
+
+# Resolve the forward reference in UserWorkspace.discovery_preferences now that
+# SessionPreferences is defined (see UserWorkspace above).
+UserWorkspace.model_rebuild()
 
 
 class InteractionLedger(BaseModel):

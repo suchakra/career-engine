@@ -514,6 +514,59 @@ contract break**.
 
 ---
 
+## Phase 7 — Job Discovery web surface (bring discovery from CLI into the product UI)
+
+> **Status:** groomed 2026-07-06, building now. Turns the Phase 6 two-agent discovery loop (CLI-only,
+> `career-engine discover`) into a **product feature**: a "Jobs" view in the web app. Spec:
+> [ARCHITECTURE.md §15](ARCHITECTURE.md). Reuses the discovery engine wholesale (`discovery/`); this phase
+> is the **web surface + preference persistence** around it — no change to the agents/loop.
+
+### The flow (user journey)
+1. Signed-in user clicks **"Jobs"** in the sidebar (new nav entry).
+2. **Preferences** (persisted, editable): target roles · nice-to-haves · dealbreakers. Pre-filled from the
+   saved profile; first-time users get the operator defaults as a starting point. Saved to the workspace.
+3. **"Find jobs"** → runs the live loop (Scout ⇄ MCP ⇄ Primary) on the user's **BYOK key** (Pro-tier
+   `ModelEvaluator`), gated behind a button + spinner (like Tailor). Bridged into Streamlit's sync model via
+   the existing `web.async_runner.run_async` (the Scout is async).
+4. Results render: **✅ Strong matches** and **🟡 For review**, each with company · title · location · a
+   live URL · the **AI rationale**. Accepted jobs persist to the `LedgerStore` (Firestore) → idempotent
+   re-runs (already-seen jobs hard-reject), and prior results show on entry.
+5. Each job has **"Tailor résumé to this"** → feeds the discovered JD into the existing Tailor flow (closes
+   discover → tailor in the UI, mirroring the CLI's `--tailor-session`).
+
+### Contract
+- Add `discovery_preferences: SessionPreferences` to `UserWorkspace` (additive → **minor bump v2.8.0**;
+  backward-compatible default via `default_factory`). `SessionPreferences` already exists (v2.5.0).
+
+### Sequencing (reviewable increments, one PR each)
+- **7A — persist discovery preferences (build first; contract v2.8.0).** `UserWorkspace.discovery_preferences`
+  + a `web/preferences_store.py` seam (`load_discovery_preferences` / `save_discovery_preferences`, copy-on-write,
+  mirrors `profile_store`). Tests: roundtrip, preserve-others, backward-compat, pins→2.8.0.
+- **7B — the Jobs view (the meat).** `web/jobs.py` (pure `build_jobs_view` + injectable `render_jobs`, like
+  `web/portfolio.py`); a web discovery runner (`web/jobs_runner.py`: builds Scout + `PrimaryAgent`(BYOK
+  `ModelEvaluator`) + Firestore `LedgerStore`, runs `discover()` via `run_async`, records accepted, returns a
+  `DiscoveryResult`); the preferences form; nav entry `("jobs", "Jobs")` in `web/navigation.py` + routing in
+  `web/streamlit_app.py`; load persisted jobs on entry. Tests: view-model mapping, render callbacks (fake `st`),
+  runner wiring with a fake Scout + in-memory store (offline, no key).
+- **7C — "Tailor to this job".** A per-job button that stashes the discovered `raw_description` as the Tailor
+  JD (`session_state`) and routes to the Tailor view (which pre-fills it). Tests: the handler sets the JD +
+  view; Tailor consumes a pre-filled JD.
+
+### Design rules (keep)
+- **Reuse the engine**: no changes to `discovery/scout.py` / `primary.py` / `job_source.py` / `mcp_server.py` —
+  Phase 7 only adds the web surface + preference persistence.
+- **Two-layer UI** (pure view-model + injectable renderer) so it's tested without a Streamlit runtime, exactly
+  like `dashboard.py` / `portfolio.py`.
+- **BYOK-gated** (uses `_resolve_byok_key`); render gated behind a button (WeasyPrint-style cost discipline);
+  best-effort persistence never blocks the UI; no secrets stored.
+
+### Phase 7 exit gate
+On the web app, a signed-in user can set + save job preferences, click "Find jobs", see ranked live matches
+with AI rationale, and tailor a résumé to a chosen job — all in the UI, `make check` green, contract bumped
+additively to v2.8.0. Docs reconciled so discovery is a **product feature**, not a CLI-only demo.
+
+---
+
 ## Not groomed here
 
 Phase 3 hardening/eval and post-v1 backlog remain intentionally out of launch scope for this pass.
