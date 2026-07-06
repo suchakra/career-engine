@@ -1,30 +1,22 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-06 — Phase 8 in progress: 8A+8B shipped)
-**`master` clean @ `1d299cd` · contract v2.8.0 · 640 tests (1 skipped) · no open PRs.**
-**Phases 1–7 + 8A + 8B COMPLETE.**
+## 👉 YOU ARE HERE (updated 2026-07-06 — Phase 8: 8A+8B+8C shipped)
+**`master` clean @ `73b909d` · contract v2.8.0 · 642 tests (1 skipped) · no open PRs.**
+**Phases 1–7 + 8A + 8B + 8C COMPLETE.**
 
 **What shipped:**
-- Phases 1–5: core grill → tailor loop, web app, portfolio workbench, ATS-safe résumé, security review.
-- Phase 6 (PR #30, v2.5.0): two-agent A2A job discovery (`career-engine discover` CLI).
-- Phase 7 (PRs #38–39, v2.8.0): discovery as a web product feature — Jobs nav view, persisted rubric,
-  ranked matches, "Tailor to this job" hand-off, HITL "Not interested" (PR #40), real out-of-process
-  `StdioMcpClient` (PR #41), HITL "Keep this" (PR #42), `streamlit_app.py` made import-safe.
-- **8A** (no code): Cloud Run dev redeployed — `gh workflow run deploy.yml --ref master -f environment=dev`
-  dispatched (run `28810378381`); Jobs UI now live at https://career-engine-dev-app-ontyg6kaja-uc.a.run.app
-- **8B** (PR #43): `DashboardView.can_find_jobs: bool = True` + "Find jobs" button in `render_dashboard`
-  routing to `session_state["view"] = "jobs"`. 2 new named tests. Gemini PASS → squash-merged.
+- Phases 1–7: full product through HITL "Keep this" (PR #42) + out-of-process `StdioMcpClient`.
+- **8A**: Cloud Run dev redeployed (workflow run `28810378381`). Jobs UI live.
+- **8B** (PR #43): `DashboardView.can_find_jobs` + "Find jobs" button in `render_dashboard`.
+- **8C** (PR #44): `career-engine sweep` CLI + `jobs/sweep_cli.py` + Cloud Run Job Terraform module +
+  scheduler `token_type = "oauth2"` fix (Cloud Run Jobs Execute API requires OAuth2, not OIDC JWT).
 
-**▶ NEXT — 8C: Wire the pending-action sweep (Cloud Run Job approach).**
-Spec in [GROOMING.md §8C](GROOMING.md). Key scope:
-- `main.py`: add `career-engine sweep` CLI command
-- `jobs/sweep_cli.py` (NEW): `resolve_sweep_store()` + `run_sweep_command()`
-- `tests/test_sweep_cli.py` (NEW): at minimum a unit test for the CLI handler
-- `infrastructure/modules/cloud_run_job/` (NEW Terraform module): Cloud Run Job resource
-- `infrastructure/envs/dev/main.tf`: wire the new module + update Scheduler job target
-PAUSE conditions (subagent must stop and check with user): if `jobs/pending_action_sweep.py` needs
-any changes (should be pure — zero changes expected); if `google_cloud_run_v2_job` Terraform resource
-unavailable in the pinned provider version.
+**▶ NEXT — 8D: Multi-user model-client isolation (DESIGN-FIRST).**
+DO NOT start implementing without user sign-off on the design. The proposed design is in GROOMING.md §8D:
+`ContextVar`-based per-request factory override in `workflows/nodes.py`, propagated via `copy_context()`
+in `web/async_runner.run_async`. Present the design to the user and get explicit approval before coding.
+
+After 8D design approval: 8G (custom domain) is next in priority, followed by 8E (deployer-SA) then 8F.
 
 **Doc-accuracy note for the submission (`demo_output/`):** the MCP-separate-process claim is now TRUE (PR #41);
 the **async-sweep-as-live** claim still needs softening (sweep is built+tested but NOT wired/running — Scheduler 404s).
