@@ -1,8 +1,15 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-06 — Phase 9 in progress: 9J shipped, 9I in review)
-**`master` clean @ `87c53f7` · contract v2.8.0 · 647 tests (1 skipped) · PR #48 open (9I, Copilot review pending).**
+## 👉 YOU ARE HERE (updated 2026-07-06 — Phase 9 in progress: 9J shipped, 9B in review, 9I in review)
+**`master` clean @ `87c53f7` · feat/9b-portfolio-cta pushed (PR TBD) · contract v2.8.0 · 648 tests (1 skipped) · PR #48 open (9I, Copilot review pending).**
 **Phases 1–7 + 8A + 8B + 8C + 8D + 8G + 9J COMPLETE.**
+
+**What shipped (9B — branch feat/9b-portfolio-cta, PR TBD):**
+- **9B:** Add-experience CTA precedes portfolio entry list.
+  - `_render_portfolio()`: `_render_add_experience_form(...)` now called **before** `render_portfolio(...)`.
+  - `_render_add_experience_form()`: `st.caption("Add a role, project, or experience to your portfolio.")` added immediately before `st.expander()`.
+  - New test `test_add_experience_cta_precedes_entry_list` in `tests/test_web_portfolio.py` (recording fake-st verifies CTA caption precedes entry subheaders in widget stream).
+  - `make check`: 648 passed, 1 skipped. No contract change.
 
 **What shipped (9J — PR #47):**
 - **9J:** Grill checkpoint info copy: `st.info("💡 You've reached a checkpoint — stories completed so far are visible in Portfolio.")` shown above checkpoint summary when `grill_checkpoint` is set. No logic changes. Test: `test_checkpoint_leave_copy_shown`. Copilot review addressed: removed persistence claims (accurate under both InMemory + Firestore); fixed `_FakeSt.columns()` spec-sized.
