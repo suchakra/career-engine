@@ -177,6 +177,7 @@ def _write_state(ctx: object, new_state: CareerEngineState) -> None:
 
 def build_discovery_workflow(
     model_factory: Callable[[], ModelClient] | None = None,
+    tailor_instructions: str = "",
 ) -> Workflow:
     """Build and return the ADK 2.0 Workflow for the discovery loop.
 
@@ -256,7 +257,7 @@ def build_discovery_workflow(
         """Tailor shim: passes explicit client when model_factory is set."""
         state = _read_state(ctx)
         _c = model_factory() if model_factory is not None else None
-        new_state = tailor_node(state, _client=_c)
+        new_state = tailor_node(state, _client=_c, _instructions=tailor_instructions)
         _write_state(ctx, new_state)
 
     # ── Create FunctionNode instances ─────────────────────────────────────────
@@ -315,6 +316,7 @@ def build_runner(
     session_service: BaseSessionService | None = None,
     app_name: str = "career_engine_discovery",
     model_factory: Callable[[], ModelClient] | None = None,
+    tailor_instructions: str = "",
 ) -> Runner:
     """Build and return an ADK 2.0 Runner wired to the discovery workflow.
 
@@ -340,7 +342,7 @@ def build_runner(
             InMemorySessionService(),  # type: ignore[no-untyped-call]
         )
 
-    workflow = build_discovery_workflow(model_factory=model_factory)
+    workflow = build_discovery_workflow(model_factory=model_factory, tailor_instructions=tailor_instructions)
     return Runner(
         node=workflow,
         session_service=session_service,
