@@ -610,8 +610,11 @@ hands the posting's JD to the existing Tailor (`job_tailor_index` → the keyed 
 it disappears from the current view immediately (session hide-set) and is persisted to the ledger
 (`LedgerStore.add_rejected_company`, first writer to `InteractionLedger.rejected_companies`; Firestore uses an
 atomic `ArrayUnion`). The Primary's deterministic hard-reject gate already consumes that set, so **future**
-runs (CLI and web) never re-surface a dismissed company. This is the first slice of the discovery HITL
-controls (full accept/override/TTL dashboard remains roadmap).
+runs (CLI and web) never re-surface a dismissed company. Symmetrically, a **"Keep this"** action on a
+for-review (soft) match promotes it into Strong matches immediately (session kept-set) and persists it as
+ACCEPTED (`record_accepted`) so it survives + shows on the next visit — a human override of the Primary's
+soft-reject. Together these are the accept/reject slice of the discovery HITL controls (a full override/TTL
+dashboard remains roadmap).
 
 ### 15.5 Deliberate deviations (deadline-safe cut; roadmap noted)
 - **Package named `discovery/`**, not the literal `mcp/`+`agents/` paths first sketched — a top-level `mcp/`

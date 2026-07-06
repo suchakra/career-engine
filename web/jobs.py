@@ -93,6 +93,7 @@ def build_jobs_view(
     *,
     prior: list[JobOpportunity] | None = None,
     hidden_companies: set[str] | None = None,
+    kept_ids: set[str] | None = None,
 ) -> JobsView:
     """Build the Jobs view-model (pure).
 
@@ -100,16 +101,25 @@ def build_jobs_view(
     result (initial entry), shows previously-persisted accepted jobs (``prior``).
     ``hidden_companies`` (case-insensitive) are dropped — a "Not interested" the
     user just clicked disappears immediately (and is persisted for future runs).
+    ``kept_ids`` are for-review jobs the user just clicked "Keep" on — they are
+    promoted into the strong-matches list (and persisted as accepted for future runs).
     """
     hidden = {c.strip().lower() for c in (hidden_companies or set()) if c.strip()}
+    kept = kept_ids or set()
 
-    def _keep(job: JobOpportunity) -> bool:
+    def _visible(job: JobOpportunity) -> bool:
         return job.metadata.company.strip().lower() not in hidden
 
     if result is not None:
+        accepted_jobs = [j for j in result.accepted if _visible(j)]
+        review_jobs: list[JobOpportunity] = []
+        for job in result.soft_rejected:
+            if not _visible(job):
+                continue
+            (accepted_jobs if job.job_id in kept else review_jobs).append(job)  # Keep → promote
         return JobsView(
-            accepted=[_card(j) for j in result.accepted if _keep(j)],
-            for_review=[_card(j) for j in result.soft_rejected if _keep(j)],
+            accepted=[_card(j) for j in accepted_jobs],
+            for_review=[_card(j) for j in review_jobs],
             iterations=result.iterations,
             hard_rejected_count=result.hard_rejected_count,
             ran=True,
@@ -117,7 +127,7 @@ def build_jobs_view(
     prior_jobs = prior or []
     # Persisted jobs were all ACCEPTED when stored; keep only ACCEPTED (positive
     # filter, so a stray HARD_REJECT/None/soft never leaks into the strong list).
-    accepted = [_card(j) for j in prior_jobs if j.match_status is MatchStatus.ACCEPTED and _keep(j)]
+    accepted = [_card(j) for j in prior_jobs if j.match_status is MatchStatus.ACCEPTED and _visible(j)]
     return JobsView(accepted=accepted, ran=False)
 
 
@@ -127,6 +137,7 @@ def _render_card(
     st: Any,
     on_tailor: Callable[[str], None] | None,
     on_reject: Callable[[str], None] | None,
+    on_keep: Callable[[str], None] | None = None,
 ) -> None:
     """Render one job card via the injected ``st``-like module."""
     head = " — ".join(p for p in (card.title, card.company) if p) or "(untitled role)"
@@ -140,6 +151,12 @@ def _render_card(
         st.caption(card.url)
     if card.rationale:
         st.write(f"→ {card.rationale}")
+    if on_keep is not None:
+        st.button(
+            "👍 Keep this",
+            key=f"keep_job_{card.job_id}",
+            on_click=lambda jid=card.job_id: on_keep(jid),
+        )
     if on_tailor is not None:
         st.button(
             "Tailor résumé to this",
@@ -160,6 +177,7 @@ def render_jobs(
     st: Any,
     on_tailor: Callable[[str], None] | None = None,
     on_reject: Callable[[str], None] | None = None,
+    on_keep: Callable[[str], None] | None = None,
 ) -> None:
     """Render the discovery results via an injected ``st``-like module.
 
@@ -170,6 +188,8 @@ def render_jobs(
             the ``job_id``. When ``None``, no tailor button is rendered.
         on_reject: Optional per-job "Not interested" callback (HITL); receives the
             company name (dismisses it from future runs). ``None`` → no button.
+        on_keep: Optional per-job "Keep this" callback (HITL); receives the ``job_id``.
+            Only rendered on **for-review** cards (strong matches are already saved).
     """
     if view.ran:
         st.caption(
@@ -189,7 +209,7 @@ def render_jobs(
         st.subheader("🟡 For review")
         for card in view.for_review:
             st.divider()
-            _render_card(card, st=st, on_tailor=on_tailor, on_reject=on_reject)
+            _render_card(card, st=st, on_tailor=on_tailor, on_reject=on_reject, on_keep=on_keep)
 
 
 __all__ = ["JobCard", "JobsView", "build_jobs_view", "job_tailor_index", "render_jobs"]

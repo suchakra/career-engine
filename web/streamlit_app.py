@@ -451,15 +451,39 @@ def _render_jobs(*, user_id: str) -> None:
 
     shown = (result.accepted + result.soft_rejected) if result is not None else (prior or [])
     ss["_jobs_tailor_index"] = job_tailor_index(shown)
-    ss["_jobs_reject_store"] = store  # for the reject handler's persistence
+    ss["_jobs_by_id"] = {j.job_id: j for j in shown}  # for the "Keep this" handler
+    ss["_jobs_reject_store"] = store  # for the reject/keep handlers' persistence
     hidden = set(ss.get("_jobs_hidden_companies", set()))
+    kept = set(ss.get("_jobs_kept", set()))
     st.divider()
     render_jobs(
-        build_jobs_view(result, prior=prior, hidden_companies=hidden),
+        build_jobs_view(result, prior=prior, hidden_companies=hidden, kept_ids=kept),
         st=st,
         on_tailor=_tailor_from_job,
         on_reject=lambda company: _reject_company(user_id=user_id, company=company),
+        on_keep=lambda job_id: _keep_job(user_id=user_id, job_id=job_id),
     )
+
+
+def _keep_job(*, user_id: str, job_id: str) -> None:
+    """Save a for-review job as accepted (HITL 'Keep'): persist it + promote it now.
+
+    Runs as an on_click callback. Records the job as ACCEPTED in the ledger store (so
+    it survives + shows on future entry) and adds it to a session 'kept' set so it
+    moves into Strong matches immediately. Best-effort persistence never crashes.
+    """
+    from schema import MatchStatus
+
+    ss = st.session_state
+    ss.setdefault("_jobs_kept", set()).add(job_id)
+    job = ss.get("_jobs_by_id", {}).get(job_id)
+    store = ss.get("_jobs_reject_store")
+    if job is None or store is None:
+        return
+    try:
+        store.record_accepted(user_id, [job.model_copy(update={"match_status": MatchStatus.ACCEPTED})])
+    except Exception:
+        st.warning("Kept it for now, but couldn't save it — try again later.")
 
 
 def _reject_company(*, user_id: str, company: str) -> None:
