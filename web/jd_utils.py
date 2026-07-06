@@ -13,7 +13,8 @@ def _safe_str(value: Any) -> str:
 
 def extract_jd_metadata(jd_text: str, client: Any, model_id: str) -> tuple[str, str]:
     """Returns (title, company).  Raises ModelAPIError on transport/API failures.
-    Returns ("", "") when the model response cannot be parsed as JSON.
+    Returns ("", "") for any non-ModelAPIError failure (malformed JSON, missing
+    braces, unexpected types, empty response, etc.).
     """
     from integration.model_client import ModelAPIError
 
@@ -24,7 +25,7 @@ def extract_jd_metadata(jd_text: str, client: Any, model_id: str) -> tuple[str, 
     )
     try:
         raw = client.generate(model_id, system, jd_text[:3000])
-        # Strip markdown fences if present and extract the first JSON object.
+        # Strip markdown fences if present: extract from first '{' to last '}'.
         text = raw.strip()
         start = text.find("{")
         end = text.rfind("}")

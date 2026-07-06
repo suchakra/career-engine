@@ -820,9 +820,9 @@ def _render_save_application(*, user_id: str, today: str, resume: StructuredResu
                             title, company_extracted = extract_jd_metadata(
                                 jd_text_for_extract, client, model_id
                             )
-                        except ModelAPIError:
-                            st.error("Extraction failed — API error. Please try again.")
-                            return
+                        except ModelAPIError as exc:
+                            st.error(f"Extraction failed — {exc}. Please try again.")
+                            title, company_extracted = "", ""
                     if title or company_extracted:
                         if title:
                             ss["save_app_title"] = title.strip()
