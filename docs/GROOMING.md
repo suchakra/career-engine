@@ -23,6 +23,8 @@ Every groomed item below is constrained by the four standing goals:
 1. ✅ Phase 1.7 (integration closure of deferred Phase-1 work) — merged.
 2. ✅ Phase 2 (web/infra/async) — built, deployed live on Cloud Run (dev).
 3. ✅ **Phase 4 — Portfolio Workbench** (4A–4D) — SHIPPED & deployed (PRs #15/#16/#17). 4E deferred.
+4. ✅ **Phase 7 — Job Discovery web surface** (PRs #38–42, contract v2.8.0) — COMPLETE. ⚠️ Needs redeploy (Phase 8A).
+5. **Phase 8 — Operational hardening** — groomed below; not started.
 4. Phase 3 (hardening/eval) — not groomed here.
 
 ---
@@ -570,3 +572,300 @@ additively to v2.8.0. Docs reconciled so discovery is a **product feature**, not
 ## Not groomed here
 
 Phase 3 hardening/eval and post-v1 backlog remain intentionally out of launch scope for this pass.
+
+---
+
+## Phase 8 — Operational hardening (post-Phase-7 productionisation)
+
+> **Status: ⬜ Not started.** All Phase 7 code (PRs #38–42) is on master and `make check` green.
+> Phase 8 resolves the remaining operational gaps before the product is multi-user sound.
+> Spec context: [ARCHITECTURE.md §15.5–15.6](ARCHITECTURE.md); security context: [SECURITY.md](SECURITY.md).
+
+### The goal in plain language
+
+The Jobs Discovery feature is **fully wired in code** but invisible in the live app because the Cloud Run
+deployment hasn't been refreshed. Once redeployed (8A), the Jobs button will appear in the sidebar. Two
+other gaps keep the product from being operationally sound at any scale:
+
+1. **Sweep never fires** — Cloud Scheduler PUTs a 14-day pending-action reminder job, but the endpoint it
+   targets 404s because `jobs/sweep_endpoint.py` (the framework-agnostic handler) was never mounted behind
+   an HTTP route. Fix: promote the sweep to a **Cloud Run Job** triggered by Scheduler, removing the need
+   for an HTTP server entirely.
+
+2. **BYOK keys bleed across users** — `_client_factory` in `workflows/nodes.py` is a module-level mutable
+   global. When user A's grill call sets the factory to their key, a concurrent user B's request can
+   inherit that client. Under Cloud Run's default concurrency (no longer `concurrency=1` since PR #14
+   reverted it), this is a real concurrency hazard. Fix: `contextvars.ContextVar` for per-async-context
+   factory override, captured at submission time via `contextvars.copy_context()`.
+
+The remaining items (8B dashboard CTA, 8E deployer-SA, 8F HITL dashboard) are improvements or
+security hygiene that don't block the core product.
+
+### Launch order
+
+| Ticket | Scope | Size | Depends on | Grooming |
+|--------|-------|------|-----------|----------|
+| 8A | Redeploy to dev | Ops (no code) | none | ✅ Ready |
+| 8B | Dashboard "Find jobs" CTA | Tiny (1 file) | 8A ideally first | ✅ Ready |
+| 8C | Wire sweep endpoint (Cloud Run Job) | Medium | 8A (deploy validates) | ✅ Ready |
+| 8D | Multi-user model-client isolation | Significant (design-first) | none (but read the design section) | ◐ Draft — needs user sign-off on the design before implementation |
+| 8E | Deployer-SA least-privilege | Terraform-only | none | ◐ Draft (see SECURITY.md for the role list) |
+| 8F | HITL TTL/override dashboard | Medium-new feature | none | ⬜ To groom |
+
+---
+
+### ⬜ 8A — Redeploy to dev (operational, no code change)
+
+**What:** Dispatch the existing manual deploy workflow so the Cloud Run dev image reflects master
+(PRs #38–42). No files to change.
+
+**Command:**
+```bash
+gh workflow run deploy.yml --ref master -f environment=dev
+```
+
+**Verification:** Visit https://career-engine-dev-app-ontyg6kaja-uc.a.run.app, sign in with Google,
+confirm the sidebar shows **Dashboard / Portfolio / Grill / Jobs / Tailor**. Click Jobs and confirm the
+preferences form + "Find jobs" button appear (no Gemini key → the info message is expected).
+
+**No PR needed.** Record the outcome in [HANDOFF.md](HANDOFF.md).
+
+---
+
+### ⬜ 8B — Dashboard "Find jobs" CTA
+
+> Read first: `web/dashboard.py`, `web/streamlit_app.py` (render_dashboard call + the existing
+> Grill/Tailor buttons pattern).
+
+**What:** The dashboard (`render_dashboard` in `web/dashboard.py`) already has "Start / continue
+grilling" (primary) and "Tailor a resume" buttons but no Jobs entry point. Users have to discover the
+sidebar themselves. Add a third button so all three core flows are reachable from the landing page.
+
+**Scope:** `web/dashboard.py` only (view-model flag + renderer button). Tests already cover the
+dashboard renderer via a fake `st`; add one more assertion.
+
+```text
+You are WS 8B for CareerEngine. Add a "Find jobs" button to the dashboard so Job Discovery is
+reachable from the landing page.
+
+Stay in: web/dashboard.py (add DashboardView.can_find_jobs: bool = True field; add button in
+render_dashboard), and the existing dashboard tests in tests/test_nodes.py (or wherever the
+render_dashboard / build_dashboard_view tests live — check with grep).
+
+Scope:
+- Add a `can_find_jobs: bool = True` field to DashboardView (mirrors the existing can_tailor
+  invariant; always True; never gates).
+- In render_dashboard, after the "Tailor a resume" button, add:
+    st.button("Find jobs", on_click=lambda: st.session_state.__setitem__("view", "jobs"))
+  The on_click pattern is identical to the existing Grill and Tailor buttons.
+- Add a test asserting: render_dashboard emits a "Find jobs" button; clicking it sets view=jobs.
+
+Acceptance criteria (named tests required):
+- test_dashboard_find_jobs_button_present: a rendered DashboardView has a "Find jobs" button.
+- test_dashboard_find_jobs_routes_to_jobs_view: the button's on_click sets session_state["view"] = "jobs".
+- Existing dashboard tests remain green (no regression).
+
+DoD:
+- make check green.
+- No contract change.
+- Report READY FOR REVIEW with criterion→test mapping.
+```
+
+---
+
+### ⬜ 8C — Wire the pending-action sweep (Cloud Run Job approach)
+
+> Read first: `jobs/pending_action_sweep.py`, `jobs/sweep_endpoint.py`, `main.py` (existing CLI
+> commands pattern), `infrastructure/modules/` (Cloud Run + Scheduler modules),
+> `infrastructure/envs/dev/main.tf`, [ARCHITECTURE.md §8](ARCHITECTURE.md).
+
+**What / Why:** `jobs/pending_action_sweep.py` (`run_sweep`) exists and is tested. `jobs/sweep_endpoint.py`
+is a framework-agnostic OIDC-verified HTTP handler built to be mounted behind a route — but nothing mounts
+it, so Cloud Scheduler gets 404s. Rather than add an HTTP framework alongside Streamlit, the cleaner
+approach is a **Cloud Run Job** (a one-shot container run, not a persistent service). Cloud Scheduler can
+trigger a Cloud Run Job via the Jobs Execute API with standard service-account IAM auth — no OIDC token
+exchange, no HTTP server required. The existing `jobs/sweep_endpoint.py` is retained (not deleted) as a
+secondary HTTP-triggered path, but it is no longer the primary wiring.
+
+**Design:**
+- Add `career-engine sweep` CLI command in `main.py` → `jobs/sweep_cli.py` (thin, mirrors `discovery/cli.py`).
+  Calls `run_sweep(store=FirestoreWorkspaceStore(), today=date.today().isoformat())` and exits 0/1.
+- Add a `jobs/sweep_cli.py` module (the testable core — resolves store, calls `run_sweep`, logs counts).
+- In Terraform: add a Cloud Run Job resource (`google_cloud_run_v2_job`) in the scheduler module (or a
+  new `sweep_job` module) that runs the same Docker image with `command: ["career-engine", "sweep"]`.
+  Update the Scheduler job from a `pubsub` / HTTP push target to a Cloud Run Jobs execute target
+  (`google_cloud_scheduler_job` with `http_target` pointing to the Jobs Execute API endpoint, SA-authed).
+- No new container image needed — the existing `Dockerfile` already installs the package.
+
+```text
+You are WS 8C for CareerEngine. Wire the pending-action sweep so Cloud Scheduler actually triggers it.
+
+Approach: Cloud Run Job (not HTTP endpoint). Add a `career-engine sweep` CLI command, then update
+Terraform to run it as a Cloud Run Job on schedule.
+
+Stay in: main.py (add sweep command), jobs/sweep_cli.py (new — the testable core), tests/ (new
+test for the CLI + store integration), infrastructure/modules/scheduler/ or a new sweep_job module,
+infrastructure/envs/dev/main.tf (add the job + scheduler wiring).
+
+Do NOT delete jobs/sweep_endpoint.py — keep it as an alternative HTTP-triggered path with its doc comment.
+Do NOT modify jobs/pending_action_sweep.py (the pure logic is already correct).
+
+Scope:
+  CLI:
+  - Add `career-engine sweep` in main.py (parallel to `career-engine discover`).
+  - jobs/sweep_cli.py: resolve_sweep_store() (Firestore, with loud in-memory fallback), run_sweep_command()
+    (calls run_sweep, logs "Swept N workspaces, M actions triggered", returns counts). Pure + testable.
+  Terraform:
+  - Add a Cloud Run Job resource that runs the same image with ["career-engine", "sweep"] as the command.
+  - Update the Cloud Scheduler job to target the Cloud Run Jobs Execute API endpoint (POST
+    https://run.googleapis.com/v2/projects/{project}/locations/{region}/jobs/{job}:run) with the
+    deployer/scheduler SA having roles/run.invoker on the job.
+  - make tf-check green in envs/dev.
+
+Acceptance criteria (named tests required):
+  - test_sweep_cli_calls_run_sweep: resolve_sweep_store() returns a store; run_sweep_command() calls
+    run_sweep with it and returns (workspaces_processed, actions_triggered) counts.
+  - test_sweep_cli_store_fallback: if Firestore construction raises, logs a warning and uses in-memory
+    store (does not crash).
+  - Existing sweep tests (test_pending_action_sweep.py, test_jobs_handlers.py) remain green.
+  - make tf-check green.
+
+DoD:
+  - make check green (including new sweep CLI tests).
+  - make tf-check green.
+  - No contract change.
+  - jobs/sweep_endpoint.py retained; doc comment updated to note the Cloud Run Job is the primary path.
+  - Report READY FOR REVIEW with criterion→test mapping.
+```
+
+---
+
+### ⬜ 8D — Multi-user model-client isolation (design-first)
+
+> Read first: `workflows/nodes.py` (the `_client_factory` global, `set_model_client_factory`,
+> `_get_model_client`), `web/async_runner.py` (the `run_async` loop), `web/grill_ui.py`
+> (how the web grill injects a BYOK key today).
+
+**The problem:** `_client_factory` in `workflows/nodes.py` is a module-level `Callable[[], ModelClient]`
+that `set_model_client_factory()` mutates globally. Any caller that sets it races with every other
+concurrent request. Cloud Run's default concurrency (multiple simultaneous requests per instance) means
+user A's BYOK key can be used to generate user B's résumé content — a privacy and billing violation.
+
+**Proposed design (for user review before coding):**
+
+```
+ContextVar approach:
+
+1. Add to workflows/nodes.py:
+     _factory_ctx: contextvars.ContextVar[Callable[[], ModelClient] | None] = \
+         contextvars.ContextVar("_model_client_factory", default=None)
+
+2. set_model_client_factory_for_context(factory) sets _factory_ctx.set(factory).
+   The existing set_model_client_factory(factory) becomes a module-level-only setter
+   (used by tests + CLI where there is no concurrency) — kept for backward compat.
+
+3. _get_model_client() checks _factory_ctx.get() first; falls back to _client_factory().
+
+4. In web/async_runner.run_async (or wherever the coroutine is submitted to the
+   background loop): capture ctx = contextvars.copy_context() at submission time, then
+   run the coroutine inside ctx.run(...). This propagates the caller's ContextVar state
+   into the background task.
+   Concretely: replace loop.run_until_complete(coro) with a Future + ctx.run approach,
+   or use asyncio.Task with copy_context() explicitly.
+
+5. web/grill_ui.py calls set_model_client_factory_for_context(byok_factory) before
+   calling run_async.
+
+No contract change. The test helpers that call set_model_client_factory remain unchanged
+(they run serially with no concurrency).
+```
+
+⚠️ **This ticket requires the user to review and sign off on the design above before any code is
+written.** The risk is subtle: if `run_async`'s context propagation is wrong, the BYOK key silently
+fails to propagate and every grill falls back to the default (Free) client — a regression harder to
+notice than a crash. Do NOT proceed with implementation until the design is confirmed.
+
+```text
+You are WS 8D for CareerEngine. Fix the process-global model-client factory so concurrent web users
+cannot bleed BYOK keys across requests.
+
+⚠️ READ THE DESIGN NOTE in GROOMING.md §8D IN FULL before writing any code. Implement exactly the
+ContextVar approach described there — do not improvise.
+
+Stay in: workflows/nodes.py (add ContextVar, add set_model_client_factory_for_context, update
+_get_model_client), web/async_runner.py (propagate context into background task), web/grill_ui.py
+(call the new context setter), tests/test_nodes.py (new isolation tests).
+
+Scope (strict — do NOT touch grill nodes, graph edges, or any other web/* files):
+- Add _factory_ctx ContextVar to workflows/nodes.py.
+- Add set_model_client_factory_for_context(factory) (context-local override).
+- _get_model_client(): check _factory_ctx.get() first, fall back to _client_factory().
+- web/async_runner.run_async: capture ctx = contextvars.copy_context() before submitting;
+  ensure the coroutine runs within that captured context.
+- web/grill_ui.py: replace any set_model_client_factory call with set_model_client_factory_for_context.
+- Keep the module-level set_model_client_factory for CLI/test backward compat.
+
+Acceptance criteria (named tests required):
+- test_context_factory_isolation: two concurrent tasks each setting different factories via
+  set_model_client_factory_for_context get different clients (no bleed).
+- test_context_factory_fallback: a context with no override falls back to the module-level factory.
+- test_run_async_propagates_context: a factory set before run_async() is visible inside the
+  submitted coroutine.
+- Existing tests that use set_model_client_factory() remain green (no regression).
+
+DoD:
+- make check green.
+- No contract change.
+- No changes to graph nodes, routing logic, or existing API surfaces beyond the new context setter.
+- Report READY FOR REVIEW with criterion→test mapping and a written explanation of how copy_context
+  propagation was verified.
+```
+
+---
+
+### ◐ 8E — Deployer-SA least-privilege curation (Terraform-only)
+
+> Read first: [SECURITY.md](SECURITY.md) "Required next review" section; `infrastructure/modules/`.
+
+**What:** The `career-engine-deployer` service account was granted broad project-level roles to get the
+initial deploy working. Narrow them to only what each Terraform resource actually needs (Cloud Run deploy,
+Artifact Registry push, Firestore rules, Secret Manager reads for the runtime SA, etc.).
+
+**This is Terraform-only** (`infrastructure/` files). No application code changes.
+
+Acceptance criteria:
+- `make tf-check` green in both envs.
+- The deployer SA's bound roles are listed in [SECURITY.md](SECURITY.md) "Post-8E role inventory" section.
+- A `terraform plan` on a fresh environment shows no diff from the stated desired state.
+
+DoD:
+- `make tf-check` green.
+- [SECURITY.md](SECURITY.md) updated with the role inventory.
+- No application code changes.
+
+---
+
+### ⬜ 8F — HITL TTL/override dashboard (lower priority; not yet groomed)
+
+**What:** A dedicated view for managing discovery HITL decisions: list dismissed companies (from
+`InteractionLedger.rejected_companies`), allow un-dismissing a company (reverse a "Not interested"),
+optionally show when a dismissal was added. A full TTL (auto-expiry) mechanism on the `rejected_companies`
+list is also roadmap but deferred to a separate sub-ticket once the base view ships.
+
+**Dependencies:** none on the code side; the `LedgerStore` already has `add_rejected_company` + the
+`rejected_companies` set on the ledger. Needs a `remove_rejected_company` method on `LedgerStore`.
+
+**Status:** ⬜ To groom — the user flow and Firestore path need to be specified before a build spec is written.
+
+---
+
+### Phase 8 exit gate
+
+Phase 8 is complete when:
+- The deployed dev app shows the Jobs nav, preferences form, and "Find jobs" button; and the dashboard
+  has a "Find jobs" action button (8A + 8B).
+- Cloud Scheduler successfully triggers a sweep run (verified in Cloud Logging) with no 404 (8C).
+- A written concurrency test proves two simultaneous grill contexts use different model clients (8D).
+- `make check` green and `make tf-check` green at every merged PR.
+- [SECURITY.md](SECURITY.md) has a "Post-8E role inventory" section (8E).
+

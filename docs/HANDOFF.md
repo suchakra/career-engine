@@ -1,31 +1,35 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-06)
-**`master` at contract v2.8.0. Web app DEPLOYED & LIVE on Cloud Run (dev): Google login + BYOK web grill +
-résumé upload + Portfolio Workbench + real ATS Tailor (+ pin-for-tailoring, master résumé download,
-save-as-application). `make check` green.**
-**Phase 5 COMPLETE + security-reviewed:** ✅ Phase 6 A2A discovery (PR #30, `v2.5.0`); ✅ 5B
-save-as-application (PR #31); ✅ persist-Contact (PR #32, `v2.6.0`); ✅ 5C one renderer + master résumé
-download (PR #33); ✅ 4E pin-for-tailoring (PR #34, `v2.7.0`); ✅ pre-GA security review (PR #35);
-✅ config `.env` fix (PR #37).
-**✅ Phase 7 COMPLETE — Job Discovery is now a web product feature** ([ARCHITECTURE §15.6](ARCHITECTURE.md)):
-✅ 7A persisted discovery preferences (`UserWorkspace.discovery_preferences`, **`v2.8.0`**, PR #38);
-✅ 7B Jobs view (nav + live loop via `run_async` + ranked matches, PR #39); ✅ 7C "Tailor to this job".
-Discovery is now **grill → Jobs → tailor** in the UI (was CLI-only); no engine change.
-**✅ Post-Phase-7 roadmap (this session):** ✅ HITL **"Not interested"** — dismiss a company, persisted +
-hard-rejected on future runs (PR #40, atomic Firestore `ArrayUnion`); ✅ **real out-of-process MCP transport**
-`StdioMcpClient` — spawns the server as a separate process over stdio, both transports raise identically on
-tool errors (PR #41; §15.5); ✅ HITL **"Keep this"** — promote a for-review match to saved (PR #42). Also made
-`web/streamlit_app.py` **import-safe** (`main()` gated on `streamlit.runtime.exists()`) → handlers are now
-unit-testable. **638 tests + 1 skipped (opt-in live stdio).**
-**▶ NEXT roadmap (design-first, lower priority):** wire the async pending-action-sweep HTTP endpoint (Cloud
-Scheduler 404s today); deployer-SA least-privilege curation; **multi-user model-client isolation** (the
-process-global factory in `workflows/nodes.py` can bleed one user's BYOK key into another's inference under
-concurrency — needs a careful design given the `run_async` background-loop; **do NOT autonomously refactor
-the working grill/jobs/tailor floor**). Full HITL override/TTL dashboard; remote/network A2A; Podman sandbox.
+## 👉 YOU ARE HERE (updated 2026-07-06 — handoff to Copilot; Phase 8 grooming session)
+**`master` clean · contract v2.8.0 · 639 tests (1 skipped: opt-in live stdio) · no open PRs.**
+**Phases 1–7 COMPLETE.** Everything through PR #42 is on master and `make check` green.
+
+**What shipped:**
+- Phases 1–5: core grill → tailor loop, web app, portfolio workbench, ATS-safe résumé, security review.
+- Phase 6 (PR #30, v2.5.0): two-agent A2A job discovery (`career-engine discover` CLI).
+- Phase 7 (PRs #38–39, v2.8.0): discovery as a web product feature — Jobs nav view, persisted rubric,
+  ranked matches, "Tailor to this job" hand-off, HITL "Not interested" (PR #40), real out-of-process
+  `StdioMcpClient` (PR #41), HITL "Keep this" (PR #42), `streamlit_app.py` made import-safe.
+
+**⚠️ Deploy gap (most immediate action):** The Jobs view + all HITL controls (PRs #38–42) are **fully
+wired in the codebase** — `web/navigation.py` has the "Jobs" nav item, `web/streamlit_app.py` has the
+full `_render_jobs` routing + handler, `web/jobs.py` + `web/jobs_runner.py` are complete — but the
+**Cloud Run dev app has NOT been redeployed** since these PRs merged. The live URL shows an older build.
+Redeploy command: `gh workflow run deploy.yml --ref master -f environment=dev`
+
+**▶ NEXT — Phase 8 (operational hardening).** All tickets are groomed in [GROOMING.md §Phase 8](GROOMING.md).
+Priority order: (1) 8A redeploy → unblocks UI verification; (2) 8B dashboard "Find jobs" CTA; (3) 8C
+wire sweep endpoint (Cloud Run Job approach); (4) 8D multi-user model-client isolation (**design-first,
+do NOT touch the grill/jobs/tailor floor without a written design — `_client_factory` in `workflows/nodes.py`
+is process-global and can bleed BYOK keys under concurrency**); (5) 8E deployer-SA least-privilege;
+(6) 8F HITL TTL/override dashboard.
 Capstone packaging (video/writeup/README/diagram) is user-owned and deferred.
+
 **Doc-accuracy note for the submission (`demo_output/`):** the MCP-separate-process claim is now TRUE (PR #41);
 the **async-sweep-as-live** claim still needs softening (sweep is built+tested but NOT wired/running — Scheduler 404s).
+
+---
+*Historical session notes follow (most recent first):*
 
 **Latest this session:**
 - **DURABLE WEB SESSIONS (data-loss root cause fixed):** the web grill was on `InMemorySessionService`
