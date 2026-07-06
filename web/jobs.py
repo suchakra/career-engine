@@ -122,9 +122,11 @@ def build_jobs_view(
                 accepted_jobs.append(job.model_copy(update={"match_status": MatchStatus.ACCEPTED}))
             else:
                 review_jobs.append(job)
+        sorted_accepted = sorted(accepted_jobs, key=lambda j: len(j.ai_rationale or ""), reverse=True)
+        sorted_review = sorted(review_jobs, key=lambda j: len(j.ai_rationale or ""), reverse=True)
         return JobsView(
-            accepted=[_card(j) for j in accepted_jobs],
-            for_review=[_card(j) for j in review_jobs],
+            accepted=[_card(j) for j in sorted_accepted],
+            for_review=[_card(j) for j in sorted_review],
             iterations=result.iterations,
             hard_rejected_count=result.hard_rejected_count,
             ran=True,
@@ -207,14 +209,16 @@ def render_jobs(
 
     if view.accepted:
         st.subheader("✅ Strong matches")
-        for card in view.accepted:
-            st.divider()
-            _render_card(card, st=st, on_tailor=on_tailor, on_reject=on_reject)
+        with st.container(height=420):
+            for card in view.accepted:
+                st.divider()
+                _render_card(card, st=st, on_tailor=on_tailor, on_reject=on_reject)
     if view.for_review:
         st.subheader("🟡 For review")
-        for card in view.for_review:
-            st.divider()
-            _render_card(card, st=st, on_tailor=on_tailor, on_reject=on_reject, on_keep=on_keep)
+        with st.container(height=420):
+            for card in view.for_review:
+                st.divider()
+                _render_card(card, st=st, on_tailor=on_tailor, on_reject=on_reject, on_keep=on_keep)
 
 
 __all__ = ["JobCard", "JobsView", "build_jobs_view", "job_tailor_index", "render_jobs"]
