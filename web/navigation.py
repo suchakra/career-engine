@@ -27,6 +27,7 @@ NAV_ITEMS: tuple[tuple[str, str], ...] = (
     ("dashboard", "Dashboard"),
     ("portfolio", "Portfolio"),
     ("grill", "Grill"),
+    ("jobs", "Jobs"),
     ("tailor", "Tailor"),
 )
 _NAV_KEYS = frozenset(key for key, _ in NAV_ITEMS)
