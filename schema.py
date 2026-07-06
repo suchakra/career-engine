@@ -446,8 +446,12 @@ class UserWorkspace(BaseModel):
         default_factory=UserProfile,
         description="Persisted résumé-header identity (additive v2.6.0)",
     )
-    # Forward-ref to SessionPreferences (defined later in the discovery section);
-    # UserWorkspace.model_rebuild() is called right after that class to resolve it.
+    # Forward-ref to SessionPreferences (defined later in the discovery section;
+    # the annotation is lazy via `from __future__ import annotations`).
+    # UserWorkspace.model_rebuild() below that class resolves it. The lambda is
+    # load-bearing: `default_factory=SessionPreferences` (bare name) would raise
+    # NameError here — the future import stringifies annotations, NOT default-value
+    # expressions, and the name isn't bound yet. Do not "simplify" it.
     discovery_preferences: SessionPreferences = Field(
         default_factory=lambda: SessionPreferences(),
         description="Persisted job-discovery rubric (additive v2.8.0)",

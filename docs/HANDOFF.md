@@ -1,14 +1,18 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-05)
-**`master` at contract v2.7.0. Web app DEPLOYED & LIVE on Cloud Run (dev): Google login + BYOK web grill +
+## 👉 YOU ARE HERE (updated 2026-07-06)
+**`master` at contract v2.8.0. Web app DEPLOYED & LIVE on Cloud Run (dev): Google login + BYOK web grill +
 résumé upload + Portfolio Workbench + real ATS Tailor (+ pin-for-tailoring, master résumé download,
-save-as-application). `make check` green (585 tests).**
-**Product work — Phase 5 sequence:** ✅ Phase 6 A2A discovery (PR #30, `contract-v2.5.0`);
-✅ 5B save-as-application (PR #31); ✅ persist-Contact (PR #32, `contract-v2.6.0`); ✅ 5C one renderer +
-master résumé download (PR #33); ✅ 4E pin-for-tailoring (PR #34, `contract-v2.7.0`). **Only remaining Phase 5
-item: pre-GA /security-review** (web OIDC login + BYOK key storage + deployer-SA roles) — in progress.
-Capstone packaging (video/writeup/README/diagram) is user-owned and deferred.
+save-as-application). `make check` green.**
+**Phase 5 COMPLETE + security-reviewed:** ✅ Phase 6 A2A discovery (PR #30, `v2.5.0`); ✅ 5B
+save-as-application (PR #31); ✅ persist-Contact (PR #32, `v2.6.0`); ✅ 5C one renderer + master résumé
+download (PR #33); ✅ 4E pin-for-tailoring (PR #34, `v2.7.0`); ✅ pre-GA security review (PR #35);
+✅ config `.env` fix (PR #37).
+**▶ Phase 7 IN PROGRESS — Job Discovery web surface** (bring the CLI-only two-agent loop into the web UI;
+[GROOMING.md Phase 7](GROOMING.md)): ✅ **7A persist discovery preferences** (`UserWorkspace.discovery_preferences`,
+**`v2.8.0`**, PR #38); ⏳ 7B Jobs view (runner + view-model + renderer + nav + wiring); ⏳ 7C "Tailor to this job".
+**Note:** discovery is still CLI-only until 7B/7C land the web view — full ARCHITECTURE/PROGRESS reconciliation
+happens at the Phase 7 exit gate. Capstone packaging (video/writeup/README/diagram) is user-owned and deferred.
 
 **Latest this session:**
 - **DURABLE WEB SESSIONS (data-loss root cause fixed):** the web grill was on `InMemorySessionService`
