@@ -88,8 +88,16 @@ def test_resume_template_has_education_section() -> None:
 
 
 def test_resume_renders_to_pdf_without_error() -> None:
-    """PDF render function returns non-empty bytes for a StructuredResume fixture."""
-    from web.resume_render import structured_to_pdf_bytes
+    """classic_resume.html renders to a non-empty PDF via WeasyPrint."""
+    try:
+        import weasyprint
+    except ImportError:
+        import pytest
+        pytest.skip("weasyprint not installed")
 
-    pdf_bytes = structured_to_pdf_bytes(_FIXTURE_RESUME)
+    html = _render_template(_FIXTURE_RESUME)
+    pdf_bytes: bytes = weasyprint.HTML(
+        string=html,
+        base_url=str(_TEMPLATE_DIR),
+    ).write_pdf()
     assert len(pdf_bytes) > 0
