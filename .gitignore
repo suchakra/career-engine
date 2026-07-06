@@ -38,3 +38,4 @@ demo_output/
 # Streamlit auth secrets (never commit)
 .streamlit/secrets.toml
 .terraform.lock.hcl
+.claude/

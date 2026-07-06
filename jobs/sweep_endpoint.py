@@ -1,9 +1,13 @@
-"""HTTP entrypoint for the 14-day pending-action sweep (Phase 2 wiring).
+"""HTTP entrypoint for the 14-day pending-action sweep.
 
-Cloud Scheduler POSTs to a Cloud Run endpoint with an **OIDC token** whose
-audience is the service base URL (see ``infrastructure/modules/scheduler``). This
-module is the framework-agnostic core that a thin adapter (Flask / FastAPI /
-functions-framework) mounts:
+**Primary execution path (WS 8C+): Cloud Scheduler → Cloud Run Job → `career-engine sweep`.**
+See ``jobs/sweep_cli.py`` and ``infrastructure/modules/cloud_run_job/``.
+
+This module is retained as an **alternative trigger** (HTTP path). Cloud Scheduler
+POSTs to a Cloud Run endpoint with an **OIDC token** whose audience is the service
+base URL (see ``infrastructure/modules/scheduler``). This module is the
+framework-agnostic core that a thin adapter (Flask / FastAPI / functions-framework)
+mounts:
 
     resp = handle_sweep_request(
         authorization=request.headers.get("Authorization"),
