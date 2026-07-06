@@ -516,10 +516,10 @@ contract break**.
 
 ## Phase 7 — Job Discovery web surface (bring discovery from CLI into the product UI)
 
-> **Status:** groomed 2026-07-06, building now. Turns the Phase 6 two-agent discovery loop (CLI-only,
-> `career-engine discover`) into a **product feature**: a "Jobs" view in the web app. Spec:
-> [ARCHITECTURE.md §15](ARCHITECTURE.md). Reuses the discovery engine wholesale (`discovery/`); this phase
-> is the **web surface + preference persistence** around it — no change to the agents/loop.
+> **Status: ✅ COMPLETE 2026-07-06** (7A PR #38 · 7B PR #39 · 7C). Turned the Phase 6 two-agent discovery
+> loop (was CLI-only, `career-engine discover`) into a **product feature**: the "Jobs" view in the web app.
+> Spec: [ARCHITECTURE.md §15.6](ARCHITECTURE.md). Reused the discovery engine wholesale (`discovery/`); this
+> phase was the **web surface + preference persistence** around it — no change to the agents/loop.
 
 ### The flow (user journey)
 1. Signed-in user clicks **"Jobs"** in the sidebar (new nav entry).

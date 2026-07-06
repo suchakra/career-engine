@@ -8,11 +8,11 @@ save-as-application). `make check` green.**
 save-as-application (PR #31); ✅ persist-Contact (PR #32, `v2.6.0`); ✅ 5C one renderer + master résumé
 download (PR #33); ✅ 4E pin-for-tailoring (PR #34, `v2.7.0`); ✅ pre-GA security review (PR #35);
 ✅ config `.env` fix (PR #37).
-**▶ Phase 7 IN PROGRESS — Job Discovery web surface** (bring the CLI-only two-agent loop into the web UI;
-[GROOMING.md Phase 7](GROOMING.md)): ✅ **7A persist discovery preferences** (`UserWorkspace.discovery_preferences`,
-**`v2.8.0`**, PR #38); ⏳ 7B Jobs view (runner + view-model + renderer + nav + wiring); ⏳ 7C "Tailor to this job".
-**Note:** discovery is still CLI-only until 7B/7C land the web view — full ARCHITECTURE/PROGRESS reconciliation
-happens at the Phase 7 exit gate. Capstone packaging (video/writeup/README/diagram) is user-owned and deferred.
+**✅ Phase 7 COMPLETE — Job Discovery is now a web product feature** ([ARCHITECTURE §15.6](ARCHITECTURE.md)):
+✅ 7A persisted discovery preferences (`UserWorkspace.discovery_preferences`, **`v2.8.0`**, PR #38);
+✅ 7B Jobs view (nav + live loop via `run_async` + ranked matches, PR #39); ✅ 7C "Tailor to this job".
+Discovery is now **grill → Jobs → tailor** in the UI (was CLI-only); no engine change. Capstone packaging
+(video/writeup/README/diagram) is user-owned and deferred.
 
 **Latest this session:**
 - **DURABLE WEB SESSIONS (data-loss root cause fixed):** the web grill was on `InMemorySessionService`

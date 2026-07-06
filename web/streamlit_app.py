@@ -145,6 +145,9 @@ def main() -> None:
     if view_name == "portfolio":
         _render_portfolio(user_id=user_id, today=today)
         return
+    if view_name == "jobs":
+        _render_jobs(user_id=user_id)
+        return
 
     state = _load_discovery_state(user_id=user_id, today=today)
     view = build_dashboard_view(state, workspace, today=today)
@@ -336,6 +339,139 @@ def _render_master_resume_download(*, user_id: str, state: CareerEngineState) ->
         )
 
 
+@st.cache_resource(show_spinner=False)
+def _jobs_ledger_store() -> Any:
+    """Cached discovery ledger store (Firestore, or in-memory fallback)."""
+    from web.jobs_runner import resolve_ledger_store
+
+    return resolve_ledger_store(use_firestore=True)
+
+
+def _workspace_store() -> Any:
+    """Return a FRESH workspace store for discovery-preference load/save.
+
+    MUST NOT be cached: ``FirestoreWorkspaceStore`` wraps an async Firestore client
+    in a per-call ``asyncio.run()``, so caching the instance would bind its gRPC
+    channel to the first loop and every later call would hit "Event loop is closed"
+    (matches how the rest of this file constructs it fresh, e.g. ``_load_workspace``).
+    """
+    from database.workspace_store import FirestoreWorkspaceStore
+
+    return FirestoreWorkspaceStore()
+
+
+def _prefs_from_session(ss: Any) -> Any:
+    """Build a SessionPreferences from the Jobs preference text areas."""
+    from schema import SessionPreferences
+
+    def _lines(key: str) -> list[str]:
+        return [x.strip() for x in str(ss.get(key, "")).splitlines() if x.strip()]
+
+    return SessionPreferences(
+        target_roles=_lines("jobs_target_roles"),
+        nice_to_haves=_lines("jobs_nice"),
+        dealbreakers=_lines("jobs_deal"),
+    )
+
+
+def _render_jobs(*, user_id: str) -> None:
+    """Job Discovery view (7B): preferences → live two-agent loop → ranked matches."""
+    from web.jobs import build_jobs_view, render_jobs
+    from web.jobs_runner import build_web_primary, run_web_discovery
+
+    st.title("Find jobs")
+    key = _resolve_byok_key(user_id)
+    if not key:
+        st.info(
+            "Job discovery runs on **your Gemini key** — add it once in **Grill Me** "
+            "(sidebar → Grill), then come back here."
+        )
+        return
+
+    ss = st.session_state
+    store = _jobs_ledger_store()
+
+    # Prefill the preference form from the saved rubric (once per session).
+    if not ss.get("_jobs_prefs_loaded"):
+        ss["_jobs_prefs_loaded"] = True
+        try:
+            from web.preferences_store import load_discovery_preferences
+
+            saved = load_discovery_preferences(_workspace_store(), user_id=user_id)
+            ss.setdefault("jobs_target_roles", "\n".join(saved.target_roles))
+            ss.setdefault("jobs_nice", "\n".join(saved.nice_to_haves))
+            ss.setdefault("jobs_deal", "\n".join(saved.dealbreakers))
+        except Exception:
+            pass  # no saved prefs / backend hiccup → empty form
+
+    st.caption(
+        "A stateless Scout pulls live postings; your Primary agent ranks each against "
+        "your rubric (Pro-tier, on your key)."
+    )
+    # Explicit widget keys → Streamlit owns the state under these keys (the prefill
+    # above seeds them via setdefault); no manual value=/mirror-assign (avoids drift).
+    with st.expander("Your job preferences", expanded=not ss.get("jobs_target_roles")):
+        st.text_area("Target roles (one per line)", key="jobs_target_roles")
+        st.text_area("Nice to have (one per line)", key="jobs_nice")
+        st.text_area("Dealbreakers (one per line)", key="jobs_deal")
+
+    if st.button("Find jobs", type="primary"):
+        from discovery.scout import Scout
+
+        prefs = _prefs_from_session(ss)
+        # Persist the rubric on run so it's pre-filled next time (best-effort).
+        try:
+            from web.preferences_store import save_discovery_preferences
+
+            save_discovery_preferences(_workspace_store(), user_id=user_id, preferences=prefs)
+        except Exception:
+            pass
+        try:
+            ledger = store.load_ledger(user_id)
+            primary = build_web_primary(
+                api_key=key, preferences=prefs, ledger=ledger, scout=Scout()
+            )
+            with st.spinner("Searching live job boards + evaluating against your rubric…"):
+                ss["jobs_result"] = run_web_discovery(
+                    user_id=user_id, primary=primary, store=store
+                )
+        except Exception as exc:  # network / model / backend hiccup — degrade, don't crash
+            st.error(f"Couldn't run discovery just now: {exc}")
+
+    result = ss.get("jobs_result")
+    prior = None
+    if result is None:  # initial entry → show previously-found matches
+        try:
+            prior = store.list_accepted(user_id)
+        except Exception:
+            prior = []
+    # Index the shown jobs so the per-job "Tailor to this" button (7C) can hand the
+    # posting's JD to the Tailor view.
+    from web.jobs import job_tailor_index
+
+    shown = (result.accepted + result.soft_rejected) if result is not None else (prior or [])
+    ss["_jobs_tailor_index"] = job_tailor_index(shown)
+    st.divider()
+    render_jobs(build_jobs_view(result, prior=prior), st=st, on_tailor=_tailor_from_job)
+
+
+def _tailor_from_job(job_id: str) -> None:
+    """Hand a discovered job's JD to the Tailor view and route there (7C).
+
+    Runs as an on_click callback (before the rerun). Looks the JD up from the
+    index built in :func:`_render_jobs`; a miss is a no-op.
+    """
+    ss = st.session_state
+    entry = ss.get("_jobs_tailor_index", {}).get(job_id)
+    if not entry:
+        return
+    label, jd_text = entry
+    ss["tailor_jd_text_input"] = jd_text  # pre-fills the keyed JD text area
+    ss["tailor_from_job"] = label
+    ss.pop("tailor_resume", None)  # don't show a stale prior résumé
+    ss["view"] = "tailor"
+
+
 def _resolve_byok_key(user_id: str) -> str | None:
     """Return the user's BYOK Gemini key: session cache → Secret Manager (set once).
 
@@ -481,8 +617,19 @@ def _render_tailor(*, user_id: str, today: str) -> None:
         "résumé: JD-aligned skills + your strongest quantified achievements grouped by "
         "role. (Stronger the more you've grilled; tailoring is never blocked.)"
     )
+    from_job = ss.pop("tailor_from_job", "")
+    if from_job:
+        st.success(
+            f"Tailoring to **{from_job}** (from your Jobs matches). Edit the JD below if "
+            "you like, then tailor."
+        )
     jd_url = st.text_input("Job posting URL (optional)", placeholder="https://…/careers/123")
-    jd = st.text_area("…or paste the job description", height=200, placeholder="Paste the JD text…")
+    jd = st.text_area(
+        "…or paste the job description",
+        height=200,
+        key="tailor_jd_text_input",
+        placeholder="Paste the JD text…",
+    )
     if st.button("Tailor my résumé", type="primary"):
         client = GeminiModelClient(api_key=key)
         _install_model_client(client)

@@ -32,3 +32,16 @@ def test_users_are_isolated() -> None:
     store = InMemoryLedgerStore()
     store.record_accepted("u1", [_job("1")])
     assert store.load_ledger("u2").already_applied_ids == []
+
+
+def test_list_accepted_returns_stored_jobs() -> None:
+    store = InMemoryLedgerStore()
+    store.record_accepted("u1", [_job("1"), _job("2")])
+    assert {j.job_id for j in store.list_accepted("u1")} == {
+        make_job_id("remotive", "1"),
+        make_job_id("remotive", "2"),
+    }
+
+
+def test_list_accepted_empty_for_new_user() -> None:
+    assert InMemoryLedgerStore().list_accepted("nobody") == []

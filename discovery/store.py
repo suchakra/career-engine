@@ -33,6 +33,10 @@ class LedgerStore(Protocol):
         """Persist accepted jobs idempotently; return the count of *new* writes."""
         ...
 
+    def list_accepted(self, user_id: str) -> list[JobOpportunity]:
+        """Return the user's previously accepted jobs (for display on entry)."""
+        ...
+
 
 class InMemoryLedgerStore:
     """Dict-backed store for dev / CI / demo (no persistence across processes)."""
@@ -54,6 +58,10 @@ class InMemoryLedgerStore:
                 written += 1
             bucket[job.job_id] = job
         return written
+
+    def list_accepted(self, user_id: str) -> list[JobOpportunity]:
+        """Return the user's stored jobs (insertion order)."""
+        return list(self._jobs.get(user_id, {}).values())
 
 
 class FirestoreLedgerStore:
@@ -91,3 +99,20 @@ class FirestoreLedgerStore:
                 written += 1
             ref.set(job.model_dump(mode="json"), merge=True)
         return written
+
+    def list_accepted(self, user_id: str) -> list[JobOpportunity]:
+        """Read all stored job docs back into JobOpportunity objects.
+
+        Resilient per-record: a single malformed doc is skipped (falling back to
+        the doc id as job_id when that's all that's missing) rather than blanking
+        the whole list — one bad record shouldn't hide every prior match.
+        """
+        out: list[JobOpportunity] = []
+        for doc in self._jobs_col(user_id).stream():
+            data = doc.to_dict() or {}
+            data.setdefault("job_id", doc.id)  # doc id IS the job_id (see record_accepted)
+            try:
+                out.append(JobOpportunity.model_validate(data))
+            except ValueError:
+                continue
+        return out
