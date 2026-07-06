@@ -10,7 +10,7 @@ from typing import Any
 
 from discovery.primary import DiscoveryResult
 from schema import EmploymentType, JobMetadata, JobOpportunity, MatchStatus, WorkModel, make_job_id
-from web.jobs import JobsView, build_jobs_view, render_jobs
+from web.jobs import JobsView, build_jobs_view, job_tailor_index, render_jobs
 
 
 class FakeSt:
@@ -125,3 +125,19 @@ class TestRenderJobs:
 
 def test_jobs_view_default_is_empty() -> None:
     assert JobsView().is_empty is True
+
+
+class TestJobTailorIndex:
+    def test_maps_job_id_to_label_and_jd(self) -> None:
+        job = JobOpportunity(
+            job_id=make_job_id("remotive", "1"),
+            metadata=JobMetadata(title="Fractional CTO", company="Acme"),
+            raw_description="Lead cloud + AI.",
+        )
+        index = job_tailor_index([job])
+        label, jd = index[make_job_id("remotive", "1")]
+        assert label == "Fractional CTO — Acme"
+        assert jd == "Lead cloud + AI."
+
+    def test_empty_input(self) -> None:
+        assert job_tailor_index([]) == {}

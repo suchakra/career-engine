@@ -14,7 +14,7 @@ two-layer, UI-logic-only pattern as :mod:`web.portfolio` / :mod:`web.dashboard`:
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -57,6 +57,19 @@ class JobsView:
     def is_empty(self) -> bool:
         """True when there are no accepted or for-review cards to show."""
         return not (self.accepted or self.for_review)
+
+
+def job_tailor_index(jobs: Iterable[JobOpportunity]) -> dict[str, tuple[str, str]]:
+    """Map job_id → (label, JD text) for the "Tailor to this job" hand-off (7C).
+
+    ``label`` is a human "Title — Company"; the JD text is the posting's cleaned
+    ``raw_description`` that the Tailor consumes. Pure — no Streamlit.
+    """
+    index: dict[str, tuple[str, str]] = {}
+    for job in jobs:
+        label = " — ".join(p for p in (job.metadata.title, job.metadata.company) if p) or "this role"
+        index[job.job_id] = (label, job.raw_description)
+    return index
 
 
 def _card(job: JobOpportunity) -> JobCard:
@@ -155,4 +168,4 @@ def render_jobs(
             _render_card(card, st=st, on_tailor=on_tailor)
 
 
-__all__ = ["JobCard", "JobsView", "build_jobs_view", "render_jobs"]
+__all__ = ["JobCard", "JobsView", "build_jobs_view", "job_tailor_index", "render_jobs"]

@@ -444,8 +444,31 @@ def _render_jobs(*, user_id: str) -> None:
             prior = store.list_accepted(user_id)
         except Exception:
             prior = []
+    # Index the shown jobs so the per-job "Tailor to this" button (7C) can hand the
+    # posting's JD to the Tailor view.
+    from web.jobs import job_tailor_index
+
+    shown = (result.accepted + result.soft_rejected) if result is not None else (prior or [])
+    ss["_jobs_tailor_index"] = job_tailor_index(shown)
     st.divider()
-    render_jobs(build_jobs_view(result, prior=prior), st=st)
+    render_jobs(build_jobs_view(result, prior=prior), st=st, on_tailor=_tailor_from_job)
+
+
+def _tailor_from_job(job_id: str) -> None:
+    """Hand a discovered job's JD to the Tailor view and route there (7C).
+
+    Runs as an on_click callback (before the rerun). Looks the JD up from the
+    index built in :func:`_render_jobs`; a miss is a no-op.
+    """
+    ss = st.session_state
+    entry = ss.get("_jobs_tailor_index", {}).get(job_id)
+    if not entry:
+        return
+    label, jd_text = entry
+    ss["tailor_jd_text_input"] = jd_text  # pre-fills the keyed JD text area
+    ss["tailor_from_job"] = label
+    ss.pop("tailor_resume", None)  # don't show a stale prior résumé
+    ss["view"] = "tailor"
 
 
 def _resolve_byok_key(user_id: str) -> str | None:
@@ -593,8 +616,19 @@ def _render_tailor(*, user_id: str, today: str) -> None:
         "résumé: JD-aligned skills + your strongest quantified achievements grouped by "
         "role. (Stronger the more you've grilled; tailoring is never blocked.)"
     )
+    from_job = ss.pop("tailor_from_job", "")
+    if from_job:
+        st.success(
+            f"Tailoring to **{from_job}** (from your Jobs matches). Edit the JD below if "
+            "you like, then tailor."
+        )
     jd_url = st.text_input("Job posting URL (optional)", placeholder="https://…/careers/123")
-    jd = st.text_area("…or paste the job description", height=200, placeholder="Paste the JD text…")
+    jd = st.text_area(
+        "…or paste the job description",
+        height=200,
+        key="tailor_jd_text_input",
+        placeholder="Paste the JD text…",
+    )
     if st.button("Tailor my résumé", type="primary"):
         client = GeminiModelClient(api_key=key)
         _install_model_client(client)

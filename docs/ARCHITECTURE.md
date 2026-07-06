@@ -6,9 +6,9 @@
 > Phase 1 + Phase 1.5 (§12) + Phase 2 (web/infra/async) + Phase 4 (Portfolio Workbench, §14) are built &
 > deployed; **Phase 6 two-agent A2A discovery (§15) merged (v2.5.0)**; **Phase 5 COMPLETE + pre-GA
 > security-reviewed** (5A real ATS résumé, 5B save-as-application, persist-Contact v2.6.0, 5C one renderer +
-> master download, 4E pin-for-tailoring v2.7.0). **Phase 7 in progress** — Job Discovery web surface: 7A
-> persisted discovery preferences (**latest contract v2.8.0**); 7B/7C (Jobs view + tailor-to-job) pending, at
-> which point §15 gains the web-surface reconciliation.
+> master download, 4E pin-for-tailoring v2.7.0). **Phase 7 COMPLETE** — Job Discovery is now a web product
+> feature (Jobs view: preferences → live loop → ranked matches → tailor-to-job), **latest contract v2.8.0**;
+> see §15.6.
 > Decisions captured in [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md).
 
 CareerEngine converts raw, multi-decade career histories into quantified, STAR-formatted
@@ -595,9 +595,20 @@ run's ledger so re-runs hard-reject already-seen jobs. The discovered `JobOpport
 exactly the `jd_source` the existing/deployed **Tailor** consumes, so `discover --tailor-session` closes
 **discover → tailor** with no new résumé code.
 
+### 15.6 Web surface — Job Discovery is a product feature (Phase 7)
+Discovery began as a CLI demo (`career-engine discover`); Phase 7 brought it into the web app as a **Jobs
+view** with **no change to the engine** (`discovery/scout.py`/`primary.py`/`job_source.py`/`mcp_server.py`
+are untouched). The web surface adds only: a persisted rubric (`UserWorkspace.discovery_preferences`, v2.8.0,
+`web/preferences_store.py`); a **Jobs** nav view (`web/jobs.py` pure view-model + renderer, `web/streamlit_app.py`
+`_render_jobs`) that runs the live loop on the user's **BYOK key** via the persistent `run_async` loop
+(`web/jobs_runner.py`), renders **✅ Strong / 🟡 For review** with the AI rationale, and persists accepted jobs
+(idempotent, `LedgerStore.list_accepted` for display on entry); and a per-job **"Tailor résumé to this"** that
+hands the posting's JD to the existing Tailor (`job_tailor_index` → the keyed JD input). So discovery is now
+**grill → jobs → tailor** in the UI, not a terminal-only demo.
+
 ### 15.5 Deliberate deviations (deadline-safe cut; roadmap noted)
 - **Package named `discovery/`**, not the literal `mcp/`+`agents/` paths first sketched — a top-level `mcp/`
   dir would shadow the installed `mcp` SDK on `sys.path`. One feature, one package.
-- **In-process MCP transport** for the demo (real dispatch, no subprocess); **network/stdio A2A** and the
+- **In-process MCP transport** (real dispatch, no subprocess); **network/stdio A2A** and the
   **Podman sandbox** are roadmap. Async background worker + spin-down, full HITL dashboard (TTL/override), and
   multi-user session isolation are also roadmap. The deployed grill→tailor path is the untouched safety-net floor.
