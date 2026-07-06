@@ -1,10 +1,10 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-06 — Phase 9 in progress: 9J shipped, 9B in review, 9I in review)
-**`master` clean @ `87c53f7` · feat/9b-portfolio-cta pushed (PR TBD) · contract v2.8.0 · 648 tests (1 skipped) · PR #48 open (9I, Copilot review pending).**
+## 👉 YOU ARE HERE (updated 2026-07-06 — Phase 9 in progress: 9J shipped, 9B + 9I in review)
+**`master` clean @ `e16c4df` · contract v2.8.0 · 647 tests (1 skipped) · PR #48 (9I) + PR #49 (9B) open, Copilot reviews pending.**
 **Phases 1–7 + 8A + 8B + 8C + 8D + 8G + 9J COMPLETE.**
 
-**What shipped (9B — branch feat/9b-portfolio-cta, PR TBD):**
+**In review — 9B (PR #49, feat/9b-portfolio-cta):**
 - **9B:** Add-experience CTA precedes portfolio entry list.
   - `_render_portfolio()`: `_render_add_experience_form(...)` now called **before** `render_portfolio(...)`.
   - `_render_add_experience_form()`: `st.caption("Add a role, project, or experience to your portfolio.")` added immediately before `st.expander()`.
