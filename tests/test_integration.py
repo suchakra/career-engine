@@ -959,19 +959,30 @@ class TestDiscoveryGraphGlue:
     """Validate the minimal turn-based glue applied to discovery_graph.py."""
 
     def test_router_shim_sets_ctx_route(self) -> None:
-        """_router_shim must set ctx.route rather than return a route string."""
-        from workflows.discovery_graph import _router_shim
+        """Router shim must set ctx.route (not return) to drive ADK edge dispatch.
 
-        src = inspect.getsource(_router_shim)
-        assert "route" in src, "_router_shim must set ctx.route"
+        Shims are now closures inside build_discovery_workflow(); we verify the
+        ADK integration invariant by checking discovery_router returns a non-empty
+        string — the value the closure assigns to ctx.route.
+        Full routing coverage: test_router_finalizes_when_no_pending_work and
+        test_router_suppresses_brake_during_checkpoint_phase.
+        """
+        state = CareerEngineState(current_phase=PhaseStatus.GRILLING, work_timeline=[])
+        route = discovery_router(state)
+        assert isinstance(route, str) and route, (
+            "discovery_router must return a non-empty string for ctx.route assignment"
+        )
 
     def test_ingest_shim_is_idempotent(self) -> None:
-        """_ingest_shim must only seed while the phase is INGESTING."""
-        from workflows.discovery_graph import _ingest_shim
+        """Ingest must only seed while the phase is INGESTING.
 
-        src = inspect.getsource(_ingest_shim)
+        Shims are closures; we check the invariant on ingest_node directly.
+        """
+        from workflows.nodes import ingest_node
+
+        src = inspect.getsource(ingest_node)
         assert "INGESTING" in src, (
-            "_ingest_shim must guard on PhaseStatus.INGESTING to stay idempotent"
+            "ingest_node must guard on PhaseStatus.INGESTING to stay idempotent"
         )
 
     def test_router_suppresses_brake_during_checkpoint_phase(self) -> None:

@@ -71,7 +71,6 @@ from schema import (
 from tools.pdf_renderer import render_pdf
 from tools.resume_parser import ParseError, parse_resume
 from workflows.discovery_graph import build_runner
-from workflows.nodes import set_model_client_factory
 
 # ── Resume-file ingestion (Phase 1.7-A) ───────────────────────────────────────
 
@@ -152,17 +151,6 @@ def build_session_service(*, use_firestore: bool = False) -> BaseSessionService:
                 file=sys.stderr,
             )
     return cast("BaseSessionService", InMemorySessionService())  # type: ignore[no-untyped-call]
-
-
-def _install_model_client(client: GeminiModelClient) -> None:
-    """Inject the model client into the workflow nodes and expose it for scrapers.
-
-    Sets the nodes factory so every node call uses the same real client.
-
-    Args:
-        client: The resolved ``GeminiModelClient`` for this session.
-    """
-    set_model_client_factory(lambda: client)
 
 
 def resolve_auth_and_client() -> tuple[str, AccessMode, GeminiModelClient]:
@@ -251,10 +239,9 @@ class DiscoverySession:
         self._runner: Runner = build_runner(
             session_service=session_service,
             app_name=app_name,
+            model_factory=lambda: model_client,
         )
         self._turn_index = 0  # in-memory turn ordinal for observability spans
-        # Inject model client into the workflow nodes.
-        _install_model_client(model_client)
 
     @property
     def session_id(self) -> str:
@@ -965,8 +952,7 @@ def run_tailor_command(
         )
         # Run one turn; the router will see phase=COMPLETE and go to finalize
         # which then chains to tailor.
-        runner = build_runner(session_service=svc)
-        _install_model_client(client)
+        runner = build_runner(session_service=svc, model_factory=lambda: client)
         async for _ in runner.run_async(user_id=user_id, session_id=session_id, state_delta={}):
             pass
         return await session_helpers.read_state(

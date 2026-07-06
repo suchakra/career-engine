@@ -46,6 +46,7 @@ State marshalling contract:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, cast
 
 from google.adk.runners import Runner
@@ -54,6 +55,7 @@ from google.adk.workflow import DEFAULT_ROUTE, START, Edge, FunctionNode, Workfl
 
 from schema import CareerEngineState, EntryStatus, PhaseStatus
 from workflows.nodes import (
+    ModelClient,
     discovery_turn_node,
     execute_grill_turn_node,
     finalize_master_resume_node,
@@ -166,128 +168,24 @@ def _write_state(ctx: object, new_state: CareerEngineState) -> None:
         state_obj[field] = value
 
 
-# ── ADK shims (ctx-receiving wrappers around the pure node functions) ─────────
-
-
-def _ingest_shim(ctx: object) -> None:
-    """ADK graph-entry shim: seed the timeline once and resolve a verified checkpoint.
-
-    TURN-BASED NOTE: every ``runner.run_async`` call restarts the graph from
-    START, so this is the entry node on every turn.  It does two boundary jobs:
-
-    1. Idempotent ingest.  ``ingest_node`` resets ``question_count`` to 0 and
-       re-seeds the timeline — if it re-ran every turn the 5-turn brake could
-       never accumulate and prior progress would be clobbered.  So ingest runs
-       ONLY while the phase is still INGESTING (the first turn); later turns
-       pass the seeded state straight through.
-
-    2. Checkpoint resolution.  When the CLI has set ``checkpoint_verified=True``
-       on a paused checkpoint, this entry step calls ``user_checkpoint_node`` to
-       advance the phase back to GRILLING (and reset the flag/summary) BEFORE the
-       router runs.  This keeps the router contract intact — the router
-       still suppresses the brake while phase==CHECKPOINT and never has to
-       re-enter the checkpoint node — while giving the HITL gate a single,
-       deterministic resolution point.  An un-verified checkpoint is left as-is
-       so the router routes onward (grill) without losing the pause semantics.
-    """
-    state = _read_state(ctx)
-    if state.current_phase == PhaseStatus.INGESTING:
-        state = ingest_node(state)
-        _write_state(ctx, state)
-    elif (
-        state.current_phase == PhaseStatus.CHECKPOINT and state.checkpoint_verified
-    ):
-        # Advance CHECKPOINT → GRILLING (resets the flag + summary).
-        state = user_checkpoint_node(state)
-        # The checkpoint consumed the turn at question_count == 5k; step the
-        # counter off that multiple so the router's "% 5" brake does not
-        # immediately re-fire on the very next router evaluation this same turn.
-        state = state.model_copy(
-            update={"question_count": state.question_count + 1}
-        )
-        _write_state(ctx, state)
-
-
-def _router_shim(ctx: object) -> None:
-    """ADK shim: reads state from ctx, calls discovery_router, sets ctx.route.
-
-    INTEGRATION NOTE: FunctionNode wraps a plain str return value as
-    Event(output=...), which lands in child_ctx.output — NOT in child_ctx.route.
-    The ADK Workflow's _buffer_downstream_triggers uses child_ctx.route to
-    select the matching Edge, so a string return value causes all router
-    branches to be silently skipped (falls back to DEFAULT_ROUTE only, which
-    doesn't exist for the router → the graph terminates after ingest).
-
-    Setting ctx.route directly writes to ctx._route_value, which
-    _flush_output_and_deltas then emits as Event(route=...) → tracked by
-    _track_event_in_context as ctx.route → used by _buffer_downstream_triggers.
-    This is the correct ADK 2.0 pattern for routing FunctionNodes.
-    """
-    state = _read_state(ctx)
-    route = discovery_router(state)
-    # Set route on the context object; ADK flushes it as Event(route=...) so
-    # _buffer_downstream_triggers can select the correct outgoing edge.
-    # ctx is the ADK Context (a runtime attribute); the annotation is 'object'
-    # to keep this module decoupled from ADK internals, so cast for the write.
-    cast("Any", ctx).route = route
-
-
-def _grill_shim(ctx: object) -> None:
-    """ADK shim: reads state, calls execute_grill_turn_node, writes result back.
-
-    If the node returns UpgradeRequired, stores the signal in ctx.state so the
-    runner can surface it to the UI without crashing.
-    """
-    from schema import UpgradeRequired
-
-    state = _read_state(ctx)
-    result = execute_grill_turn_node(state)
-    if isinstance(result, UpgradeRequired):
-        # Store the typed signal; the UI/CLI layer inspects this key
-        state_obj = getattr(ctx, "state", {})
-        state_obj["_upgrade_required"] = result.model_dump_json()
-    else:
-        _write_state(ctx, result)
-
-
-def _checkpoint_shim(ctx: object) -> None:
-    """ADK shim: reads state, calls user_checkpoint_node, writes result back."""
-    state = _read_state(ctx)
-    new_state = user_checkpoint_node(state)
-    _write_state(ctx, new_state)
-
-
-def _discovery_shim(ctx: object) -> None:
-    """ADK shim: reads state, calls discovery_turn_node, writes result back.
-
-    Terminal-per-turn like grill/checkpoint: the ASK pass surfaces a question and
-    the run ends; the PROCESS pass (with pending_user_answer) appends discovered
-    entries and flips coverage_confirmed so the router stops re-routing here.
-    """
-    state = _read_state(ctx)
-    new_state = discovery_turn_node(state)
-    _write_state(ctx, new_state)
-
-
-def _finalize_shim(ctx: object) -> None:
-    """ADK shim: reads state, calls finalize_master_resume_node, writes result back."""
-    state = _read_state(ctx)
-    new_state = finalize_master_resume_node(state)
-    _write_state(ctx, new_state)
-
-
-def _tailor_shim(ctx: object) -> None:
-    """ADK shim: reads state, calls tailor_node, writes result back."""
-    state = _read_state(ctx)
-    new_state = tailor_node(state)
-    _write_state(ctx, new_state)
-
-
 # ── Workflow builder ──────────────────────────────────────────────────────────
+# NOTE: The ADK shim functions (ctx-receiving wrappers) are defined as closures
+# inside build_discovery_workflow() so that each workflow instance can capture
+# its own model_factory for per-runner client isolation (8D DI fix).  There are
+# NO module-level shim functions — using closures is the only safe pattern.
 
 
-def build_discovery_workflow() -> Workflow:
+def build_discovery_workflow(
+    model_factory: Callable[[], ModelClient] | None = None,
+) -> Workflow:
     """Build and return the ADK 2.0 Workflow for the discovery loop.
+
+    Args:
+        model_factory: Optional callable that returns a ModelClient.  When
+            supplied, every shim passes the result as ``_client=`` to its node
+            so each workflow instance is isolated from the process-global
+            factory.  When ``None``, nodes fall back to ``_get_model_client()``
+            (CLI / test path).
 
     Graph:
         START → ingest → router → execute_grill_turn
@@ -297,17 +195,81 @@ def build_discovery_workflow() -> Workflow:
     Returns:
         google.adk.workflow.Workflow instance ready to be passed to a Runner.
     """
+    # ── Closure shims — capture model_factory per workflow instance ───────────
+    def _ci_ingest_shim(ctx: object) -> None:
+        """Entry shim: idempotent ingest + checkpoint resolution."""
+        state = _read_state(ctx)
+        _c = model_factory() if model_factory is not None else None
+        if state.current_phase == PhaseStatus.INGESTING:
+            state = ingest_node(state, _client=_c)
+            _write_state(ctx, state)
+        elif (
+            state.current_phase == PhaseStatus.CHECKPOINT and state.checkpoint_verified
+        ):
+            state = user_checkpoint_node(state, _client=_c)
+            state = state.model_copy(
+                update={"question_count": state.question_count + 1}
+            )
+            _write_state(ctx, state)
+
+    def _ci_router_shim(ctx: object) -> None:
+        """Router shim: no model call; sets ctx.route."""
+        state = _read_state(ctx)
+        route = discovery_router(state)
+        cast("Any", ctx).route = route
+
+    def _ci_grill_shim(ctx: object) -> None:
+        """Grill shim: passes explicit client when model_factory is set."""
+        from schema import UpgradeRequired
+
+        state = _read_state(ctx)
+        _c = model_factory() if model_factory is not None else None
+        result = execute_grill_turn_node(state, _client=_c)
+        if isinstance(result, UpgradeRequired):
+            state_obj = getattr(ctx, "state", {})
+            state_obj["_upgrade_required"] = result.model_dump_json()
+        else:
+            _write_state(ctx, result)
+
+    def _ci_checkpoint_shim(ctx: object) -> None:
+        """Checkpoint shim: passes explicit client when model_factory is set."""
+        state = _read_state(ctx)
+        _c = model_factory() if model_factory is not None else None
+        new_state = user_checkpoint_node(state, _client=_c)
+        _write_state(ctx, new_state)
+
+    def _ci_discovery_shim(ctx: object) -> None:
+        """Discovery shim: passes explicit client when model_factory is set."""
+        state = _read_state(ctx)
+        _c = model_factory() if model_factory is not None else None
+        new_state = discovery_turn_node(state, _client=_c)
+        _write_state(ctx, new_state)
+
+    def _ci_finalize_shim(ctx: object) -> None:
+        """Finalize shim: passes explicit client when model_factory is set."""
+        state = _read_state(ctx)
+        _c = model_factory() if model_factory is not None else None
+        new_state = finalize_master_resume_node(state, _client=_c)
+        _write_state(ctx, new_state)
+
+    def _ci_tailor_shim(ctx: object) -> None:
+        """Tailor shim: passes explicit client when model_factory is set."""
+        state = _read_state(ctx)
+        _c = model_factory() if model_factory is not None else None
+        new_state = tailor_node(state, _client=_c)
+        _write_state(ctx, new_state)
+
     # ── Create FunctionNode instances ─────────────────────────────────────────
-    ingest = FunctionNode(func=_ingest_shim, name="ingest_node")
-    router = FunctionNode(func=_router_shim, name="discovery_router")
-    grill = FunctionNode(func=_grill_shim, name="execute_grill_turn_node")
-    checkpoint = FunctionNode(func=_checkpoint_shim, name="user_checkpoint_node")
-    discovery = FunctionNode(func=_discovery_shim, name="discovery_turn_node")
-    finalize = FunctionNode(func=_finalize_shim, name="finalize_master_resume_node")
-    tailor = FunctionNode(func=_tailor_shim, name="tailor_node")
+    ingest = FunctionNode(func=_ci_ingest_shim, name="ingest_node")
+    router = FunctionNode(func=_ci_router_shim, name="discovery_router")
+    grill = FunctionNode(func=_ci_grill_shim, name="execute_grill_turn_node")
+    checkpoint = FunctionNode(func=_ci_checkpoint_shim, name="user_checkpoint_node")
+    discovery = FunctionNode(func=_ci_discovery_shim, name="discovery_turn_node")
+    finalize = FunctionNode(func=_ci_finalize_shim, name="finalize_master_resume_node")
+    tailor = FunctionNode(func=_ci_tailor_shim, name="tailor_node")
 
     # ── Wire edges ────────────────────────────────────────────────────────────
-    # Route strings set on ctx.route by _router_shim must match Edge.route values.
+    # Route strings set on ctx.route by _ci_router_shim must match Edge.route values.
     #
     # TURN-BASED TOPOLOGY: there is NO back-edge from grill or checkpoint to the
     # router.  Each run_async invocation flows START → ingest → router → ONE of
@@ -352,6 +314,7 @@ def build_discovery_workflow() -> Workflow:
 def build_runner(
     session_service: BaseSessionService | None = None,
     app_name: str = "career_engine_discovery",
+    model_factory: Callable[[], ModelClient] | None = None,
 ) -> Runner:
     """Build and return an ADK 2.0 Runner wired to the discovery workflow.
 
@@ -361,6 +324,10 @@ def build_runner(
             FirestoreSessionService (WS-C).
         app_name: Application name; must match the name used in
             session_service.create_session().
+        model_factory: Optional callable returning a ModelClient.  Passed to
+            ``build_discovery_workflow`` so every node in this runner instance
+            uses the same per-request client instead of the process-global
+            factory.  When ``None``, nodes fall back to ``_get_model_client()``.
 
     Returns:
         google.adk.runners.Runner instance ready to call run_async().
@@ -373,7 +340,7 @@ def build_runner(
             InMemorySessionService(),  # type: ignore[no-untyped-call]
         )
 
-    workflow = build_discovery_workflow()
+    workflow = build_discovery_workflow(model_factory=model_factory)
     return Runner(
         node=workflow,
         session_service=session_service,

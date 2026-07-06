@@ -429,7 +429,7 @@ def _apply_entry_status_rules(entries: list[Entry], reference_date: str) -> None
 # ── Node implementations ──────────────────────────────────────────────────────
 
 
-def ingest_node(state: CareerEngineState) -> CareerEngineState:
+def ingest_node(state: CareerEngineState, *, _client: ModelClient | None = None) -> CareerEngineState:
     """Seed the work_timeline and set phase=GRILLING.
 
     Two entry paths converge here (both run once, on the INGESTING turn):
@@ -477,7 +477,7 @@ def ingest_node(state: CareerEngineState) -> CareerEngineState:
         )
 
     # ── Path 2: text fallback — parse raw_history_text into entries ──────────
-    client = _get_model_client()
+    client = _client if _client is not None else _get_model_client()
     raw = state.raw_history_text.strip() or "(no career history provided)"
     response_text = client.generate(
         model_id=model_id,
@@ -530,7 +530,7 @@ def ingest_node(state: CareerEngineState) -> CareerEngineState:
     )
 
 
-def discovery_turn_node(state: CareerEngineState) -> CareerEngineState:
+def discovery_turn_node(state: CareerEngineState, *, _client: ModelClient | None = None) -> CareerEngineState:
     """Confirm coverage_through and discover new roles not on the resume.
 
     Asks the user to confirm when they last refreshed their resume, and
@@ -550,7 +550,7 @@ def discovery_turn_node(state: CareerEngineState) -> CareerEngineState:
     if isinstance(model_id, UpgradeRequired):
         return state
 
-    client = _get_model_client()
+    client = _client if _client is not None else _get_model_client()
     user_answer = state.pending_user_answer.strip()
 
     if user_answer:
@@ -645,6 +645,8 @@ def discovery_turn_node(state: CareerEngineState) -> CareerEngineState:
 
 def execute_grill_turn_node(
     state: CareerEngineState,
+    *,
+    _client: ModelClient | None = None,
 ) -> CareerEngineState | UpgradeRequired:
     """Ask one probing question and validate the user's answer for concrete metrics.
 
@@ -685,7 +687,7 @@ def execute_grill_turn_node(
         return model_id_result
 
     model_id: str = model_id_result
-    client = _get_model_client()
+    client = _client if _client is not None else _get_model_client()
 
     # Find the entry to grill
     frontier_entry = _get_frontier_entry(state)
@@ -860,7 +862,7 @@ def execute_grill_turn_node(
         )
 
 
-def user_checkpoint_node(state: CareerEngineState) -> CareerEngineState:
+def user_checkpoint_node(state: CareerEngineState, *, _client: ModelClient | None = None) -> CareerEngineState:
     """Hydration Point — summarise the last 5-turn delta and await user verification.
 
     Summarises everything that has been extracted in the most recent batch of
@@ -909,7 +911,7 @@ def user_checkpoint_node(state: CareerEngineState) -> CareerEngineState:
             }
         )
 
-    client = _get_model_client()
+    client = _client if _client is not None else _get_model_client()
 
     # Summarise recent stories (last 5 or all if fewer)
     recent_stories = state.extracted_star_stories[-5:]
@@ -945,7 +947,7 @@ def user_checkpoint_node(state: CareerEngineState) -> CareerEngineState:
     )
 
 
-def finalize_master_resume_node(state: CareerEngineState) -> CareerEngineState:
+def finalize_master_resume_node(state: CareerEngineState, *, _client: ModelClient | None = None) -> CareerEngineState:
     """Assemble all validated StarStories into the master resume structure.
 
     Uses SPEED_FAST capability (Flash baseline).  Sends the validated stories
@@ -965,7 +967,7 @@ def finalize_master_resume_node(state: CareerEngineState) -> CareerEngineState:
     if isinstance(model_id, UpgradeRequired):
         return state.model_copy(update={"current_phase": PhaseStatus.COMPLETE})
 
-    client = _get_model_client()
+    client = _client if _client is not None else _get_model_client()
 
     stories_payload = [
         {
@@ -1002,7 +1004,7 @@ def finalize_master_resume_node(state: CareerEngineState) -> CareerEngineState:
     )
 
 
-def tailor_node(state: CareerEngineState) -> CareerEngineState:
+def tailor_node(state: CareerEngineState, *, _client: ModelClient | None = None) -> CareerEngineState:
     """Produce a targeted resume variant from a cleaned job description.
 
     Uses SPEED_FAST capability (Flash baseline).  Reads:
@@ -1021,7 +1023,7 @@ def tailor_node(state: CareerEngineState) -> CareerEngineState:
     if isinstance(model_id, UpgradeRequired):
         return state
 
-    client = _get_model_client()
+    client = _client if _client is not None else _get_model_client()
 
     master_resume = state.master_resume_json
     jd_text = state.jd_text.strip() or "(no job description provided)"

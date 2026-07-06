@@ -33,7 +33,6 @@ from cli import session as session_helpers
 from cli.app import (
     DiscoverySession,
     TurnResult,
-    _install_model_client,
     build_session_service,
     guess_resume_mime,
 )
@@ -649,8 +648,6 @@ def render_grill(*, user_id: str) -> None:
         return
 
     # ── Step 3: the conversation ──────────────────────────────────────────────
-    _install_model_client(ss["grill_client"])  # ensure nodes use this user's key
-
     if ss.pop("grill_resumed", False):
         st.caption("↩︎ Picked up your saved session where you left off.")
 

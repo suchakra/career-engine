@@ -1,25 +1,26 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-06 — Phase 8: 8A+8B+8C shipped)
-**`master` clean @ `73b909d` · contract v2.8.0 · 642 tests (1 skipped) · no open PRs.**
-**Phases 1–7 + 8A + 8B + 8C COMPLETE.**
+## 👉 YOU ARE HERE (updated 2026-07-06 — Phase 8: 8A+8B+8C COMPLETE · 8D PR #45 in review)
+**`feat/8d-model-client-di` @ latest · PR #45 open, Copilot review in progress · contract v2.8.0 · 646 tests (1 skipped).**
+**Phases 1–7 + 8A + 8B + 8C COMPLETE. 8D implementation done — PR #45 pending merge.**
 
-**What shipped:**
-- Phases 1–7: full product through HITL "Keep this" (PR #42) + out-of-process `StdioMcpClient`.
-- **8A**: Cloud Run dev redeployed (workflow run `28810378381`). Jobs UI live.
-- **8B** (PR #43): `DashboardView.can_find_jobs` + "Find jobs" button in `render_dashboard`.
-- **8C** (PR #44): `career-engine sweep` CLI + `jobs/sweep_cli.py` + Cloud Run Job Terraform module +
-  scheduler `token_type = "oauth2"` fix (Cloud Run Jobs Execute API requires OAuth2, not OIDC JWT).
+**8D work in branch (not yet on master):**
+- **8D (PR #45):** Multi-user model-client isolation — replaced process-global `_install_model_client`
+  mutation with explicit DI via closure injection at `build_discovery_workflow()` time:
+  - 6 node functions in `workflows/nodes.py` gain `*, _client: ModelClient | None = None`
+  - `build_discovery_workflow(model_factory=None)` — shims become closures; `build_runner(model_factory=None)` threads through
+  - `cli/app.py`, `web/grill_ui.py`, `web/streamlit_app.py` — all 3 `_install_model_client` call sites replaced
+  - 4 new named isolation tests (646 total). Gemini review: PASS.
 
-**▶ NEXT — 8D: Multi-user model-client isolation (DESIGN-FIRST).**
-DO NOT start implementing without user sign-off on the design. The proposed design is in GROOMING.md §8D:
-`ContextVar`-based per-request factory override in `workflows/nodes.py`, propagated via `copy_context()`
-in `web/async_runner.run_async`. Present the design to the user and get explicit approval before coding.
+**▶ NEXT — merge PR #45 (squash-merge), then 8G: Custom domain via Cloudflare + Cloud Run.**
+After merging: checkout master, `git reset --hard origin/master`, confirm 646 tests, then launch 8G subagent.
+8G spec is in GROOMING.md §8G (Terraform-only; two new modules: cloud_run_domain_mapping + cloudflare_dns).
 
-After 8D design approval: 8G (custom domain) is next in priority, followed by 8E (deployer-SA) then 8F.
+**Known follow-up from 8D review:**
+- Dead module-level shims in `discovery_graph.py` (duplicated, not moved — harmless but confusing)
+- `web/resume_builder.py::tailor_structured_resume` still calls `set_model_client_factory` directly — pre-existing race, out of 8D scope; add a follow-up ticket (8D.5 or 8H).
 
-**Doc-accuracy note for the submission (`demo_output/`):** the MCP-separate-process claim is now TRUE (PR #41);
-the **async-sweep-as-live** claim still needs softening (sweep is built+tested but NOT wired/running — Scheduler 404s).
+**After 8G:** 8E (deployer-SA least-privilege), then 8F (HITL TTL dashboard).
 
 ---
 *Historical session notes follow (most recent first):*
