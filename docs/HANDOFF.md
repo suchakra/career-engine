@@ -1,8 +1,15 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-06 — Phase 9 in progress: 9J + 9B shipped, 9I in review)
-**`master` clean @ `b8a18ee` · contract v2.8.0 · 648 tests (1 skipped) · PR #48 (9I) open, Copilot review pending.**
-**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + 9J + 9B COMPLETE.**
+## 👉 YOU ARE HERE (updated 2026-07-06 — Phase 9: 9J+9B+9K shipped, 9I+9G+9C in review)
+**`master` clean @ `37368b4` · contract v2.8.0 · 652 tests (1 skipped) · PR #48 (9I) + PR #51 (9G) + PR #52 (9C) open.**
+**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + 9J + 9B + 9K COMPLETE.**
+
+**In review — 9C (PR #52):**
+- **9C:** Editable Profile section in Portfolio view.
+  - `web/portfolio.py`: `ProfileView` dataclass; `build_profile_view()`; `render_profile_section()` (expander, 2-col layout, links CRUD, Save button); `render_portfolio()` gains `on_save_profile` + `profile_view` kwargs, renders profile section at very top when set.
+  - `web/streamlit_app.py`: `_load_user_profile()` monkeypatchable helper; `_render_portfolio()` loads profile, passes `on_save_profile` + `profile_view` to `render_portfolio()`.
+  - `tests/test_web_portfolio.py`: 3 new tests (`TestBuildProfileView`, `TestRenderProfileSection`); existing `FakeSt` upgraded with `columns()` + `expander()`; integration test patched for `_load_user_profile`.
+  - `make check`: 653 passed, 1 skipped. No contract change.
 
 **What shipped (9B — PR #49):**
 - **9B:** Add-experience CTA precedes portfolio entry list.
