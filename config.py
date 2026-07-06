@@ -80,6 +80,10 @@ class Settings(BaseSettings):
         "env_file": ".env",
         "env_file_encoding": "utf-8",
         "case_sensitive": False,
+        # Tolerate unrelated env vars / .env keys (e.g. the devcontainer's GIT_*
+        # git-identity vars). pydantic-settings reads the whole .env, so without
+        # this an unknown key raises extra_forbidden and breaks every get_settings().
+        "extra": "ignore",
     }
 
 
