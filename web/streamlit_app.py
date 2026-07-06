@@ -347,9 +347,14 @@ def _jobs_ledger_store() -> Any:
     return resolve_ledger_store(use_firestore=True)
 
 
-@st.cache_resource(show_spinner=False)
 def _workspace_store() -> Any:
-    """Cached workspace store (for discovery-preference load/save)."""
+    """Return a FRESH workspace store for discovery-preference load/save.
+
+    MUST NOT be cached: ``FirestoreWorkspaceStore`` wraps an async Firestore client
+    in a per-call ``asyncio.run()``, so caching the instance would bind its gRPC
+    channel to the first loop and every later call would hit "Event loop is closed"
+    (matches how the rest of this file constructs it fresh, e.g. ``_load_workspace``).
+    """
     from database.workspace_store import FirestoreWorkspaceStore
 
     return FirestoreWorkspaceStore()
@@ -403,16 +408,12 @@ def _render_jobs(*, user_id: str) -> None:
         "A stateless Scout pulls live postings; your Primary agent ranks each against "
         "your rubric (Pro-tier, on your key)."
     )
+    # Explicit widget keys → Streamlit owns the state under these keys (the prefill
+    # above seeds them via setdefault); no manual value=/mirror-assign (avoids drift).
     with st.expander("Your job preferences", expanded=not ss.get("jobs_target_roles")):
-        ss["jobs_target_roles"] = st.text_area(
-            "Target roles (one per line)", value=ss.get("jobs_target_roles", "")
-        )
-        ss["jobs_nice"] = st.text_area(
-            "Nice to have (one per line)", value=ss.get("jobs_nice", "")
-        )
-        ss["jobs_deal"] = st.text_area(
-            "Dealbreakers (one per line)", value=ss.get("jobs_deal", "")
-        )
+        st.text_area("Target roles (one per line)", key="jobs_target_roles")
+        st.text_area("Nice to have (one per line)", key="jobs_nice")
+        st.text_area("Dealbreakers (one per line)", key="jobs_deal")
 
     if st.button("Find jobs", type="primary"):
         from discovery.scout import Scout

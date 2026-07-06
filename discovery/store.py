@@ -101,8 +101,18 @@ class FirestoreLedgerStore:
         return written
 
     def list_accepted(self, user_id: str) -> list[JobOpportunity]:
-        """Read all stored job docs back into JobOpportunity objects."""
-        return [
-            JobOpportunity.model_validate(doc.to_dict() or {})
-            for doc in self._jobs_col(user_id).stream()
-        ]
+        """Read all stored job docs back into JobOpportunity objects.
+
+        Resilient per-record: a single malformed doc is skipped (falling back to
+        the doc id as job_id when that's all that's missing) rather than blanking
+        the whole list — one bad record shouldn't hide every prior match.
+        """
+        out: list[JobOpportunity] = []
+        for doc in self._jobs_col(user_id).stream():
+            data = doc.to_dict() or {}
+            data.setdefault("job_id", doc.id)  # doc id IS the job_id (see record_accepted)
+            try:
+                out.append(JobOpportunity.model_validate(data))
+            except ValueError:
+                continue
+        return out

@@ -107,8 +107,9 @@ def build_jobs_view(
             ran=True,
         )
     prior_jobs = prior or []
-    # Persisted jobs were all ACCEPTED when stored; keep only those, defensively.
-    accepted = [_card(j) for j in prior_jobs if j.match_status is not MatchStatus.SOFT_REJECT]
+    # Persisted jobs were all ACCEPTED when stored; keep only ACCEPTED (positive
+    # filter, so a stray HARD_REJECT/None/soft never leaks into the strong list).
+    accepted = [_card(j) for j in prior_jobs if j.match_status is MatchStatus.ACCEPTED]
     return JobsView(accepted=accepted, ran=False)
 
 

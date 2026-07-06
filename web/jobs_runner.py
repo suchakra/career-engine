@@ -14,6 +14,8 @@ Split for testability:
 
 from __future__ import annotations
 
+import logging
+
 from config import AccessMode
 from discovery.primary import DiscoveryResult, ModelEvaluator, PrimaryAgent
 from discovery.scout import Scout
@@ -21,13 +23,25 @@ from discovery.store import FirestoreLedgerStore, InMemoryLedgerStore, LedgerSto
 from schema import InteractionLedger, SessionPreferences
 from web.async_runner import run_async
 
+_log = logging.getLogger(__name__)
+
 
 def resolve_ledger_store(*, use_firestore: bool = True) -> LedgerStore:
-    """Return a Firestore-backed ledger store, falling back to in-memory on failure."""
+    """Return a Firestore-backed ledger store, falling back to in-memory on failure.
+
+    A Firestore construction failure is **logged** (not silent) before the
+    in-memory downgrade — otherwise discovery would non-persistently "succeed" with
+    no operator signal.
+    """
     if use_firestore:
         try:
             return FirestoreLedgerStore()
         except Exception:
+            _log.warning(
+                "Firestore ledger store unavailable; discovered jobs will NOT persist "
+                "(using in-memory store).",
+                exc_info=True,
+            )
             return InMemoryLedgerStore()
     return InMemoryLedgerStore()
 
