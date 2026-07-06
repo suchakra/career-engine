@@ -810,15 +810,18 @@ def _render_save_application(*, user_id: str, today: str, resume: StructuredResu
                 else:
                     from web.jd_utils import extract_jd_metadata
 
-                    title, company_extracted = extract_jd_metadata(
-                        jd_text_for_extract, client, model_id
-                    )
+                    with st.spinner("Extracting…"):
+                        title, company_extracted = extract_jd_metadata(
+                            jd_text_for_extract, client, model_id
+                        )
                     if title or company_extracted:
                         if title:
-                            ss["save_app_title"] = title
+                            ss["save_app_title"] = title.strip()
                         if company_extracted:
-                            ss["save_app_company"] = company_extracted
+                            ss["save_app_company"] = company_extracted.strip()
                         st.rerun()
+                    else:
+                        st.warning("Could not extract title or company — try filling in the fields manually.")
             else:
                 st.warning(
                     "Add your Gemini key in the **Grill Me** tab first to use extraction."

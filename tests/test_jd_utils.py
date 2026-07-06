@@ -32,3 +32,21 @@ def test_extract_jd_metadata_truncates_long_jd() -> None:
     extract_jd_metadata(jd_text, client, "gemini-2.5-flash-lite")
     _model_id, _system, user_arg = client.generate.call_args[0]
     assert len(user_arg) <= 3000
+
+
+def test_extract_jd_metadata_null_fields_return_empty_string() -> None:
+    """JSON null for title/company returns ('', '') not ('None', 'None')."""
+    client = MagicMock()
+    client.generate.return_value = '{"title": null, "company": null}'
+    title, company = extract_jd_metadata("Some JD text", client, "gemini-2.5-flash-lite")
+    assert title == ""
+    assert company == ""
+
+
+def test_extract_jd_metadata_strips_markdown_fences() -> None:
+    """Handles model output wrapped in markdown code fences."""
+    client = MagicMock()
+    client.generate.return_value = '```json\n{"title": "SWE", "company": "Acme"}\n```'
+    title, company = extract_jd_metadata("Some JD text", client, "gemini-2.5-flash-lite")
+    assert title == "SWE"
+    assert company == "Acme"
