@@ -484,6 +484,35 @@ class TestRenderProfileSection:
         assert "https://x.com" not in saved[0].links
         assert "https://y.com" in saved[0].links
 
+    def test_add_link_appends_stripped_link(self) -> None:
+        """'Add link' fires on_save with new link appended (whitespace stripped)."""
+        saved: list[UserProfile] = []
+        fake_st = _FakeStProfile({"New link": "  https://z.com  "})
+        view = ProfileView(name="", email="", phone="", location="", links=["https://a.com"])
+        render_profile_section(view, on_save=saved.append, st=fake_st)
+
+        add_btns = [
+            (label, kw) for label, kw in fake_st.all_buttons() if label == "Add link"
+        ]
+        assert len(add_btns) == 1
+        add_btns[0][1]["on_click"]()
+        assert len(saved) == 1
+        assert saved[0].links == ["https://a.com", "https://z.com"]
+
+    def test_add_link_no_op_on_empty_input(self) -> None:
+        """'Add link' with empty/whitespace-only input does not fire on_save."""
+        saved: list[UserProfile] = []
+        fake_st = _FakeStProfile({"New link": "   "})
+        view = ProfileView(name="", email="", phone="", location="", links=[])
+        render_profile_section(view, on_save=saved.append, st=fake_st)
+
+        add_btns = [
+            (label, kw) for label, kw in fake_st.all_buttons() if label == "Add link"
+        ]
+        assert len(add_btns) == 1
+        add_btns[0][1]["on_click"]()
+        assert len(saved) == 0, "on_save should not fire for empty/whitespace link"
+
 
 # ---------------------------------------------------------------------------
 # Integration-level ordering test (9B)

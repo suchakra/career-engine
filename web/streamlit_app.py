@@ -98,11 +98,14 @@ def _load_user_profile(user_id: str) -> UserProfile:
     from web.profile_store import load_profile
 
     try:
-        return load_profile(FirestoreWorkspaceStore(), user_id=user_id)
+        profile = load_profile(FirestoreWorkspaceStore(), user_id=user_id)
+        st.session_state.pop("_profile_load_failed", None)
+        return profile
     except ContractVersionError:
         raise  # schema mismatch must not masquerade as empty (lost) profile
     except Exception:
-        st.warning("Couldn't load your profile just now — showing empty profile.")
+        st.warning("Couldn't load your profile just now — profile editing is disabled.")
+        st.session_state["_profile_load_failed"] = True
         return UserProfile()
 
 
@@ -261,12 +264,13 @@ def _render_add_experience_form(*, user_id: str, today: str) -> None:
 
 
 def _render_portfolio(*, user_id: str, today: str) -> None:
-    """Read-only Portfolio view + steer/add controls (4B/4C/4D/9C)."""
+    """Portfolio view with entry controls and editable Profile section (4B/4C/4D/9C)."""
     from web.portfolio import build_portfolio_view, build_profile_view, render_portfolio
     from web.profile_store import save_profile
 
     state = _load_discovery_state(user_id=user_id, today=today)
     profile = _load_user_profile(user_id)
+    profile_load_failed = st.session_state.get("_profile_load_failed", False)
 
     def _grill_entry(entry_id: str) -> None:
         _jump_grill_to_entry(user_id=user_id, entry_id=entry_id)
@@ -277,6 +281,9 @@ def _render_portfolio(*, user_id: str, today: str) -> None:
     def _on_save_profile(p: UserProfile) -> None:
         from database.workspace_store import FirestoreWorkspaceStore
 
+        if st.session_state.get("_profile_load_failed"):
+            st.error("Profile save disabled — initial load failed. Please refresh.")
+            return
         try:
             save_profile(FirestoreWorkspaceStore(), user_id=user_id, profile=p)
         except Exception:
@@ -288,7 +295,7 @@ def _render_portfolio(*, user_id: str, today: str) -> None:
         st=st,
         on_grill_entry=_grill_entry,
         on_toggle_highlight=_toggle_highlight,
-        on_save_profile=_on_save_profile,
+        on_save_profile=None if profile_load_failed else _on_save_profile,
         profile_view=build_profile_view(profile),
     )
     _render_master_resume_download(user_id=user_id, state=state)
