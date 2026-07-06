@@ -43,8 +43,8 @@ class LedgerStore(Protocol):
 
 
 def _dedup_append(bucket: list[str], name: str) -> list[str]:
-    """Append ``name`` to ``bucket`` unless a case-insensitive match already exists."""
-    if name and name.lower() not in {c.lower() for c in bucket}:
+    """Append ``name`` unless a case/whitespace-insensitive match already exists."""
+    if name and name.lower() not in {c.strip().lower() for c in bucket}:
         return [*bucket, name]
     return bucket
 
@@ -114,9 +114,8 @@ class FirestoreLedgerStore:
         ids = [doc.id for doc in self._jobs_col(user_id).stream()]
         snap = self._doc_ref(user_id).get()
         rejected = (snap.to_dict() or {}).get("rejected_companies", []) if snap.exists else []
-        return InteractionLedger(
-            already_applied_ids=ids, rejected_companies=[str(c) for c in rejected]
-        )
+        clean = [s for s in (str(c).strip() for c in rejected) if s]  # drop blanks/whitespace
+        return InteractionLedger(already_applied_ids=ids, rejected_companies=clean)
 
     def record_accepted(self, user_id: str, jobs: list[JobOpportunity]) -> int:
         """Upsert each accepted job by job_id (merge); return the count of new docs."""
@@ -147,13 +146,18 @@ class FirestoreLedgerStore:
         return out
 
     def add_rejected_company(self, user_id: str, company: str) -> None:
-        """Add a dismissed company to the parent doc (read-modify-write, deduped)."""
+        """Add a dismissed company to the parent doc atomically (ArrayUnion).
+
+        ``ArrayUnion`` appends server-side without a read-modify-write, so concurrent
+        dismissals (multi-tab / double-click) can't lose each other. It dedups by
+        exact value; case variants are harmless — the hard-reject gate matches
+        case-insensitively — so no client-side normalisation is needed here.
+        """
         name = company.strip()
         if not name:
             return
-        ref = self._doc_ref(user_id)
-        snap = ref.get()
-        existing = [str(c) for c in (snap.to_dict() or {}).get("rejected_companies", [])] if snap.exists else []
-        merged = _dedup_append(existing, name)
-        if merged != existing:
-            ref.set({"rejected_companies": merged}, merge=True)
+        from google.cloud import firestore
+
+        self._doc_ref(user_id).set(
+            {"rejected_companies": firestore.ArrayUnion([name])}, merge=True
+        )

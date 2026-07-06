@@ -451,7 +451,7 @@ def _render_jobs(*, user_id: str) -> None:
 
     shown = (result.accepted + result.soft_rejected) if result is not None else (prior or [])
     ss["_jobs_tailor_index"] = job_tailor_index(shown)
-    st.session_state["_jobs_reject_store"] = store  # for the reject handler's persistence
+    ss["_jobs_reject_store"] = store  # for the reject handler's persistence
     hidden = set(ss.get("_jobs_hidden_companies", set()))
     st.divider()
     render_jobs(
