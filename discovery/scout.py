@@ -12,13 +12,16 @@ Access discipline (the point of the MCP boundary): the Scout reaches job data
 :mod:`discovery.job_source` directly. That keeps the untrusted network fetch behind
 the server's security seam (SSRF guard today, Podman sandbox on the roadmap).
 
-Transports:
+Transports (both real MCP client↔server interactions):
 
 - :class:`InProcessMcpClient` — dispatches through the real FastMCP tool machinery
   in-process (validation + serialisation), needing no subprocess or key. This is
   the default for the CLI demo and for tests.
-- A stdio subprocess client (spawning ``python -m discovery.mcp_server``) is the
-  roadmap transport for a fully out-of-process / network A2A deployment.
+- :class:`StdioMcpClient` — spawns the MCP server as a **separate process**
+  (``python -m discovery.mcp_server``) and talks to it over the MCP **stdio**
+  transport — genuine out-of-process A2A (the shape a networked/sandboxed
+  deployment takes). Same :class:`JobToolClient` surface, so it drops into the
+  Scout unchanged.
 
 Model routing note: the Scout needs no inference for the P0 fetch — filtering is
 deterministic in the MCP tool. Flash-assisted *relevance triage* (cheap bulk
@@ -28,9 +31,60 @@ seam is injected here so it can be added without a contract change.
 
 from __future__ import annotations
 
+import sys
+from collections.abc import Sequence
 from typing import Any, Protocol, runtime_checkable
 
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+
 from schema import JobOpportunity, ScoutDirective
+
+
+def _search_args(directive: ScoutDirective) -> dict[str, Any]:
+    """Map a ScoutDirective to the ``search_jobs`` MCP tool arguments."""
+    return {
+        "query": directive.query,
+        "desired_count": directive.desired_count,
+        "include_keywords": directive.include_keywords,
+        "exclude_keywords": directive.exclude_keywords,
+        "exclude_companies": directive.exclude_companies,
+    }
+
+
+def _jobs_from_raw(raw: Any) -> list[JobOpportunity]:
+    """Revalidate a tool's raw list payload into JobOpportunity objects."""
+    items = raw if isinstance(raw, list) else []
+    return [JobOpportunity.model_validate(item) for item in items]
+
+
+def _structured_payload(result: Any) -> Any:
+    """Extract a tool's structured ``result`` value.
+
+    Handles both transports: FastMCP in-process returns ``(content, {"result": …})``;
+    the stdio ``ClientSession`` returns a ``CallToolResult`` with ``.structuredContent``.
+    """
+    if isinstance(result, tuple):
+        structured = result[1] if len(result) > 1 else None  # guard variant tuple shapes
+    else:
+        structured = getattr(result, "structuredContent", None)
+    if isinstance(structured, dict) and "result" in structured:
+        return structured["result"]
+    return structured
+
+
+def _unwrap_tool_result(result: Any, tool_name: str) -> Any:
+    """Raise on a tool error, then extract the structured payload.
+
+    The stdio ``ClientSession.call_tool`` returns a ``CallToolResult`` with
+    ``isError=True`` when the server-side tool raised (it does NOT raise on the
+    client), whereas in-process ``FastMCP.call_tool`` raises directly. Checking
+    ``isError`` here makes both transports fail the same way — instead of the stdio
+    path silently returning ``[]`` / the string ``"None"`` as if the call succeeded.
+    """
+    if getattr(result, "isError", False):
+        raise RuntimeError(f"MCP tool {tool_name!r} failed: {getattr(result, 'content', '')}")
+    return _structured_payload(result)
 
 
 @runtime_checkable
@@ -65,32 +119,51 @@ class InProcessMcpClient:
 
     async def _call(self, name: str, arguments: dict[str, Any]) -> Any:
         """Invoke an MCP tool and return its structured ``result`` payload."""
-        result = await self._app.call_tool(name, arguments)
-        # FastMCP returns (content_blocks, {"result": <value>}).
-        structured = result[1] if isinstance(result, tuple) else result
-        if isinstance(structured, dict) and "result" in structured:
-            return structured["result"]
-        return structured
+        return _unwrap_tool_result(await self._app.call_tool(name, arguments), name)
 
     async def search_jobs(self, directive: ScoutDirective) -> list[JobOpportunity]:
         """Call the ``search_jobs`` MCP tool and revalidate into the contract."""
-        raw = await self._call(
-            "search_jobs",
-            {
-                "query": directive.query,
-                "desired_count": directive.desired_count,
-                "include_keywords": directive.include_keywords,
-                "exclude_keywords": directive.exclude_keywords,
-                "exclude_companies": directive.exclude_companies,
-            },
-        )
-        items = raw if isinstance(raw, list) else []
-        return [JobOpportunity.model_validate(item) for item in items]
+        return _jobs_from_raw(await self._call("search_jobs", _search_args(directive)))
 
     async def fetch_jd(self, url: str) -> str:
         """Call the ``fetch_jd`` MCP tool and return the description text."""
-        raw = await self._call("fetch_jd", {"url": url})
-        return str(raw)
+        return str(await self._call("fetch_jd", {"url": url}))
+
+
+class StdioMcpClient:
+    """A :class:`JobToolClient` that talks to the MCP server as a SEPARATE PROCESS.
+
+    Spawns ``python -m discovery.mcp_server`` and calls its tools over the MCP
+    **stdio** transport — a genuine out-of-process client↔server round-trip (vs
+    :class:`InProcessMcpClient`'s in-process dispatch), the shape a networked or
+    Podman-sandboxed deployment takes. A fresh session is opened per call (simple +
+    correct); a persistent session is a future optimisation.
+    """
+
+    def __init__(self, *, command: str | None = None, args: Sequence[str] | None = None) -> None:
+        """Bind the launch command (defaults to this interpreter + the server module)."""
+        self._command = command or sys.executable
+        self._args = list(args) if args is not None else ["-m", "discovery.mcp_server"]
+
+    async def _call(self, name: str, arguments: dict[str, Any]) -> Any:
+        """Spawn the server, initialise a stdio session, call the tool, and extract.
+
+        Raises ``RuntimeError`` when the tool reports an error (``CallToolResult
+        .isError``) so a failed fetch surfaces loudly instead of becoming empty/"None".
+        """
+        params = StdioServerParameters(command=self._command, args=self._args)
+        async with stdio_client(params) as (read, write), ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(name, arguments)
+        return _unwrap_tool_result(result, name)
+
+    async def search_jobs(self, directive: ScoutDirective) -> list[JobOpportunity]:
+        """Call the ``search_jobs`` tool over stdio and revalidate into the contract."""
+        return _jobs_from_raw(await self._call("search_jobs", _search_args(directive)))
+
+    async def fetch_jd(self, url: str) -> str:
+        """Call the ``fetch_jd`` tool over stdio and return the description text."""
+        return str(await self._call("fetch_jd", {"url": url}))
 
 
 class Scout:

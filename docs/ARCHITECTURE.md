@@ -616,6 +616,12 @@ controls (full accept/override/TTL dashboard remains roadmap).
 ### 15.5 Deliberate deviations (deadline-safe cut; roadmap noted)
 - **Package named `discovery/`**, not the literal `mcp/`+`agents/` paths first sketched — a top-level `mcp/`
   dir would shadow the installed `mcp` SDK on `sys.path`. One feature, one package.
-- **In-process MCP transport** (real dispatch, no subprocess); **network/stdio A2A** and the
-  **Podman sandbox** are roadmap. Async background worker + spin-down, full HITL dashboard (TTL/override), and
-  multi-user session isolation are also roadmap. The deployed grill→tailor path is the untouched safety-net floor.
+- **Two MCP transports, both real:** `InProcessMcpClient` (default — real FastMCP dispatch, no subprocess)
+  and `StdioMcpClient` (spawns `python -m discovery.mcp_server` as a **separate process** over MCP stdio —
+  genuine out-of-process A2A, live-verified; both transports raise identically on a tool error via
+  `_unwrap_tool_result`). `StdioMcpClient` opens a fresh session **per call** (a cold subprocess start each
+  time) — fine for a demo, but a **persistent session** is the pre-at-scale optimisation. **Remote/network
+  A2A** (server on its own host) and the
+  **Podman sandbox** around that process remain roadmap. Async background worker + spin-down, full HITL
+  dashboard (TTL/override), and multi-user session isolation are also roadmap. The deployed
+  grill→jobs→tailor path is the untouched safety-net floor.
