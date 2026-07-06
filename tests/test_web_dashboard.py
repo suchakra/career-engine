@@ -34,6 +34,10 @@ class FakeSt:
         self.subheaders: list[str] = []
         self.writes: list[Any] = []
         self.buttons: list[str] = []
+        # Captures full kwargs per button (label included) for on_click routing tests.
+        self.button_calls: list[dict[str, Any]] = []
+        # Minimal session_state so on_click lambdas can write to it.
+        self.session_state: dict[str, Any] = {}
 
     def title(self, body: str) -> None:
         self.titles.append(body)
@@ -52,6 +56,7 @@ class FakeSt:
 
     def button(self, label: str, **kwargs: Any) -> None:
         self.buttons.append(label)
+        self.button_calls.append({"label": label, **kwargs})
 
 
 def _incomplete_state() -> CareerEngineState:
@@ -172,3 +177,20 @@ class TestRenderDashboard:
         st = FakeSt()
         render_dashboard(self._view(show_nudge=False, pending=["Follow up with Acme."]), st=st)
         assert any("Follow up with Acme." in str(w) for w in st.writes)
+
+    def test_find_jobs_button_present(self) -> None:
+        """'Find jobs' is always rendered alongside Grill and Tailor (never gated)."""
+        st = FakeSt()
+        render_dashboard(self._view(show_nudge=False, pending=[]), st=st)
+        assert "Find jobs" in st.buttons
+
+    def test_find_jobs_on_click_routes_to_jobs_view(self) -> None:
+        """The 'Find jobs' button's on_click callback sets view='jobs' in session_state."""
+        st = FakeSt()
+        render_dashboard(self._view(show_nudge=False, pending=[]), st=st)
+        call = next((c for c in st.button_calls if c["label"] == "Find jobs"), None)
+        assert call is not None, "'Find jobs' button not found in button_calls"
+        on_click = call.get("on_click")
+        assert callable(on_click), "'Find jobs' button has no on_click"
+        on_click()
+        assert st.session_state.get("view") == "jobs"
