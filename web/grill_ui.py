@@ -665,6 +665,11 @@ def render_grill(*, user_id: str) -> None:
         return
 
     if ss.get("grill_checkpoint"):
+        st.info(
+            "💾 Your progress is automatically saved. Feel free to close this tab and come "
+            "back later — your stories will be right where you left them. Visit **Portfolio** "
+            "to review what has been recorded so far."
+        )
         with st.chat_message("assistant"):
             st.write("**Checkpoint — does this look right so far?**")
             st.write(ss["grill_checkpoint"])
