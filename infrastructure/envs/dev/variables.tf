@@ -49,8 +49,26 @@ variable "auth_client_id" {
   default     = ""
 }
 
-variable "auth_redirect_uri" {
+variable "custom_domain" {
   type        = string
-  description = "OIDC redirect URI (public app URL + /oauth2callback), e.g. https://<domain>/oauth2callback."
+  description = "Custom domain for the web app (e.g. career-engine.bitcrafty.cloud)."
+  default     = "career-engine.bitcrafty.cloud"
+}
+
+variable "cloudflare_zone_id" {
+  type        = string
+  description = "Cloudflare zone ID for the bitcrafty.cloud domain (from Cloudflare Dashboard → Overview). Set via TF_VAR_cloudflare_zone_id."
+}
+
+variable "cloudflare_api_token" {
+  type        = string
+  sensitive   = true
+  description = "Cloudflare API token scoped to bitcrafty.cloud DNS Edit. Set via TF_VAR_cloudflare_api_token — never commit or store in state."
+}
+
+variable "google_domain_verification_txt" {
+  type        = string
+  sensitive   = true
   default     = ""
+  description = "Google domain ownership verification TXT value (google-site-verification=...). One-time bootstrap only — apply module.cloudflare_dns.cloudflare_dns_record.verification first, complete verification, then run full apply. Set via TF_VAR_google_domain_verification_txt. Leave empty (the default) for steady-state applies after verification is complete."
 }

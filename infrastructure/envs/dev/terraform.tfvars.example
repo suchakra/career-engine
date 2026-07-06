@@ -9,6 +9,16 @@ region     = "us-central1"
 image = "us-central1-docker.pkg.dev/your-dev-project-id/career-engine-dev-images/app:latest"
 
 # Web OIDC login (Streamlit st.login). Create a Google OAuth 2.0 Web client in the
-# Console; put its client ID here. The redirect URI is the public app URL + path.
-auth_client_id    = "your-oauth-client-id.apps.googleusercontent.com"
-auth_redirect_uri = "https://careerengine.bitcrafty.cloud/oauth2callback"
+# Console; put its client ID here. The redirect URI is derived from custom_domain
+# (default: career-engine.bitcrafty.cloud/_stcore/oauth2callback).
+auth_client_id = "your-oauth-client-id.apps.googleusercontent.com"
+# auth_redirect_uri was removed — it is now derived from custom_domain in main.tf.
+
+# Custom domain + Cloudflare DNS.
+# cloudflare_zone_id is not sensitive — safe to set here.
+# cloudflare_api_token and google_domain_verification_txt are SENSITIVE — set via
+# environment variables (TF_VAR_cloudflare_api_token, TF_VAR_google_domain_verification_txt)
+# or a secrets manager; never put them here.
+cloudflare_zone_id = "your-cloudflare-zone-id"
+# custom_domain defaults to "career-engine.bitcrafty.cloud"; override here if needed:
+# custom_domain = "career-engine.example.com"

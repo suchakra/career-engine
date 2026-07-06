@@ -971,6 +971,8 @@ New modules:
   infrastructure/modules/cloudflare_dns/
     main.tf   — cloudflare provider + cloudflare_dns_record resources
                 (verification TXT + A/AAAA records from domain mapping)
+                Note: cloudflare_dns_record is a v5 provider API; constraint ">= 5.0, < 6.0" is correct.
+                (v4 used cloudflare_record; the spec originally said >= 4.0 which was an error)
     variables.tf
 
 Changes to existing files:
@@ -1021,7 +1023,7 @@ terraform {
   required_providers {
     cloudflare = {
       source  = "cloudflare/cloudflare"
-      version = ">= 4.0, < 5.0"
+      version = ">= 5.0, < 6.0"  # v5+ required: cloudflare_dns_record is a v5 API
     }
   }
 }

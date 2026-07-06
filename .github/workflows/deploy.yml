@@ -68,7 +68,8 @@ jobs:
           TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
           TF_VAR_image: ${{ steps.build.outputs.image }}
           TF_VAR_auth_client_id: ${{ vars.CE_AUTH_CLIENT_ID }}
-          TF_VAR_auth_redirect_uri: ${{ vars.CE_AUTH_REDIRECT_URI }}
+          # custom_domain default (career-engine.bitcrafty.cloud) is used unless overridden.
+          # auth_redirect_uri is now derived from custom_domain; TF_VAR_auth_redirect_uri removed.
         run: |
           terraform init -input=false \
             -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \

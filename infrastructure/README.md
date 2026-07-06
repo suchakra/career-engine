@@ -82,6 +82,66 @@ Prod is driven directly (guard rails on): `terraform -chdir=infrastructure/envs/
 > CI note: only `make tf-check` runs in this repo's gates (no credentials in CI).
 > `plan`/`apply` are operator steps in a credentialed environment.
 
+## Custom domain (`career-engine.bitcrafty.cloud`)
+
+The `domain_mapping` and `cloudflare_dns` modules in `envs/dev/main.tf` wire up
+a GCP-managed TLS certificate on the custom domain. Cloudflare acts as **DNS-only
+(grey cloud / `proxied = false`)** — GCP validates the A/AAAA records and manages
+the certificate. The first-time setup is a **two-phase apply**.
+
+### Required secrets / env vars
+
+| Variable | How to set | Notes |
+|---|---|---|
+| `TF_VAR_cloudflare_api_token` | CI secret or local env | Cloudflare API token scoped to _Edit zone DNS_ for `bitcrafty.cloud`. Create at Cloudflare Dashboard → My Profile → API Tokens → Create Token → **Edit zone DNS**. Never commit. |
+| `TF_VAR_cloudflare_zone_id` | `terraform.tfvars` or env | Zone ID for `bitcrafty.cloud` — visible in Cloudflare Dashboard → Overview sidebar. Not sensitive; can live in `terraform.tfvars` (gitignored). |
+| `TF_VAR_google_domain_verification_txt` | env only (one-time) | TXT value from Google domain verification (see Phase 1 below). Only needed for the initial bootstrap apply. |
+
+### Phase 1 — DNS verification (one-time bootstrap)
+
+```bash
+# 1. Obtain the Google domain verification TXT value:
+gcloud domains verify career-engine.bitcrafty.cloud
+# Copy the TXT string it prints (google-site-verification=...).
+
+# 2. Export required vars:
+export TF_VAR_cloudflare_api_token="<token>"
+export TF_VAR_cloudflare_zone_id="<zone-id>"
+export TF_VAR_google_domain_verification_txt="<google-site-verification=...>"
+
+# 3. Apply only the TXT verification record:
+terraform -chdir=infrastructure/envs/dev apply \
+  -target=module.cloudflare_dns.cloudflare_dns_record.verification
+
+# 4. Wait ~30 s for DNS propagation, then complete Google's verification:
+gcloud domains verify career-engine.bitcrafty.cloud --verify
+# (or: Cloud Console → Cloud Run → Domain Mappings → Verify)
+```
+
+### Phase 2 — Full apply (steady state)
+
+```bash
+# 5. Run full apply (creates domain_mapping, A/AAAA records, updates redirect URI):
+terraform -chdir=infrastructure/envs/dev apply
+
+# 6. SSL provisioning takes 5–30 min; monitor status:
+gcloud run domain-mappings describe \
+  --domain career-engine.bitcrafty.cloud \
+  --region us-central1
+
+# 7. ONE-TIME MANUAL: add the custom-domain redirect URI to the OAuth 2.0 client.
+#    Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client IDs →
+#    edit the web client → Authorized redirect URIs → Add:
+#      https://career-engine.bitcrafty.cloud/_stcore/oauth2callback
+#    (the existing *.run.app URI can remain; both coexist safely)
+```
+
+### Ongoing (after first apply)
+
+Normal `terraform apply` workflow — domain mapping and DNS records are idempotent.
+The `CE_AUTH_REDIRECT_URI` change in `envs/dev/main.tf` causes a new Cloud Run
+revision to deploy automatically on `apply` (no manual step).
+
 ## Access / auth posture (handoff for Phase 2B)
 
 The Cloud Run service uses `ingress = INGRESS_TRAFFIC_ALL` but **no `allUsers`
