@@ -277,9 +277,9 @@ class TestBuildRunnerThreadsTailorInstructions:
 
         asyncio.run(_run())
 
-        # tailor_node is the last node; its generate() call carries the instructions.
+        # tailor_node is the last node; its generate() call carries the instructions in user prompt.
         assert fake_client.calls, "client was never called"
         tailor_call = fake_client.calls[-1]
-        assert "be concise" in tailor_call["system"], (
-            f"tailor_instructions not found in system prompt: {tailor_call['system']!r}"
+        assert "be concise" in tailor_call["user"], (
+            f"tailor_instructions not found in user prompt: {tailor_call['user']!r}"
         )

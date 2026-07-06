@@ -1034,15 +1034,15 @@ def tailor_node(state: CareerEngineState, *, _client: ModelClient | None = None,
     )
 
     extra = (
-        f"\n\nAdditional instructions from the user (apply to this résumé only):\n"
+        f"\n\n[Additional instructions — apply to this résumé only]:\n"
         f"{_instructions.strip()}"
         if _instructions.strip() else ""
     )
-    effective_system = TAILOR_SYSTEM_PROMPT + extra
+    effective_user = tailor_input + extra
     tailored_text = client.generate(
         model_id=model_id,
-        system=effective_system,
-        user=tailor_input,
+        system=TAILOR_SYSTEM_PROMPT,
+        user=effective_user,
     )
 
     return state.model_copy(

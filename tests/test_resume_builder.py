@@ -206,7 +206,7 @@ class TestTailorStructuredResume:
         assert resume.is_empty is True
 
     def test_tailor_structured_resume_appends_instructions(self) -> None:
-        """_instructions text is appended to the system prompt sent to the model."""
+        """_instructions text is appended to the user prompt (not system) sent to the model."""
         job = _job()
         s1 = _story(job, "Cut p99 latency 40%")
         state = CareerEngineState(work_timeline=[job], extracted_star_stories=[s1])
@@ -223,7 +223,7 @@ class TestTailorStructuredResume:
             _instructions="use formal tone",
         )
         assert client.calls, "model was never called"
-        assert "use formal tone" in client.calls[-1]["system"]
+        assert "use formal tone" in client.calls[-1]["user"]
 
     def test_tailor_structured_resume_empty_instructions_unchanged(self) -> None:
         """Empty _instructions leaves the system prompt exactly as STRUCTURED_TAILOR_SYSTEM_PROMPT."""

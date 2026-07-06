@@ -187,6 +187,10 @@ def build_discovery_workflow(
             so each workflow instance is isolated from the process-global
             factory.  When ``None``, nodes fall back to ``_get_model_client()``
             (CLI / test path).
+        tailor_instructions: Optional per-application instructions forwarded
+            to ``tailor_node`` as ``_instructions``.  Appended to the *user*
+            prompt (not the system prompt) so the fixed system rules remain
+            intact.  Defaults to ``""`` (no extra instructions).
 
     Graph:
         START → ingest → router → execute_grill_turn
@@ -330,9 +334,10 @@ def build_runner(
             ``build_discovery_workflow`` so every node in this runner instance
             uses the same per-request client instead of the process-global
             factory.  When ``None``, nodes fall back to ``_get_model_client()``.
-
-    Returns:
-        google.adk.runners.Runner instance ready to call run_async().
+        tailor_instructions: Optional per-application instructions forwarded
+            through ``build_discovery_workflow`` to ``tailor_node``.  Appended
+            to the *user* prompt so the system prompt rules remain intact.
+            Defaults to ``""`` (no extra instructions).
     """
     if session_service is None:
         # InMemorySessionService is an untyped ADK constructor; the cast keeps

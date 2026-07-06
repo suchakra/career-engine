@@ -208,12 +208,12 @@ def tailor_structured_resume(
         f"CANDIDATE ACHIEVEMENTS (catalog):\n{json.dumps(catalog, indent=2)}"
     )
     extra = (
-        f"\n\nAdditional instructions from the user (apply to this résumé only):\n"
+        f"\n\n[Additional instructions — apply to this r\u00e9sum\u00e9 only]:\n"
         f"{_instructions.strip()}"
         if _instructions.strip() else ""
     )
-    effective_system = STRUCTURED_TAILOR_SYSTEM_PROMPT + extra
-    raw = client.generate(model_id=model_id_str, system=effective_system, user=user_prompt)
+    effective_user = user_prompt + extra
+    raw = client.generate(model_id=model_id_str, system=STRUCTURED_TAILOR_SYSTEM_PROMPT, user=effective_user)
     parsed = _extract_json_object(raw)
 
     summary = str(parsed.get("tailored_summary", "")).strip()

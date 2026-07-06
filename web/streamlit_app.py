@@ -686,7 +686,7 @@ def _render_tailor(*, user_id: str, today: str) -> None:
             "e.g. Emphasise cloud infrastructure experience. "
             "Omit side projects. Use a formal tone."
         ),
-        help="These instructions apply to this résumé only and are not saved.",
+        help="These instructions apply to this résumé only and are not persisted to your profile.",
     )
     if st.button("Tailor my résumé", type="primary"):
         client = GeminiModelClient(api_key=key)
