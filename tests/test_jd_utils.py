@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+
+from integration.model_client import ModelAPIError
 from web.jd_utils import extract_jd_metadata
 
 
@@ -50,3 +53,11 @@ def test_extract_jd_metadata_strips_markdown_fences() -> None:
     title, company = extract_jd_metadata("Some JD text", client, "gemini-2.5-flash-lite")
     assert title == "SWE"
     assert company == "Acme"
+
+
+def test_extract_jd_metadata_propagates_model_api_error() -> None:
+    """ModelAPIError from the LLM client propagates — not silently swallowed."""
+    client = MagicMock()
+    client.generate.side_effect = ModelAPIError("quota exceeded")
+    with pytest.raises(ModelAPIError):
+        extract_jd_metadata("Some JD text", client, "gemini-2.5-flash-lite")

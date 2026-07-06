@@ -806,14 +806,23 @@ def _render_save_application(*, user_id: str, today: str, resume: StructuredResu
                 client = GeminiModelClient(api_key=key)
                 model_id = get_registry().get_model_id(Capability.BULK_CHEAP)
                 if not isinstance(model_id, str):
-                    st.warning("Could not resolve a model for extraction.")
+                    st.warning(
+                        model_id.user_message
+                        if hasattr(model_id, "user_message")
+                        else "Could not resolve a model for extraction."
+                    )
                 else:
+                    from integration.model_client import ModelAPIError
                     from web.jd_utils import extract_jd_metadata
 
                     with st.spinner("Extracting…"):
-                        title, company_extracted = extract_jd_metadata(
-                            jd_text_for_extract, client, model_id
-                        )
+                        try:
+                            title, company_extracted = extract_jd_metadata(
+                                jd_text_for_extract, client, model_id
+                            )
+                        except ModelAPIError:
+                            st.error("Extraction failed — API error. Please try again.")
+                            return
                     if title or company_extracted:
                         if title:
                             ss["save_app_title"] = title.strip()
