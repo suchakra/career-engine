@@ -1,24 +1,25 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-06 — Phase 8: 8A+8B+8C COMPLETE · 8D PR #45 in review)
-**`feat/8d-model-client-di` @ latest · PR #45 open, Copilot review in progress · contract v2.8.0 · 646 tests (1 skipped).**
-**Phases 1–7 + 8A + 8B + 8C COMPLETE. 8D implementation done — PR #45 pending merge.**
+## 👉 YOU ARE HERE (updated 2026-07-06 — Phase 8: 8A+8B+8C+8D COMPLETE)
+**`master` clean @ `8a3067d` · contract v2.8.0 · 646 tests (1 skipped) · no open PRs.**
+**Phases 1–7 + 8A + 8B + 8C + 8D COMPLETE.**
 
-**8D work in branch (not yet on master):**
+**What shipped (this session):**
 - **8D (PR #45):** Multi-user model-client isolation — replaced process-global `_install_model_client`
   mutation with explicit DI via closure injection at `build_discovery_workflow()` time:
   - 6 node functions in `workflows/nodes.py` gain `*, _client: ModelClient | None = None`
   - `build_discovery_workflow(model_factory=None)` — shims become closures; `build_runner(model_factory=None)` threads through
   - `cli/app.py`, `web/grill_ui.py`, `web/streamlit_app.py` — all 3 `_install_model_client` call sites replaced
-  - 4 new named isolation tests (646 total). Gemini review: PASS.
+  - 7 dead legacy module-level shims removed (Copilot review fix)
+  - 4 new named isolation tests (646 total). Gemini PASS + Copilot PASS.
 
-**▶ NEXT — merge PR #45 (squash-merge), then 8G: Custom domain via Cloudflare + Cloud Run.**
-After merging: checkout master, `git reset --hard origin/master`, confirm 646 tests, then launch 8G subagent.
-8G spec is in GROOMING.md §8G (Terraform-only; two new modules: cloud_run_domain_mapping + cloudflare_dns).
+**▶ NEXT — 8G: Custom domain via Cloudflare + Cloud Run (Terraform-only).**
+Spec in GROOMING.md §8G. Two new Terraform modules: `cloud_run_domain_mapping` + `cloudflare_dns`.
+Needs `TF_VAR_cloudflare_api_token`, `TF_VAR_cloudflare_zone_id`, `TF_VAR_google_domain_verification_txt`.
+Two-phase apply (TXT verification first). After 8G: 8E (deployer-SA), then 8F.
 
-**Known follow-up from 8D review:**
-- Dead module-level shims in `discovery_graph.py` (duplicated, not moved — harmless but confusing)
-- `web/resume_builder.py::tailor_structured_resume` still calls `set_model_client_factory` directly — pre-existing race, out of 8D scope; add a follow-up ticket (8D.5 or 8H).
+**Known follow-up (out of 8D scope):**
+- `web/resume_builder.py::tailor_structured_resume` still calls `set_model_client_factory` directly — pre-existing race; track as 8H or fold into 8E.
 
 **After 8G:** 8E (deployer-SA least-privilege), then 8F (HITL TTL dashboard).
 
