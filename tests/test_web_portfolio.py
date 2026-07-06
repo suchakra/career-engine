@@ -261,7 +261,7 @@ class TestRenderPortfolio:
         assert not any("tailoring priority" in label for label, _ in st.buttons)
 
     def test_progress_renders_zero_state(self) -> None:
-        """EntryCard with story_count=0 renders a 'No stories yet' caption (9K)."""
+        """EntryCard with story_count=0 renders a 'No stories recorded' caption (9K)."""
         from web.portfolio import EntryCard, PortfolioView
 
         card = EntryCard(
@@ -275,7 +275,7 @@ class TestRenderPortfolio:
         )
         st = FakeSt()
         render_portfolio(PortfolioView(entries=[card]), st=st)
-        assert any("No stories yet" in c for c in st.captions)
+        assert any("No stories recorded" in c for c in st.captions)
         assert st.progress_calls == []
 
     def test_progress_renders_partial(self) -> None:

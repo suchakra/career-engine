@@ -176,10 +176,11 @@ def render_portfolio(
             st.caption("⭐ Pinned as tailoring priority — always included when tailoring.")
 
         if entry.story_count == 0:
-            st.caption("No stories yet — click 'Grill me about this' to start.")
+            st.caption("No stories recorded yet.")
         else:
+            target = entry.stories_target if entry.stories_target > 0 else 1
             st.progress(
-                min(entry.story_count / entry.stories_target, 1.0),
+                min(entry.story_count / target, 1.0),
                 text=(
                     f"{entry.story_count} stor{'y' if entry.story_count == 1 else 'ies'} recorded"
                     + (" ✓" if entry.story_count >= entry.stories_target else "")
