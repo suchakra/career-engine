@@ -207,10 +207,10 @@ def tailor_structured_resume(
         f"JOB DESCRIPTION:\n{jd_text}\n\n"
         f"CANDIDATE ACHIEVEMENTS (catalog):\n{json.dumps(catalog, indent=2)}"
     )
+    stripped_instructions = _instructions.strip()
     extra = (
-        f"\n\n[Additional instructions — apply to this r\u00e9sum\u00e9 only]:\n"
-        f"{_instructions.strip()}"
-        if _instructions.strip() else ""
+        f"\n\n[Additional instructions — apply to this résumé only]:\n{stripped_instructions}"
+        if stripped_instructions else ""
     )
     effective_user = user_prompt + extra
     raw = client.generate(model_id=model_id_str, system=STRUCTURED_TAILOR_SYSTEM_PROMPT, user=effective_user)

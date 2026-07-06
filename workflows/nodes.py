@@ -1033,10 +1033,10 @@ def tailor_node(state: CareerEngineState, *, _client: ModelClient | None = None,
         f"JOB DESCRIPTION (cleaned):\n{jd_text}"
     )
 
+    stripped_instructions = _instructions.strip()
     extra = (
-        f"\n\n[Additional instructions — apply to this résumé only]:\n"
-        f"{_instructions.strip()}"
-        if _instructions.strip() else ""
+        f"\n\n[Additional instructions — apply to this résumé only]:\n{stripped_instructions}"
+        if stripped_instructions else ""
     )
     effective_user = tailor_input + extra
     tailored_text = client.generate(
