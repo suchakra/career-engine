@@ -1,10 +1,10 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-06 — Phase 8: 8A+8B+8C+8D shipped, PR #45 open)
-**`feat/8d-model-client-di` @ `7b579db` · PR #45 open, not yet merged · contract v2.8.0 · 646 tests (1 skipped).**
-**Phases 1–7 + 8A + 8B + 8C COMPLETE. 8D implementation complete — awaiting squash-merge.**
+## 👉 YOU ARE HERE (updated 2026-07-06 — Phase 8: 8A+8B+8C COMPLETE · 8D PR #45 in review)
+**`feat/8d-model-client-di` @ latest · PR #45 open, Copilot review in progress · contract v2.8.0 · 646 tests (1 skipped).**
+**Phases 1–7 + 8A + 8B + 8C COMPLETE. 8D implementation done — PR #45 pending merge.**
 
-**What shipped (this session):**
+**8D work in branch (not yet on master):**
 - **8D (PR #45):** Multi-user model-client isolation — replaced process-global `_install_model_client`
   mutation with explicit DI via closure injection at `build_discovery_workflow()` time:
   - 6 node functions in `workflows/nodes.py` gain `*, _client: ModelClient | None = None`
