@@ -116,7 +116,12 @@ def build_jobs_view(
         for job in result.soft_rejected:
             if not _visible(job):
                 continue
-            (accepted_jobs if job.job_id in kept else review_jobs).append(job)  # Keep → promote
+            if job.job_id in kept:
+                # Keep → promote AFTER the originally-accepted jobs, and stamp ACCEPTED
+                # so the card's status field is truthful under "Strong matches".
+                accepted_jobs.append(job.model_copy(update={"match_status": MatchStatus.ACCEPTED}))
+            else:
+                review_jobs.append(job)
         return JobsView(
             accepted=[_card(j) for j in accepted_jobs],
             for_review=[_card(j) for j in review_jobs],

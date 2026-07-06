@@ -820,4 +820,13 @@ def _render_save_application(*, user_id: str, today: str, resume: StructuredResu
             st.error(f"Couldn't save the application just now: {exc}")
 
 
-main()
+# Run the app ONLY under a real Streamlit runtime (`streamlit run …`). Importing this
+# module (e.g. for unit-testing the handlers) must NOT execute main(). Streamlit sets
+# ``sys.modules["__main__"]`` but not ``__name__``, so the usual ``if __name__ ==
+# "__main__"`` guard can't be used (see Streamlit's ScriptRunner); ``runtime.exists()``
+# is the supported way to detect the running app — it's True under `streamlit run`,
+# False on a plain import.
+from streamlit.runtime import exists as _streamlit_runtime_exists  # noqa: E402
+
+if _streamlit_runtime_exists():
+    main()

@@ -102,6 +102,8 @@ class TestBuildJobsView:
         view = build_jobs_view(result, kept_ids={make_job_id("remotive", "2")})
         assert [c.company for c in view.accepted] == ["Acme", "Globex"]  # Globex promoted
         assert view.for_review == []
+        # The promoted card's status is truthful (ACCEPTED), not the old soft_reject.
+        assert view.accepted[1].status == "accepted"
 
 
 class TestRenderJobs:
