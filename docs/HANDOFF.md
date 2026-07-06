@@ -1,8 +1,11 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-06 — Phase 8: 8A+8B+8C+8D+8G COMPLETE)
-**`master` clean @ `71d80a5` · contract v2.8.0 · 646 tests (1 skipped) · no open PRs.**
-**Phases 1–7 + 8A + 8B + 8C + 8D + 8G COMPLETE.**
+## 👉 YOU ARE HERE (updated 2026-07-06 — Phase 9 in progress: 9J shipped, 9I in review)
+**`master` clean @ `87c53f7` · contract v2.8.0 · 647 tests (1 skipped) · PR #48 open (9I, Copilot review pending).**
+**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + 9J COMPLETE.**
+
+**What shipped (9J — PR #47):**
+- **9J:** Grill checkpoint info copy: `st.info("💡 You've reached a checkpoint — stories completed so far are visible in Portfolio.")` shown above checkpoint summary when `grill_checkpoint` is set. No logic changes. Test: `test_checkpoint_leave_copy_shown`. Copilot review addressed: removed persistence claims (accurate under both InMemory + Firestore); fixed `_FakeSt.columns()` spec-sized.
 
 **What shipped (8G — PR #46):**
 - **8G:** Custom domain `career-engine.bitcrafty.cloud` — two new Terraform modules:
@@ -19,10 +22,12 @@
 - 9A–9K + 9I: Streamlit-compatible, can ship as incremental PRs.
 - 9H, 9M: require Next.js frontend (wait on architecture decision).
 
-**▶ NEXT — 8E: Deployer-SA least-privilege (Terraform-only).**
-Spec in GROOMING.md §8E + SECURITY.md "Required next review". Narrow `career-engine-deployer`
-SA from broad project roles to only what Terraform actually needs.
-Alternatively: skip to Phase 9 Streamlit-compatible items (9A–9K) which can ship now.
+**▶ NEXT — Wait for Copilot review on PR #48 (9I); then 9B.**
+PR #48 (9I: tailor specific instructions textarea) is open. Copilot review requested.
+While waiting: launch 9B (portfolio add-experience CTA) in parallel.
+
+After 9I merged: launch batch 9C + 9K + 9G in parallel.
+After that: batch 9E + 9D + 9F. Then 9A (may need story_id contract decision).
 
 ---
 *Historical session notes follow (most recent first):*
