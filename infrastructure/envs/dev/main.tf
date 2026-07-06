@@ -206,7 +206,10 @@ module "cloudflare_dns" {
   subdomain               = "career-engine"
   google_verification_txt = var.google_domain_verification_txt
   resource_records        = module.domain_mapping.resource_records
-  depends_on              = [module.domain_mapping]
+  # No explicit depends_on needed: resource_records references module.domain_mapping.resource_records,
+  # which gives Terraform an implicit dependency for the A/AAAA records. Removing the explicit
+  # depends_on here allows `-target=module.cloudflare_dns.cloudflare_dns_record.verification` to
+  # create only the TXT record (Phase 1) without also creating the domain mapping.
 }
 
 output "service_uri" {

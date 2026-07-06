@@ -12,7 +12,8 @@ variable "subdomain" {
 variable "google_verification_txt" {
   type        = string
   sensitive   = true
-  description = "Google domain ownership verification TXT value (google-site-verification=...). One-time bootstrap only; obtain from Google Search Console or Cloud Run domain mapping console."
+  default     = ""
+  description = "Google domain ownership verification TXT value (google-site-verification=...). One-time bootstrap only; obtain from Google Search Console or Cloud Run domain mapping console. Set to empty string to skip creating the TXT record (after verification is complete and the record can be removed)."
 }
 
 variable "resource_records" {

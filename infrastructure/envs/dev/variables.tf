@@ -69,5 +69,6 @@ variable "cloudflare_api_token" {
 variable "google_domain_verification_txt" {
   type        = string
   sensitive   = true
-  description = "Google domain ownership verification TXT value (google-site-verification=...). One-time bootstrap only — apply module.cloudflare_dns.cloudflare_dns_record.verification first, complete verification, then run full apply. Set via TF_VAR_google_domain_verification_txt."
+  default     = ""
+  description = "Google domain ownership verification TXT value (google-site-verification=...). One-time bootstrap only — apply module.cloudflare_dns.cloudflare_dns_record.verification first, complete verification, then run full apply. Set via TF_VAR_google_domain_verification_txt. Leave empty (the default) for steady-state applies after verification is complete."
 }

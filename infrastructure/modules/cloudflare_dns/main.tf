@@ -24,7 +24,10 @@ terraform {
 # Value comes from Google Webmaster Central / Cloud Console domain verification.
 # Apply this first (targeted apply), complete verification in Google Console,
 # then run the full apply to create the A/AAAA records.
+# Set google_verification_txt to "" (the default) after verification is complete
+# to remove this record from management — it is not needed for steady-state operation.
 resource "cloudflare_dns_record" "verification" {
+  count   = var.google_verification_txt != "" ? 1 : 0
   zone_id = var.zone_id
   name    = var.subdomain
   type    = "TXT"
@@ -38,7 +41,7 @@ resource "cloudflare_dns_record" "verification" {
 # resource_records is a list of { type, rrdata } objects returned by the
 # cloud_run_domain_mapping module after GCP provisions the mapping.
 resource "cloudflare_dns_record" "cloud_run" {
-  for_each = { for r in var.resource_records : r.type => r }
+  for_each = { for r in var.resource_records : "${r.type}:${r.rrdata}" => r }
 
   zone_id = var.zone_id
   name    = var.subdomain
