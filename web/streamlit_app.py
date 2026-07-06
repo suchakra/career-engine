@@ -96,7 +96,11 @@ def _load_user_profile(user_id: str) -> UserProfile:
     from database.workspace_store import FirestoreWorkspaceStore
     from web.profile_store import load_profile
 
-    return load_profile(FirestoreWorkspaceStore(), user_id=user_id)
+    try:
+        return load_profile(FirestoreWorkspaceStore(), user_id=user_id)
+    except Exception:
+        st.warning("Couldn't load your profile just now — showing empty profile.")
+        return UserProfile()
 
 
 def _render_signin() -> None:
@@ -270,7 +274,10 @@ def _render_portfolio(*, user_id: str, today: str) -> None:
     def _on_save_profile(p: UserProfile) -> None:
         from database.workspace_store import FirestoreWorkspaceStore
 
-        save_profile(FirestoreWorkspaceStore(), user_id=user_id, profile=p)
+        try:
+            save_profile(FirestoreWorkspaceStore(), user_id=user_id, profile=p)
+        except Exception:
+            st.error("Couldn't save your profile — please try again.")
 
     _render_add_experience_form(user_id=user_id, today=today)
     render_portfolio(
