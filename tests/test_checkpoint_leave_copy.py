@@ -28,8 +28,9 @@ class _FakeSt:
         self._null = _NullCtx()
         self.infos: list[str] = []
 
-    def columns(self, *args: Any, **kwargs: Any) -> list[_NullCtx]:
-        return [_NullCtx() for _ in range(10)]
+    def columns(self, spec: int | list[Any] = 1, **kwargs: Any) -> list[_NullCtx]:
+        n = spec if isinstance(spec, int) else len(spec)
+        return [_NullCtx() for _ in range(n)]
 
     def button(self, *args: Any, **kwargs: Any) -> bool:
         return False
@@ -74,7 +75,7 @@ def _make_ss(checkpoint: str) -> dict[str, Any]:
 
 
 def test_checkpoint_leave_copy_shown(monkeypatch: Any) -> None:
-    """Info message containing 'come back' is rendered when grill_checkpoint is set."""
+    """Info message about checkpoint / Portfolio is rendered when grill_checkpoint is set."""
     ss = _make_ss("Great work so far — here is your checkpoint summary.")
     fake_st = _FakeSt(ss)
 
@@ -90,6 +91,6 @@ def test_checkpoint_leave_copy_shown(monkeypatch: Any) -> None:
 
     grill_ui.render_grill(user_id="test-user")
 
-    assert any("come back" in msg for msg in fake_st.infos), (
-        f"Expected 'come back' in an st.info() call, got: {fake_st.infos}"
+    assert any("checkpoint" in msg for msg in fake_st.infos), (
+        f"Expected checkpoint info in an st.info() call, got: {fake_st.infos}"
     )
