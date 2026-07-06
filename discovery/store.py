@@ -37,17 +37,32 @@ class LedgerStore(Protocol):
         """Return the user's previously accepted jobs (for display on entry)."""
         ...
 
+    def add_rejected_company(self, user_id: str, company: str) -> None:
+        """Record a company the user dismissed (future runs hard-reject it)."""
+        ...
+
+
+def _dedup_append(bucket: list[str], name: str) -> list[str]:
+    """Append ``name`` to ``bucket`` unless a case-insensitive match already exists."""
+    if name and name.lower() not in {c.lower() for c in bucket}:
+        return [*bucket, name]
+    return bucket
+
 
 class InMemoryLedgerStore:
     """Dict-backed store for dev / CI / demo (no persistence across processes)."""
 
     def __init__(self) -> None:
-        """Initialise an empty per-user job map."""
+        """Initialise empty per-user job + dismissed-company maps."""
         self._jobs: dict[str, dict[str, JobOpportunity]] = {}
+        self._rejected: dict[str, list[str]] = {}
 
     def load_ledger(self, user_id: str) -> InteractionLedger:
-        """Return a ledger whose already_applied_ids are this user's stored jobs."""
-        return InteractionLedger(already_applied_ids=list(self._jobs.get(user_id, {})))
+        """Return the user's ledger: seen job_ids + dismissed companies."""
+        return InteractionLedger(
+            already_applied_ids=list(self._jobs.get(user_id, {})),
+            rejected_companies=list(self._rejected.get(user_id, [])),
+        )
 
     def record_accepted(self, user_id: str, jobs: list[JobOpportunity]) -> int:
         """Store jobs by job_id; a repeat job_id overwrites without counting as new."""
@@ -62,6 +77,12 @@ class InMemoryLedgerStore:
     def list_accepted(self, user_id: str) -> list[JobOpportunity]:
         """Return the user's stored jobs (insertion order)."""
         return list(self._jobs.get(user_id, {}).values())
+
+    def add_rejected_company(self, user_id: str, company: str) -> None:
+        """Record a dismissed company (case preserved; deduped case-insensitively)."""
+        name = company.strip()
+        if name:
+            self._rejected[user_id] = _dedup_append(self._rejected.get(user_id, []), name)
 
 
 class FirestoreLedgerStore:
@@ -81,13 +102,21 @@ class FirestoreLedgerStore:
         self._prefix = collection_prefix
         self._client: Any = client
 
+    def _doc_ref(self, user_id: str) -> Any:
+        """Parent doc ``discovered_jobs/{user_id}`` (holds dismissed companies)."""
+        return self._client.collection(self._prefix).document(user_id)
+
     def _jobs_col(self, user_id: str) -> Any:
-        return self._client.collection(self._prefix).document(user_id).collection("jobs")
+        return self._doc_ref(user_id).collection("jobs")
 
     def load_ledger(self, user_id: str) -> InteractionLedger:
-        """Read the stored job_ids into the ledger's already_applied_ids."""
+        """Read stored job_ids + dismissed companies into the ledger."""
         ids = [doc.id for doc in self._jobs_col(user_id).stream()]
-        return InteractionLedger(already_applied_ids=ids)
+        snap = self._doc_ref(user_id).get()
+        rejected = (snap.to_dict() or {}).get("rejected_companies", []) if snap.exists else []
+        return InteractionLedger(
+            already_applied_ids=ids, rejected_companies=[str(c) for c in rejected]
+        )
 
     def record_accepted(self, user_id: str, jobs: list[JobOpportunity]) -> int:
         """Upsert each accepted job by job_id (merge); return the count of new docs."""
@@ -116,3 +145,15 @@ class FirestoreLedgerStore:
             except ValueError:
                 continue
         return out
+
+    def add_rejected_company(self, user_id: str, company: str) -> None:
+        """Add a dismissed company to the parent doc (read-modify-write, deduped)."""
+        name = company.strip()
+        if not name:
+            return
+        ref = self._doc_ref(user_id)
+        snap = ref.get()
+        existing = [str(c) for c in (snap.to_dict() or {}).get("rejected_companies", [])] if snap.exists else []
+        merged = _dedup_append(existing, name)
+        if merged != existing:
+            ref.set({"rejected_companies": merged}, merge=True)

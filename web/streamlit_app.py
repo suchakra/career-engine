@@ -451,8 +451,33 @@ def _render_jobs(*, user_id: str) -> None:
 
     shown = (result.accepted + result.soft_rejected) if result is not None else (prior or [])
     ss["_jobs_tailor_index"] = job_tailor_index(shown)
+    st.session_state["_jobs_reject_store"] = store  # for the reject handler's persistence
+    hidden = set(ss.get("_jobs_hidden_companies", set()))
     st.divider()
-    render_jobs(build_jobs_view(result, prior=prior), st=st, on_tailor=_tailor_from_job)
+    render_jobs(
+        build_jobs_view(result, prior=prior, hidden_companies=hidden),
+        st=st,
+        on_tailor=_tailor_from_job,
+        on_reject=lambda company: _reject_company(user_id=user_id, company=company),
+    )
+
+
+def _reject_company(*, user_id: str, company: str) -> None:
+    """Dismiss a company from job discovery (HITL): persist it + hide it now.
+
+    Runs as an on_click callback. Adds the company to the ledger's rejected set (so
+    future runs hard-reject it) and to a session hide-set (so it disappears from the
+    current view immediately). Best-effort persistence never crashes the page.
+    """
+    ss = st.session_state
+    ss.setdefault("_jobs_hidden_companies", set()).add(company)
+    store = ss.get("_jobs_reject_store")
+    if store is None:
+        return
+    try:
+        store.add_rejected_company(user_id, company)
+    except Exception:
+        st.warning(f"Hid {company} for now, but couldn't save the preference — try again later.")
 
 
 def _tailor_from_job(job_id: str) -> None:

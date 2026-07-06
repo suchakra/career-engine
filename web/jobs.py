@@ -92,16 +92,24 @@ def build_jobs_view(
     result: DiscoveryResult | None,
     *,
     prior: list[JobOpportunity] | None = None,
+    hidden_companies: set[str] | None = None,
 ) -> JobsView:
     """Build the Jobs view-model (pure).
 
     With a fresh ``result``, shows its accepted + soft-rejected batches. With no
     result (initial entry), shows previously-persisted accepted jobs (``prior``).
+    ``hidden_companies`` (case-insensitive) are dropped — a "Not interested" the
+    user just clicked disappears immediately (and is persisted for future runs).
     """
+    hidden = {c.strip().lower() for c in (hidden_companies or set()) if c.strip()}
+
+    def _keep(job: JobOpportunity) -> bool:
+        return job.metadata.company.strip().lower() not in hidden
+
     if result is not None:
         return JobsView(
-            accepted=[_card(j) for j in result.accepted],
-            for_review=[_card(j) for j in result.soft_rejected],
+            accepted=[_card(j) for j in result.accepted if _keep(j)],
+            for_review=[_card(j) for j in result.soft_rejected if _keep(j)],
             iterations=result.iterations,
             hard_rejected_count=result.hard_rejected_count,
             ran=True,
@@ -109,11 +117,17 @@ def build_jobs_view(
     prior_jobs = prior or []
     # Persisted jobs were all ACCEPTED when stored; keep only ACCEPTED (positive
     # filter, so a stray HARD_REJECT/None/soft never leaks into the strong list).
-    accepted = [_card(j) for j in prior_jobs if j.match_status is MatchStatus.ACCEPTED]
+    accepted = [_card(j) for j in prior_jobs if j.match_status is MatchStatus.ACCEPTED and _keep(j)]
     return JobsView(accepted=accepted, ran=False)
 
 
-def _render_card(card: JobCard, *, st: Any, on_tailor: Callable[[str], None] | None) -> None:
+def _render_card(
+    card: JobCard,
+    *,
+    st: Any,
+    on_tailor: Callable[[str], None] | None,
+    on_reject: Callable[[str], None] | None,
+) -> None:
     """Render one job card via the injected ``st``-like module."""
     head = " — ".join(p for p in (card.title, card.company) if p) or "(untitled role)"
     st.markdown(f"**{head}**")
@@ -132,6 +146,12 @@ def _render_card(card: JobCard, *, st: Any, on_tailor: Callable[[str], None] | N
             key=f"tailor_job_{card.job_id}",
             on_click=lambda jid=card.job_id: on_tailor(jid),
         )
+    if on_reject is not None and card.company:
+        st.button(
+            f"🚫 Not interested in {card.company}",
+            key=f"reject_job_{card.job_id}",
+            on_click=lambda co=card.company: on_reject(co),
+        )
 
 
 def render_jobs(
@@ -139,6 +159,7 @@ def render_jobs(
     *,
     st: Any,
     on_tailor: Callable[[str], None] | None = None,
+    on_reject: Callable[[str], None] | None = None,
 ) -> None:
     """Render the discovery results via an injected ``st``-like module.
 
@@ -147,6 +168,8 @@ def render_jobs(
         st: A Streamlit-like module (real ``streamlit`` in the app; a fake in tests).
         on_tailor: Optional per-job "Tailor résumé to this" callback (7C); receives
             the ``job_id``. When ``None``, no tailor button is rendered.
+        on_reject: Optional per-job "Not interested" callback (HITL); receives the
+            company name (dismisses it from future runs). ``None`` → no button.
     """
     if view.ran:
         st.caption(
@@ -161,12 +184,12 @@ def render_jobs(
         st.subheader("✅ Strong matches")
         for card in view.accepted:
             st.divider()
-            _render_card(card, st=st, on_tailor=on_tailor)
+            _render_card(card, st=st, on_tailor=on_tailor, on_reject=on_reject)
     if view.for_review:
         st.subheader("🟡 For review")
         for card in view.for_review:
             st.divider()
-            _render_card(card, st=st, on_tailor=on_tailor)
+            _render_card(card, st=st, on_tailor=on_tailor, on_reject=on_reject)
 
 
 __all__ = ["JobCard", "JobsView", "build_jobs_view", "job_tailor_index", "render_jobs"]
