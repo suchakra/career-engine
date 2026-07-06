@@ -17,7 +17,15 @@ terraform {
       source  = "hashicorp/google"
       version = ">= 5.0, < 7.0"
     }
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = ">= 5.0, < 6.0"
+    }
   }
+}
+
+provider "cloudflare" {
+  api_token = var.cloudflare_api_token
 }
 
 provider "google" {
@@ -138,7 +146,7 @@ module "cloud_run" {
     GCP_PROJECT_ID       = var.project_id
     GCP_REGION           = var.region
     CE_AUTH_CLIENT_ID    = var.auth_client_id
-    CE_AUTH_REDIRECT_URI = var.auth_redirect_uri
+    CE_AUTH_REDIRECT_URI = "https://${var.custom_domain}/_stcore/oauth2callback"
     CE_AUTH_METADATA_URL = "https://accounts.google.com/.well-known/openid-configuration"
     # The web app is BYOK (every user brings their own key), so reasoning-heavy
     # steps route to Pro on the user's key instead of Flash. ACCESS_MODE drives
@@ -182,6 +190,23 @@ module "scheduler" {
   invoker_service_account_email = module.cloud_run.service_account_email
   # Cloud Run Jobs Execute API requires an OAuth2 access token, not an OIDC JWT.
   token_type = "oauth2"
+}
+
+module "domain_mapping" {
+  source       = "../../modules/cloud_run_domain_mapping"
+  project_id   = var.project_id
+  region       = var.region
+  domain       = var.custom_domain
+  service_name = module.cloud_run.service_name
+}
+
+module "cloudflare_dns" {
+  source                  = "../../modules/cloudflare_dns"
+  zone_id                 = var.cloudflare_zone_id
+  subdomain               = "career-engine"
+  google_verification_txt = var.google_domain_verification_txt
+  resource_records        = module.domain_mapping.resource_records
+  depends_on              = [module.domain_mapping]
 }
 
 output "service_uri" {
