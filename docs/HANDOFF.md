@@ -266,31 +266,31 @@ time, and its `scripts/deploy_and_verify.sh` automates the merge+deploy+verify t
 [`wait-for-pr-review`](../skills/wait-for-pr-review/SKILL.md) skill to block for Copilot's review instead
 of hand-rolling a poll loop.
 
-**The standard per-change loop (every code change goes through this):**
-1. **Opus builds** the change in-context on a fresh branch (`fix/…`, `feat/…`).
-2. **`make check` green** (ruff + mypy --strict + pytest) — plus `make tf-check` for infra.
-3. **Sonnet reviews** the diff as an independent gate (re-runs the gates, reads the diff, returns
-   PASS / CHANGES REQUESTED). Opus does not self-declare done; address CHANGES REQUESTED and re-review.
-   *(For small/surgical changes this may be an Opus self-review; a Sonnet subagent review is the norm
-   for anything non-trivial or state-machine/contract-touching.)*
-4. **PR created** (`gh pr create`), then **Copilot review requested** on the PR
+**The standard per-change loop (every code change goes through this) — updated 2026-07-06:**
+1. **Subagent builds** the change on a fresh branch (`fix/…`, `feat/…`). Subagents are Sonnet
+   by default; worktree-isolated for large changes (`isolation: "worktree"`).
+2. **`make check` green** (ruff + mypy --strict + pytest) — plus `make tf-check` for infra changes.
+   Subagent must not declare done unless gates pass.
+3. **Gemini 2.5 Pro reviews** the diff as an independent gate — launched as a separate review subagent
+   (`model: "Gemini 2.5 Pro (Google)"`). Reviewer re-runs gates, reads the diff, returns
+   PASS / CHANGES REQUESTED with a reason list. Address CHANGES REQUESTED and re-review before pushing.
+   *(Replaces the old Sonnet/Opus review step — Claude subscription ended.)*
+4. **PR created** (`gh pr create`), then **Copilot review requested**
    (`gh api --method POST repos/{owner}/{repo}/pulls/N/requested_reviewers -f
-   'reviewers[]=copilot-pull-request-reviewer[bot]'`; it surfaces as login `Copilot`).
+   'reviewers[]=copilot-pull-request-reviewer[bot]'`; surfaces as login `Copilot`).
 5. **Address Copilot comments** (fix + reply), CI green.
 6. **Squash-merge** (`gh pr merge N --squash --delete-branch`).
 7. **Deploy** (`gh workflow run deploy.yml --ref master -f environment=dev`) + verify HTTP 200 live.
 8. **Reconcile docs** in the same session (PROGRESS/HANDOFF/etc.).
 
-So: **Opus builds → Sonnet reviews → PR → Copilot reviews → address → merge → deploy.** Two independent
-review gates (Sonnet + Copilot) plus CI. This whole loop is a strong candidate to become a coded skill
-(see the skills discussion) — it is executed by hand on every change today.
-- **Alternative (large, file-disjoint work): Sonnet builds in worktrees, Opus reviews** (`model: "sonnet"`,
-  `isolation: "worktree"`). Use when workstreams are big and don't share files.
+So: **Subagent builds → Gemini 2.5 Pro reviews → PR → Copilot reviews → address → merge → deploy.**
+Two independent review gates (Gemini + Copilot) plus CI.
+- **For large, file-disjoint work:** launch parallel Sonnet subagents in worktrees; Gemini 2.5 Pro
+  reviews each branch independently before its PR.
 - No agent self-declares done; only a review PASS ticks `docs/PROGRESS.md`. The reviewer independently
-  re-runs gates and reads the diff (don't trust the report).
+  re-runs gates and reads the diff.
 - **master must stay green after every commit** (`make check`; `make tf-check` for infra). Contract
   changes require a `CONTRACT_VERSION` bump + tag after review PASS.
-- Commit trailer: `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
 
 ## Known gotchas
 - **Shared-env mypy coupling:** gates depend on installed packages; `make check` on master is the source

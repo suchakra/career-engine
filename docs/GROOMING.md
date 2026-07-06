@@ -578,8 +578,33 @@ Phase 3 hardening/eval and post-v1 backlog remain intentionally out of launch sc
 ## Phase 8 — Operational hardening (post-Phase-7 productionisation)
 
 > **Status: ⬜ Not started.** All Phase 7 code (PRs #38–42) is on master and `make check` green.
-> Phase 8 resolves the remaining operational gaps before the product is multi-user sound.
+> [PROGRESS.md §Phase 8](PROGRESS.md) is the canonical status tracker.
 > Spec context: [ARCHITECTURE.md §15.5–15.6](ARCHITECTURE.md); security context: [SECURITY.md](SECURITY.md).
+
+### How to launch these tickets
+
+Each ticket below contains a complete, self-contained build prompt. Paste the code-block content
+verbatim into a Sonnet subagent (worktree-isolated). The prompt includes all the context the
+subagent needs. **Subagents are instructed to PAUSE and report back rather than assume** — if
+something doesn't match what the prompt describes, the agent stops and explains the discrepancy.
+Review the report, clarify, then re-launch.
+
+PR workflow (updated — Claude subscription ended; Gemini 2.5 Pro is the pre-push review gate):
+```
+new branch → subagent builds → make check green →
+Gemini 2.5 Pro review subagent (PASS or CHANGES REQUESTED → fix → re-review) →
+push → gh pr create → Copilot review → address → squash-merge → update PROGRESS.md
+```
+The Gemini review subagent prompt template (use for every ticket):
+```
+You are a code reviewer for CareerEngine. Review the diff on branch <branch>.
+Read the ticket spec in GROOMING.md §<ticket> for the intended scope and acceptance criteria.
+1. Re-run `make check` (and `make tf-check` if Terraform changed). Report exit codes.
+2. For each changed file, verify: scope boundary respected, acceptance criteria met, no new
+   security issues (OWASP Top 10 lens), no contract change without a VERSION bump.
+3. Return exactly: PASS (with any non-blocking nits) or CHANGES REQUESTED (with a numbered
+   must-fix list). Do not approve if any must-fix remains.
+```
 
 ### The goal in plain language
 
@@ -611,6 +636,7 @@ security hygiene that don't block the core product.
 | 8D | Multi-user model-client isolation | Significant (design-first) | none (but read the design section) | ◐ Draft — needs user sign-off on the design before implementation |
 | 8E | Deployer-SA least-privilege | Terraform-only | none | ◐ Draft (see SECURITY.md for the role list) |
 | 8F | HITL TTL/override dashboard | Medium-new feature | none | ⬜ To groom |
+| 8G | Custom domain via Cloudflare + Cloud Run | Terraform (2 new modules) | 8A (deploy must be live) | ✅ Ready |
 
 ---
 
@@ -668,6 +694,8 @@ Acceptance criteria (named tests required):
 DoD:
 - make check green.
 - No contract change.
+- Gemini 2.5 Pro review PASS (use the review prompt template in GROOMING.md §Phase 8 header;
+  address any CHANGES REQUESTED before pushing the branch).
 - Report READY FOR REVIEW with criterion→test mapping.
 ```
 
@@ -735,6 +763,8 @@ DoD:
   - make tf-check green.
   - No contract change.
   - jobs/sweep_endpoint.py retained; doc comment updated to note the Cloud Run Job is the primary path.
+  - Gemini 2.5 Pro review PASS (use the review prompt template in GROOMING.md §Phase 8 header;
+    address any CHANGES REQUESTED before pushing the branch).
   - Report READY FOR REVIEW with criterion→test mapping.
 ```
 
@@ -817,6 +847,8 @@ DoD:
 - make check green.
 - No contract change.
 - No changes to graph nodes, routing logic, or existing API surfaces beyond the new context setter.
+- Gemini 2.5 Pro review PASS (use the review prompt template in GROOMING.md §Phase 8 header;
+  address any CHANGES REQUESTED before pushing the branch).
 - Report READY FOR REVIEW with criterion→test mapping and a written explanation of how copy_context
   propagation was verified.
 ```
@@ -859,6 +891,200 @@ list is also roadmap but deferred to a separate sub-ticket once the base view sh
 
 ---
 
+### ✅ 8G — Custom domain `career-engine.bitcrafty.cloud` via Cloudflare + Cloud Run
+
+> Read first: `infrastructure/modules/cloud_run/main.tf`, `infrastructure/envs/dev/main.tf`,
+> `infrastructure/envs/dev/variables.tf`, `docker-entrypoint.sh` (how `CE_AUTH_REDIRECT_URI`
+> becomes `redirect_uri` in `secrets.toml`).
+
+**Goal:** Serve the deployed web app at `https://career-engine.bitcrafty.cloud` instead of (or in
+addition to) the raw `*.run.app` URL. Everything infrastructure must be Terraform — no manual
+Cloudflare dashboard clicks, no manual `gcloud` commands for the ongoing state.
+
+**Approach: Cloudflare DNS-only (grey cloud) + Cloud Run domain mapping (GCP-managed SSL)**
+
+- Cloudflare acts as the DNS resolver only (`proxied = false`). GCP provisions and renews the
+  SSL certificate for the custom domain via `google_cloud_run_domain_mapping`.
+- Why DNS-only (not Cloudflare proxy): Cloud Run domain mapping SSL provisioning works by
+  validating that the DNS A/AAAA records resolve directly to GCP's load-balancer IPs. With
+  Cloudflare proxy (orange cloud) enabled, the resolved IP is Cloudflare's, not GCP's, and SSL
+  provisioning never completes. DNS-only (grey cloud) keeps the resolution path direct.
+- Cloudflare proxy can be enabled AFTER SSL provisioning is confirmed, but the recommended steady
+  state is DNS-only — it avoids Cloudflare WebSocket quirks with Streamlit and keeps the
+  architecture simpler.
+
+**What changes in Terraform (all IaC, zero manual resource creation):**
+
+```
+New modules:
+  infrastructure/modules/cloud_run_domain_mapping/
+    main.tf   — google_cloud_run_domain_mapping resource + outputs
+    variables.tf
+
+  infrastructure/modules/cloudflare_dns/
+    main.tf   — cloudflare provider + cloudflare_dns_record resources
+                (verification TXT + A/AAAA records from domain mapping)
+    variables.tf
+
+Changes to existing files:
+  infrastructure/envs/dev/main.tf
+    — add cloudflare provider block (api_token from TF_VAR_cloudflare_api_token)
+    — add module "domain_mapping" call
+    — add module "cloudflare_dns" call (depends_on domain_mapping)
+    — update CE_AUTH_REDIRECT_URI env to "https://${var.custom_domain}/_stcore/oauth2callback"
+
+  infrastructure/envs/dev/variables.tf
+    — custom_domain (string, default "career-engine.bitcrafty.cloud")
+    — cloudflare_zone_id (string, bitcrafty.cloud zone id from Cloudflare dashboard)
+    — cloudflare_api_token (string, sensitive — set via TF_VAR_cloudflare_api_token, never in state)
+    — google_domain_verification_txt (string — TXT record value from Google domain verification)
+```
+
+**Detailed resource design:**
+
+`infrastructure/modules/cloud_run_domain_mapping/main.tf`:
+```hcl
+resource "google_cloud_run_domain_mapping" "custom" {
+  project  = var.project_id
+  location = var.region
+  name     = var.domain    # e.g. "career-engine.bitcrafty.cloud"
+
+  metadata {
+    namespace = var.project_id
+  }
+
+  spec {
+    route_name = var.service_name  # the Cloud Run service name (not the URL)
+  }
+
+  lifecycle {
+    ignore_changes = [metadata[0].annotations]
+  }
+}
+
+output "resource_records" {
+  description = "DNS records to add to Cloudflare (populated after GCP provisions the mapping)."
+  value       = google_cloud_run_domain_mapping.custom.status[0].resource_records
+}
+```
+
+`infrastructure/modules/cloudflare_dns/main.tf`:
+```hcl
+terraform {
+  required_providers {
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = ">= 4.0, < 5.0"
+    }
+  }
+}
+
+# Step 1: TXT record for Google domain ownership verification.
+# Value comes from Google Webmaster Central / Cloud Console domain verification.
+# Apply this first (targeted apply), complete verification, then apply the rest.
+resource "cloudflare_dns_record" "verification" {
+  zone_id = var.zone_id
+  name    = var.subdomain                  # e.g. "career-engine"
+  type    = "TXT"
+  content = var.google_verification_txt    # e.g. "google-site-verification=..."
+  ttl     = 300
+  proxied = false
+  comment = "Google domain ownership verification for Cloud Run domain mapping"
+}
+
+# Step 2: A/AAAA records from Cloud Run domain mapping.
+# resource_records is a list of { name, type, rrdata } objects.
+resource "cloudflare_dns_record" "cloud_run" {
+  for_each = { for r in var.resource_records : r.type => r }
+
+  zone_id = var.zone_id
+  name    = var.subdomain
+  type    = each.value.type    # "A" or "AAAA"
+  content = each.value.rrdata
+  ttl     = 300
+  proxied = false              # DNS-only: GCP manages SSL; keep grey cloud
+  comment = "Cloud Run custom domain mapping — managed by Terraform"
+
+  depends_on = [cloudflare_dns_record.verification]
+}
+```
+
+**Apply order (two-phase, both Terraform):**
+
+```
+Phase 1 — DNS verification (one-time bootstrap):
+  1. Obtain the Google domain verification TXT value:
+       gcloud domains verify career-engine.bitcrafty.cloud
+     (copy the TXT string it prints)
+  2. Set TF_VAR_google_domain_verification_txt="<value>"
+  3. terraform apply -target=module.cloudflare_dns.cloudflare_dns_record.verification
+     (adds only the TXT record to Cloudflare)
+  4. Wait ~30 s for DNS propagation, then complete verification:
+       gcloud domains verify career-engine.bitcrafty.cloud --verify
+     (or visit the Cloud Run Console > Domain Mappings > Verify)
+
+Phase 2 — Full apply (steady state after bootstrap):
+  5. terraform apply   (creates domain_mapping, A/AAAA records, updates CE_AUTH_REDIRECT_URI)
+  6. SSL provisioning takes 5–30 min; check status:
+       gcloud run domain-mappings describe --domain career-engine.bitcrafty.cloud --region us-central1
+  7. Update the Google OAuth 2.0 client's authorized redirect URIs in the Cloud Console
+     (MANUAL — one-time; add https://career-engine.bitcrafty.cloud/_stcore/oauth2callback
+      alongside the existing *.run.app URI; both can coexist):
+       Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client IDs → edit the web client
+```
+
+**Ongoing (after first apply):** normal `terraform apply` workflow; domain mapping and DNS records are
+idempotent. The `CE_AUTH_REDIRECT_URI` change in the Cloud Run env causes a new Cloud Run revision to
+deploy automatically (no manual step).
+
+**CI/CD secrets required (add to repo `vars`/`secrets` in GitHub):**
+- `TF_VAR_cloudflare_api_token` — a Cloudflare API token scoped to `bitcrafty.cloud` DNS Edit.
+  Create at Cloudflare Dashboard → My Profile → API Tokens → Create Token → "Edit zone DNS".
+  Never commit; pass only via `TF_VAR_cloudflare_api_token` in the deploy workflow env.
+- `TF_VAR_cloudflare_zone_id` — the zone ID for `bitcrafty.cloud` (not sensitive; in tfvars is fine).
+- `TF_VAR_google_domain_verification_txt` — only needed for the one-time bootstrap apply.
+
+```text
+You are WS 8G for CareerEngine. Add Terraform resources to serve the web app at
+https://career-engine.bitcrafty.cloud via Cloudflare DNS + Cloud Run domain mapping.
+
+Read GROOMING.md §8G IN FULL before writing any code. Implement exactly the
+two-module approach described there — cloud_run_domain_mapping + cloudflare_dns.
+
+Stay in:
+  infrastructure/modules/cloud_run_domain_mapping/  (new)
+  infrastructure/modules/cloudflare_dns/             (new)
+  infrastructure/envs/dev/main.tf                    (add modules + update CE_AUTH_REDIRECT_URI)
+  infrastructure/envs/dev/variables.tf               (add custom_domain, cloudflare_zone_id,
+                                                       cloudflare_api_token, google_domain_verification_txt)
+
+Do NOT modify application code (web/, workflows/, etc.).
+Do NOT change infrastructure/modules/cloud_run/main.tf — the domain mapping is a separate resource.
+
+Acceptance criteria:
+  - make tf-check green (fmt + validate) in infrastructure/envs/dev/.
+  - A terraform plan (with dummy var values and no GCP credentials) shows the expected resource
+    additions: google_cloud_run_domain_mapping + cloudflare_dns_record × N.
+  - CE_AUTH_REDIRECT_URI env in the Cloud Run module call is
+    "https://${var.custom_domain}/_stcore/oauth2callback".
+  - The cloudflare provider block uses api_token = var.cloudflare_api_token (sensitive);
+    the value never appears in .tf files or state.
+  - cloudflare_dns_record resources all have proxied = false.
+  - The verification TXT record and A/AAAA records are separate resources with correct depends_on.
+  - infrastructure/README.md updated with: (a) the two-phase apply order, (b) the new TF_VAR_*
+    secrets required, (c) the one-time manual OAuth client step.
+
+DoD:
+  - make tf-check green.
+  - No application code changes.
+  - README.md updated as above.
+  - Gemini 2.5 Pro review PASS (use the review prompt template in GROOMING.md §Phase 8 header;
+    address any CHANGES REQUESTED before pushing the branch).
+  - Report READY FOR REVIEW with the full list of new/modified files.
+```
+
+---
+
 ### Phase 8 exit gate
 
 Phase 8 is complete when:
@@ -866,6 +1092,8 @@ Phase 8 is complete when:
   has a "Find jobs" action button (8A + 8B).
 - Cloud Scheduler successfully triggers a sweep run (verified in Cloud Logging) with no 404 (8C).
 - A written concurrency test proves two simultaneous grill contexts use different model clients (8D).
+- `https://career-engine.bitcrafty.cloud` serves the app with a valid TLS certificate (8G).
 - `make check` green and `make tf-check` green at every merged PR.
 - [SECURITY.md](SECURITY.md) has a "Post-8E role inventory" section (8E).
+- Every PR passed both Gemini 2.5 Pro review (pre-push) and Copilot review (on the PR).
 

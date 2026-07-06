@@ -3,7 +3,7 @@
 > Single source of truth for **what's done vs. pending**. Update this at the end of every work
 > session / sub-agent run. Keep entries terse. Legend: ✅ done · 🟡 in progress · ⬜ not started · 🚫 blocked.
 
-Last updated: **2026-07-06** — *Phases 1–7 COMPLETE + post-Phase-7 work: HITL "Not interested" (PR #40), real `StdioMcpClient` out-of-process transport (PR #41), HITL "Keep this" (PR #42), `streamlit_app.py` import-safe. **639 tests (1 skipped)**. master clean, contract v2.8.0. Phase 8 (operational hardening) groomed — see [GROOMING.md §Phase 8](GROOMING.md). ⚠️ Deploy gap: the Cloud Run dev app has not been redeployed since PRs #38–42; Jobs UI is in code but not live yet.*
+Last updated: **2026-07-06** — *Phases 1–7 COMPLETE + post-Phase-7 work: HITL "Not interested" (PR #40), real `StdioMcpClient` out-of-process transport (PR #41), HITL "Keep this" (PR #42), `streamlit_app.py` import-safe. **639 tests (1 skipped)**. master clean, contract v2.8.0. Phase 8 (operational hardening) groomed — see [GROOMING.md §Phase 8](GROOMING.md). ⚠️ Deploy gap: the Cloud Run dev app has not been redeployed since PRs #38–42; Jobs UI is in code but not live yet. **Review chain updated:** Gemini 2.5 Pro (pre-push) + Copilot (PR) replaces old Sonnet/Opus chain.*
 
 ---
 
