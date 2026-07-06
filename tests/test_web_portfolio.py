@@ -28,6 +28,7 @@ class FakeSt:
         self.infos: list[str] = []
         self.dividers = 0
         self.buttons: list[tuple[str, dict[str, Any]]] = []
+        self.progress_calls: list[tuple[float, str]] = []
 
     def title(self, body: str) -> None:
         self.titles.append(body)
@@ -49,6 +50,9 @@ class FakeSt:
 
     def button(self, label: str, **kwargs: Any) -> None:
         self.buttons.append((label, kwargs))
+
+    def progress(self, value: float, text: str = "") -> None:
+        self.progress_calls.append((value, text))
 
 
 def _entry(title: str, status: EntryStatus = EntryStatus.NEEDS_QUANTIFYING) -> Entry:
@@ -138,6 +142,22 @@ class TestBuildPortfolioView:
         e = Entry(type=ExperienceType.FULL_TIME, title="A", org="Acme", highlighted=True)
         card = build_portfolio_view(CareerEngineState(work_timeline=[e])).entries[0]
         assert card.highlighted is True
+
+    def test_entry_card_story_count_populated(self) -> None:
+        """story_count on EntryCard reflects the number of linked StarStory objects (9K)."""
+        ea, eb = _entry("A"), _entry("B")
+        state = CareerEngineState(
+            work_timeline=[ea, eb],
+            extracted_star_stories=[
+                _story(str(ea.entry_id), "cut latency 40%"),
+                _story(str(ea.entry_id), "shipped feature X"),
+            ],
+        )
+        view = build_portfolio_view(state)
+        card_a = next(c for c in view.entries if c.title == "A")
+        card_b = next(c for c in view.entries if c.title == "B")
+        assert card_a.story_count == 2
+        assert card_b.story_count == 0
 
 
 class TestRenderPortfolio:
@@ -239,6 +259,67 @@ class TestRenderPortfolio:
         )
         assert any(label == "Grill me about this" for label, _ in st.buttons)
         assert not any("tailoring priority" in label for label, _ in st.buttons)
+
+    def test_progress_renders_zero_state(self) -> None:
+        """EntryCard with story_count=0 renders a 'No stories recorded' caption (9K)."""
+        from web.portfolio import EntryCard, PortfolioView
+
+        card = EntryCard(
+            entry_id="abc",
+            title="Role A",
+            org="Acme",
+            dates="2022 - present",
+            type_label="Full time",
+            status_label="Needs quantifying",
+            story_count=0,
+        )
+        st = FakeSt()
+        render_portfolio(PortfolioView(entries=[card]), st=st)
+        assert any("No stories recorded" in c for c in st.captions)
+        assert st.progress_calls == []
+
+    def test_progress_renders_partial(self) -> None:
+        """EntryCard with story_count=2/3 calls st.progress with fraction in (0, 1) (9K)."""
+        from web.portfolio import EntryCard, PortfolioView
+
+        card = EntryCard(
+            entry_id="abc",
+            title="Role A",
+            org="Acme",
+            dates="2022 - present",
+            type_label="Full time",
+            status_label="Needs quantifying",
+            story_count=2,
+            stories_target=3,
+        )
+        st = FakeSt()
+        render_portfolio(PortfolioView(entries=[card]), st=st)
+        assert len(st.progress_calls) == 1
+        fraction, text = st.progress_calls[0]
+        assert 0.0 < fraction < 1.0
+        assert "2 stories recorded" in text
+        assert "✓" not in text
+
+    def test_progress_renders_complete(self) -> None:
+        """EntryCard with story_count >= stories_target calls st.progress with 1.0 and '✓' (9K)."""
+        from web.portfolio import EntryCard, PortfolioView
+
+        card = EntryCard(
+            entry_id="abc",
+            title="Role A",
+            org="Acme",
+            dates="2022 - present",
+            type_label="Full time",
+            status_label="Needs quantifying",
+            story_count=3,
+            stories_target=3,
+        )
+        st = FakeSt()
+        render_portfolio(PortfolioView(entries=[card]), st=st)
+        assert len(st.progress_calls) == 1
+        fraction, text = st.progress_calls[0]
+        assert fraction == 1.0
+        assert "✓" in text
 
 
 # ---------------------------------------------------------------------------
