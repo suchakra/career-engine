@@ -792,6 +792,37 @@ def _render_save_application(*, user_id: str, today: str, resume: StructuredResu
         return
 
     st.caption("Track this as an application")
+    if st.button("✨ Extract from job description"):
+        jd_text_for_extract = ss.get("tailor_jd_text", "")
+        if not jd_text_for_extract:
+            st.warning("No job description found — paste one in the Tailor tab first.")
+        else:
+            key = _resolve_byok_key(user_id)
+            if key:
+                from integration.model_client import GeminiModelClient
+                from models.registry import get_registry
+                from schema import Capability
+
+                client = GeminiModelClient(api_key=key)
+                model_id = get_registry().get_model_id(Capability.BULK_CHEAP)
+                if not isinstance(model_id, str):
+                    st.warning("Could not resolve a model for extraction.")
+                else:
+                    from web.jd_utils import extract_jd_metadata
+
+                    title, company_extracted = extract_jd_metadata(
+                        jd_text_for_extract, client, model_id
+                    )
+                    if title or company_extracted:
+                        if title:
+                            ss["save_app_title"] = title
+                        if company_extracted:
+                            ss["save_app_company"] = company_extracted
+                        st.rerun()
+            else:
+                st.warning(
+                    "Add your Gemini key in the **Grill Me** tab first to use extraction."
+                )
     ac1, ac2 = st.columns(2)
     company = ac1.text_input("Company", key="save_app_company")
     job_title = ac2.text_input("Role / title", key="save_app_title")
