@@ -7,9 +7,9 @@
     - Jinja2 autoescaping is ALWAYS ON; all variables are auto-escaped by the
       engine.  Never pipe values through |safe.
     - No JavaScript; no external resources; self-contained for PDF rendering.
+    - No @import for Google Fonts — uses Inter / system-ui stack only.
     - Semantic elements: <header>, <main>, <section>, <article>, <h1>-<h3>.
-    - Print-optimized CSS: no floats, no flexbox tricks that break paginators,
-      no background images.
+    - Print-optimized CSS: A4 @page, flex layout for role headers.
 -->
 <html lang="en">
 <head>
@@ -17,6 +17,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{{ candidate_name }} — Resume</title>
   <style>
+    /* ── Paged media (WeasyPrint / print) ────────────────────────────────── */
+    @page {
+      size: A4;
+      margin: 15mm 18mm;
+    }
+
     /* ── Reset & base ────────────────────────────────────────────────────── */
     * {
       box-sizing: border-box;
@@ -25,35 +31,28 @@
     }
 
     body {
-      font-family: "Georgia", "Times New Roman", serif;
-      font-size: 11pt;
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 10pt;
       line-height: 1.45;
-      color: #111;
+      color: #222;
       background: #fff;
-      max-width: 760px;
-      margin: 0 auto;
-      padding: 36pt 36pt 48pt 36pt;
     }
 
     /* ── Header / name block ─────────────────────────────────────────────── */
     header {
-      text-align: center;
-      border-bottom: 2px solid #111;
-      padding-bottom: 10pt;
-      margin-bottom: 14pt;
+      margin-bottom: 12pt;
     }
 
     header h1 {
-      font-size: 20pt;
-      font-weight: bold;
-      letter-spacing: 0.5pt;
-      text-transform: uppercase;
+      font-size: 22pt;
+      font-weight: 600;
+      color: #111;
     }
 
     .contact-line {
-      font-size: 9.5pt;
-      color: #333;
-      margin-top: 4pt;
+      font-size: 9pt;
+      color: #555;
+      margin-top: 3pt;
     }
 
     .contact-line span + span::before {
@@ -62,57 +61,95 @@
 
     /* ── Section headings ────────────────────────────────────────────────── */
     section {
-      margin-bottom: 14pt;
-    }
-
-    section > h2 {
-      font-size: 11pt;
-      font-weight: bold;
-      text-transform: uppercase;
-      letter-spacing: 0.8pt;
-      border-bottom: 1px solid #555;
-      padding-bottom: 2pt;
-      margin-bottom: 8pt;
-    }
-
-    /* ── Summary ─────────────────────────────────────────────────────────── */
-    .summary p {
-      font-size: 10.5pt;
-      color: #222;
-    }
-
-    /* ── Pillar / STAR stories ───────────────────────────────────────────── */
-    article.story {
-      margin-bottom: 10pt;
+      margin-bottom: 12pt;
       page-break-inside: avoid;
     }
 
-    article.story h3 {
-      font-size: 10.5pt;
-      font-weight: bold;
-      margin-bottom: 2pt;
+    section > h2 {
+      font-size: 9.5pt;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #333;
+      border-bottom: 0.5px solid #ccc;
+      padding-bottom: 2pt;
+      margin-bottom: 4pt;
     }
 
-    .story-meta {
-      font-size: 9pt;
-      color: #555;
-      margin-bottom: 3pt;
+    /* ── Summary ─────────────────────────────────────────────────────────── */
+    .summary-text {
+      font-size: 10pt;
+      color: #333;
+      line-height: 1.5;
     }
 
-    .story-body {
+    /* ── Experience & Education role rows ────────────────────────────────── */
+    .role {
+      margin-bottom: 8pt;
+      page-break-inside: avoid;
+    }
+
+    .role:last-child {
+      margin-bottom: 0;
+    }
+
+    .role-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .role-identity {
       font-size: 10pt;
     }
 
-    .story-body .label {
-      font-weight: bold;
+    .role-company {
+      font-weight: 600;
+      color: #111;
     }
 
-    .story-result {
-      font-weight: bold;
-      color: #000;
+    .role-title {
+      font-weight: 400;
+      color: #333;
     }
 
-    /* ── Competency list ─────────────────────────────────────────────────── */
+    .role-dates {
+      font-size: 9pt;
+      color: #555;
+      white-space: nowrap;
+      margin-left: 8pt;
+      flex-shrink: 0;
+    }
+
+    ul.bullets {
+      list-style: disc;
+      padding-left: 4px;
+      margin-top: 3pt;
+    }
+
+    ul.bullets li {
+      font-size: 9.5pt;
+      line-height: 14px;
+      margin-bottom: 3px;
+      color: #222;
+    }
+
+    /* ── Skills pills ────────────────────────────────────────────────────── */
+    .skills-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .pill {
+      background: #f0f0f0;
+      border-radius: 3px;
+      padding: 2px 6px;
+      font-size: 9pt;
+      color: #333;
+    }
+
+    /* ── Competency list (legacy) ────────────────────────────────────────── */
     ul.competencies {
       list-style: none;
       padding: 0;
@@ -130,19 +167,30 @@
       font-size: 8pt;
     }
 
+    /* ── STAR story blocks (legacy) ──────────────────────────────────────── */
+    article.story {
+      margin-bottom: 8pt;
+      page-break-inside: avoid;
+    }
+
+    .story-body {
+      font-size: 9.5pt;
+      color: #333;
+    }
+
+    .story-body .label {
+      font-weight: 600;
+    }
+
+    .story-result {
+      font-weight: 600;
+      color: #000;
+    }
+
     /* ── Print overrides ─────────────────────────────────────────────────── */
     @media print {
       body {
-        padding: 0;
         margin: 0;
-      }
-
-      header {
-        margin-top: 0;
-      }
-
-      section {
-        page-break-inside: avoid;
       }
     }
   </style>
@@ -154,6 +202,7 @@
     <h1>{{ candidate_name }}</h1>
     <div class="contact-line">
       {% if candidate_email %}<span>{{ candidate_email }}</span>{% endif %}
+      {% if candidate_phone %}<span>{{ candidate_phone }}</span>{% endif %}
       {% if candidate_location %}<span>{{ candidate_location }}</span>{% endif %}
       {% if candidate_linkedin %}<span>{{ candidate_linkedin }}</span>{% endif %}
     </div>
@@ -163,13 +212,66 @@
 
     <!-- ── Professional summary ────────────────────────────────────────────── -->
     {% if summary %}
-    <section class="summary">
-      <h2>Professional Summary</h2>
-      <p>{{ summary }}</p>
+    <section>
+      <h2>Summary</h2>
+      <p class="summary-text">{{ summary }}</p>
     </section>
     {% endif %}
 
-    <!-- ── Core competencies ───────────────────────────────────────────────── -->
+    <!-- ── Experience ──────────────────────────────────────────────────────── -->
+    {% if experience %}
+    <section>
+      <h2>Experience</h2>
+      {% for role in experience %}
+      <div class="role">
+        <div class="role-head">
+          <span class="role-identity">
+            <span class="role-company">{{ role.org }}</span>{% if role.title %} &mdash; <span class="role-title">{{ role.title }}</span>{% endif %}
+          </span>
+          {% if role.dates %}<span class="role-dates">{{ role.dates }}</span>{% endif %}
+        </div>
+        {% if role.bullets %}
+        <ul class="bullets">
+          {% for b in role.bullets %}
+          <li>{{ b }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </section>
+    {% endif %}
+
+    <!-- ── Skills ──────────────────────────────────────────────────────────── -->
+    {% if skills %}
+    <section>
+      <h2>Skills</h2>
+      <div class="skills-pills">
+        {% for skill in skills %}
+        <span class="pill">{{ skill }}</span>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    <!-- ── Education ───────────────────────────────────────────────────────── -->
+    {% if education %}
+    <section>
+      <h2>Education</h2>
+      {% for entry in education %}
+      <div class="role">
+        <div class="role-head">
+          <span class="role-identity">
+            <span class="role-company">{{ entry.org }}</span>{% if entry.title %} &mdash; <span class="role-title">{{ entry.title }}</span>{% endif %}
+          </span>
+          {% if entry.dates %}<span class="role-dates">{{ entry.dates }}</span>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </section>
+    {% endif %}
+
+    <!-- ── Core competencies (legacy) ──────────────────────────────────────── -->
     {% if target_competencies %}
     <section>
       <h2>Core Competencies</h2>
@@ -187,7 +289,7 @@
       <h2>Career Achievements</h2>
 
       {% for pillar, stories in stories_by_pillar.items() %}
-      <h3 style="font-size:10.5pt; font-weight:bold; margin: 8pt 0 4pt 0;
+      <h3 style="font-size: 10pt; font-weight: 600; margin: 6pt 0 3pt 0;
                  text-transform: capitalize;">{{ pillar | replace("_", " ") }}</h3>
 
       {% for story in stories %}
