@@ -22,7 +22,9 @@ Priority order: (1) 8A redeploy → unblocks UI verification; (2) 8B dashboard "
 wire sweep endpoint (Cloud Run Job approach); (4) 8D multi-user model-client isolation (**design-first,
 do NOT touch the grill/jobs/tailor floor without a written design — `_client_factory` in `workflows/nodes.py`
 is process-global and can bleed BYOK keys under concurrency**); (5) 8E deployer-SA least-privilege;
-(6) 8F HITL TTL/override dashboard.
+(6) 8G custom domain via Cloudflare + Cloud Run; (7) 8F HITL TTL/override dashboard.
+**Phase 9 (after Phase 8):** replace Streamlit with FastAPI + proper frontend + free-tier model —
+not groomed yet; see [GROOMING.md §Phase 9](GROOMING.md) for the placeholder and design questions.
 Capstone packaging (video/writeup/README/diagram) is user-owned and deferred.
 
 **Doc-accuracy note for the submission (`demo_output/`):** the MCP-separate-process claim is now TRUE (PR #41);

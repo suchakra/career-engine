@@ -25,6 +25,7 @@ Every groomed item below is constrained by the four standing goals:
 3. ✅ **Phase 4 — Portfolio Workbench** (4A–4D) — SHIPPED & deployed (PRs #15/#16/#17). 4E deferred.
 4. ✅ **Phase 7 — Job Discovery web surface** (PRs #38–42, contract v2.8.0) — COMPLETE. ⚠️ Needs redeploy (Phase 8A).
 5. **Phase 8 — Operational hardening** — groomed below; not started.
+6. **Phase 9 — Replace Streamlit; proper product UI** — not yet groomed; groom after Phase 8 ships.
 4. Phase 3 (hardening/eval) — not groomed here.
 
 ---
@@ -1096,4 +1097,59 @@ Phase 8 is complete when:
 - `make check` green and `make tf-check` green at every merged PR.
 - [SECURITY.md](SECURITY.md) has a "Post-8E role inventory" section (8E).
 - Every PR passed both Gemini 2.5 Pro review (pre-push) and Copilot review (on the PR).
+
+---
+
+## Phase 9 — Replace Streamlit; proper product UI *(⬜ not groomed — groom after Phase 8 ships)*
+
+> **Status: ⬜ Not started. Not groomed.** Do not build anything in Phase 9 scope until Phase 8
+> is complete and a proper architecture design session has been held. This section is a placeholder
+> to ensure the decision is not lost.
+
+### Why this phase exists
+
+The current UI is scaffolding — Streamlit was the right tool to prove the product concept fast, but
+it is not the right tool for a multi-user SaaS:
+
+1. **`max_instances=1` is not a business choice — it is forced by Streamlit's architecture.**
+   `session_state` is per-connection but the process is global; the model-client factory race (8D)
+   is a direct symptom. Even with the ContextVar fix, Streamlit cannot safely serve concurrent users
+   without significant workarounds.
+
+2. **Streamlit WebSocket model creates friction** with CDN/proxy layers (Cloudflare, the custom
+   domain work in 8G), and makes standard web patterns (SSR, SEO, mobile, deep-linking) impossible.
+
+3. **Every UI feature is harder than it needs to be.** The two-layer view-model pattern (pure
+   view-model + injectable `st`) was invented to work around Streamlit's untestability. With a
+   proper frontend this scaffolding disappears.
+
+4. **BYOK acquisition friction.** New users must create a Google AI Studio account, enable billing,
+   and paste an API key before they see any value. A platform-owned free tier (3 grill sessions/month
+   on Flash, paid tier unlocks Pro) would remove the top-of-funnel drop. The `AccessMode` enum
+   (`FREE` / `BYOK`) already exists in the contract; Phase 9 adds `FREE_PLATFORM` routing.
+
+### Intended scope (to be fully groomed)
+
+- **Backend:** FastAPI service (replaces/wraps the existing workflow + discovery engine; no contract
+  change needed — the engine is already well-separated from the UI layer).
+- **Frontend:** Next.js (or equivalent) — SSR, proper auth, mobile, SEO, deep-linking.
+- **Auth:** migrate from Streamlit native OIDC to a standard OAuth2/OIDC flow (the Firebase/Google
+  OIDC backend is already correct; only the Streamlit-specific `st.login` surface changes).
+- **Free tier:** platform-owned Gemini Flash quota (rate-limited per user_id); BYOK users bypass
+  the quota. A `PlatformQuotaStore` (Firestore-backed counter, daily reset) gates the free tier.
+- **Streamlit retained** for internal tooling / demos during transition; removed from the public
+  Cloud Run service only after the new frontend is verified end-to-end.
+
+### Pre-grooming design questions (resolve before writing any build specs)
+
+1. Next.js + FastAPI vs. a full Next.js fullstack (with API routes)? What does the deployment
+   topology look like on Cloud Run?
+2. How does the grill loop (streaming, multi-turn, long-running) map to a REST or WebSocket API?
+   The current ADK Runner pattern needs an HTTP-friendly wrapper.
+3. Free tier quota: per-day or per-month? What's the unit economics ceiling at $0?
+4. Streamlit transition: run both in parallel (A/B) or hard cutover?
+5. What does the design system look like? (Color, typography, component library.)
+
+**Do not groom further until Phase 8 ships.** Record any design decisions made before then in
+[ARCHITECTURE.md](ARCHITECTURE.md) under a new §16.
 
