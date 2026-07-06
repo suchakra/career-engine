@@ -103,4 +103,20 @@ class FirestoreWorkspaceStore:
         asyncio.run(self._asave(user_id, workspace))
 
 
-__all__ = ["ContractVersionError", "FirestoreWorkspaceStore"]
+class InMemoryWorkspaceStore:
+    """Minimal in-memory WorkspaceStore for fallback / testing (no persistence)."""
+
+    def __init__(self) -> None:
+        self._store: dict[str, UserWorkspace] = {}
+
+    def list_user_ids(self) -> list[str]:
+        return list(self._store)
+
+    def load(self, user_id: str) -> UserWorkspace:
+        return self._store.get(user_id, UserWorkspace())
+
+    def save(self, user_id: str, workspace: UserWorkspace) -> None:
+        self._store[user_id] = workspace
+
+
+__all__ = ["ContractVersionError", "FirestoreWorkspaceStore", "InMemoryWorkspaceStore"]

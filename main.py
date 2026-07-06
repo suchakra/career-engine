@@ -257,6 +257,21 @@ def discover(
 
 
 @cli.command()
+@click.option("--today", default=None, help="Override today's date (YYYY-MM-DD) for testing.")
+def sweep(today: str | None) -> None:
+    """Run the 14-day pending-action sweep (Cloud Run Job entry point)."""
+    import logging
+
+    logging.basicConfig(level=logging.INFO)
+    from jobs.sweep_cli import run_sweep_command
+
+    result = run_sweep_command(today=today)
+    click.echo(
+        f"Sweep complete: {result.workspaces_processed} workspaces, {result.actions_triggered} actions triggered."
+    )
+
+
+@cli.command()
 def web() -> None:
     """Launch the Streamlit web workspace (dashboard).
 

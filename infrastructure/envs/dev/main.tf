@@ -160,16 +160,28 @@ module "secret_manager" {
   service_account_email = module.cloud_run.service_account_email
 }
 
+module "sweep_job" {
+  source                        = "../../modules/cloud_run_job"
+  project_id                    = var.project_id
+  region                        = var.region
+  job_name                      = "${var.name_prefix}-sweep"
+  image                         = var.image
+  service_account_email         = module.cloud_run.service_account_email
+  invoker_service_account_email = module.cloud_run.service_account_email
+}
+
 module "scheduler" {
   source                        = "../../modules/scheduler"
   project_id                    = var.project_id
   region                        = var.region
   job_name                      = "${var.name_prefix}-pending-action-sweep"
   schedule                      = var.sweep_schedule
-  target_uri                    = "${module.cloud_run.service_uri}/jobs/pending-action-sweep"
-  service_uri                   = module.cloud_run.service_uri
+  target_uri                    = module.sweep_job.job_execute_uri
+  service_uri                   = "https://run.googleapis.com/"
   cloud_run_service_name        = module.cloud_run.service_name
   invoker_service_account_email = module.cloud_run.service_account_email
+  # Cloud Run Jobs Execute API requires an OAuth2 access token, not an OIDC JWT.
+  token_type = "oauth2"
 }
 
 output "service_uri" {

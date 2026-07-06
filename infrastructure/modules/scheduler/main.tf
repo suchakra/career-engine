@@ -1,7 +1,8 @@
 # CareerEngine — Cloud Scheduler trigger for the 14-day pending-action sweep.
 #
-# Invokes the Cloud Run sweep endpoint on a cron schedule using an OIDC token
-# minted for the given invoker service account (ARCHITECTURE §8).
+# Invokes the target URI on a cron schedule using a service-account-minted token
+# (OIDC for Cloud Run services; OAuth2 access token for Google REST APIs such as
+# the Cloud Run Jobs Execute endpoint). Controlled by var.token_type.
 
 terraform {
   required_providers {
@@ -56,12 +57,25 @@ variable "cloud_run_service_name" {
 
 variable "invoker_service_account_email" {
   type        = string
-  description = "Service account whose OIDC token authenticates the invocation."
+  description = "Service account whose OIDC token / OAuth2 access token authenticates the invocation."
+}
+
+variable "token_type" {
+  type        = string
+  description = "Auth token type: 'oidc' (Cloud Run service) or 'oauth2' (Google REST API e.g. Cloud Run Jobs)."
+  default     = "oidc"
+  validation {
+    condition     = contains(["oidc", "oauth2"], var.token_type)
+    error_message = "token_type must be 'oidc' or 'oauth2'."
+  }
 }
 
 # Without roles/run.invoker the OIDC token is rejected (HTTP 403) and the sweep
 # never fires. Grant the invoker SA permission to invoke exactly this service.
+# When token_type = "oauth2" (Cloud Run Jobs path) the IAM binding is managed by
+# the cloud_run_job module instead, but we keep this for the oidc path.
 resource "google_cloud_run_v2_service_iam_member" "scheduler_invoker" {
+  count    = var.token_type == "oidc" ? 1 : 0
   project  = var.project_id
   location = var.region
   name     = var.cloud_run_service_name
@@ -80,15 +94,28 @@ resource "google_cloud_scheduler_job" "pending_action_sweep" {
     http_method = "POST"
     uri         = var.target_uri
 
-    oidc_token {
-      service_account_email = var.invoker_service_account_email
-      # Audience is the BASE service URL, not the request path, or Cloud Run
-      # rejects the token (401).
-      audience = var.service_uri
+    # Cloud Run services require an OIDC JWT (audience = service base URL).
+    # Google REST APIs (e.g. Cloud Run Jobs Execute) require an OAuth2 access token.
+    dynamic "oidc_token" {
+      for_each = var.token_type == "oidc" ? [1] : []
+      content {
+        service_account_email = var.invoker_service_account_email
+        # Audience is the BASE service URL, not the request path, or Cloud Run
+        # rejects the token (401).
+        audience = var.service_uri
+      }
+    }
+
+    dynamic "oauth_token" {
+      for_each = var.token_type == "oauth2" ? [1] : []
+      content {
+        service_account_email = var.invoker_service_account_email
+        scope                 = "https://www.googleapis.com/auth/cloud-platform"
+      }
     }
   }
 
-  # Ensure the invoker binding exists before the job that relies on it.
+  # Ensure the invoker binding exists before the job that relies on it (oidc path).
   depends_on = [google_cloud_run_v2_service_iam_member.scheduler_invoker]
 }
 
