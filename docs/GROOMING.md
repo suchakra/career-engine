@@ -119,11 +119,23 @@ Serve the grill turn over Server-Sent Events (WebSocket only if a bidirectional 
 The React shell consuming 10.1–10.3.
 - **Files:** new `frontend/` (Next.js App Router). Routes: Dashboard / Portfolio / Jobs / Tailor /
   Grill.
+- **Build the foundational components first** — the shared inventory in
+  [PHASE10_UI_MOCKUP.md §2](PHASE10_UI_MOCKUP.md) (`AppShell`/`SidebarNav`, `StatusBadge`, `ActionCard`,
+  `PrimaryButton`/`SplitButton`, `CollapsibleSection`/`Field`, `EmptyState`, `MetricStat`,
+  `Toast`/`InlineError`); screens compose these, no screen re-implements a card/badge/form row.
+- **Client data layer = AD-16.8** ([ARCHITECTURE.md §16](ARCHITECTURE.md)): TanStack Query; query keys
+  mirror the read APIs; writes are optimistic (`onMutate` patch → `onError` rollback → `onSettled`
+  invalidate) — that is how "without a full-page reload" is implemented. Include the SSR
+  `HydrationBoundary` seam and the shared bearer-token fetch wrapper + central 401→refresh.
 - **Acceptance:** login flow round-trips through the 10.1 auth boundary and sets the session; the
   three read views render live data from 10.2; profile/preferences forms submit via 10.3 **without a
-  full-page reload**; frontend request/response types are generated from the FastAPI OpenAPI schema.
+  full-page reload** (optimistic update + rollback on error); frontend request/response types are
+  generated from the FastAPI OpenAPI schema.
 - **Tests:** component/integration tests for auth-guarded routing + one form-submit happy path
-  (mocked API).
+  (mocked API via **MSW**; **Vitest + React Testing Library**) **including an optimistic-write rollback
+  on a failed mutation**; a bundle-size check gates the shadcn + data-layer choice
+  ([PHASE10_UI_MOCKUP.md §8](PHASE10_UI_MOCKUP.md) spike). Frontend toolchain + test stack per
+  [ARCHITECTURE.md §16 AD-16.9](ARCHITECTURE.md).
 
 ### ✅ 10.6 — Next.js grill (streaming) + tailor + résumé export  *(L · Frontend)*
 The interactive surface consuming 10.4; unblocks 9H (inline résumé-edit chat) and 9M (DnD editor).

@@ -698,6 +698,42 @@ editor (9M) are React-shaped; a rich client earns its keep given that committed 
 - **AD-16.7 — Contract impact: none intrinsic.** The migration surfaces and steers existing fields;
   any new field (e.g. for 9H/9M editing) is an independent additive-MINOR bump gated behind a
   `CONTRACT_VERSION` change when that feature is built, not by the migration itself.
+- **AD-16.8 — Client data/state layer: a server-cache library (TanStack Query), not a global store.**
+  The Next.js client caches server data (`/api/me`, `/api/dashboard`, `/api/portfolio`, `/api/jobs`)
+  with **TanStack Query (React Query)**; query keys mirror the API resources (`['portfolio', userId]`, …).
+  There is **no Redux/Zustand global store for server state** — local UI state (open dialogs, form
+  drafts, theme) stays in component state/context, and theme is the client-only localStorage preference.
+  - **Optimistic writes are the concrete mechanism** behind the mockup's "optimistic, no full-page
+    reloads" principle (AD-16.2): `useMutation` with `onMutate` (snapshot + patch the cache) → `onError`
+    rollback → `onSettled` `invalidateQueries` the affected keys — so e.g. *add experience* invalidates
+    both `portfolio` and `dashboard`. This buys cross-resource invalidation + rollback without bespoke code.
+  - **SSR/hydration:** App Router server components fetch initial data (types generated from the OpenAPI
+    schema, AD-16.3) and hydrate the client cache via `HydrationBoundary`, so first paint is data, not a
+    spinner. The verified bearer token (AD-16.4) is attached by one shared fetch wrapper; a central `401`
+    handler triggers a Firebase token refresh.
+  - **Streaming stays outside the cache:** the grill SSE (AD-16.5) is a dedicated `EventSource` hook
+    inside `StreamingTranscript`; the finished turn is written back into the query cache.
+  - **Alternative considered — SWR** (smaller, ~4KB): viable, rejected as the default because this app is
+    **write-heavy** (profile / experience / application / preferences / tailor) and React Query's
+    first-class mutation + cross-key invalidation + rollback + devtools fit that shape better.
+    **Tripwire:** if the 10.5 bundle-size spike ([PHASE10_UI_MOCKUP.md §8](PHASE10_UI_MOCKUP.md)) shows
+    the data layer materially over budget, fall back to SWR with the *same* optimistic/rollback rules;
+    the component API is written to not care which library backs it.
+- **AD-16.9 — Frontend toolchain lives in `frontend/`; the devcontainer pins only Node (Playwright system deps come at 10.5).**
+  The Next.js app and **all** its JS tooling (TanStack Query, test runners, linters) are project
+  dependencies in `frontend/package.json`, scaffolded at 10.5 — not global installs. TanStack Query is
+  `npm i @tanstack/react-query`; it needs nothing at the devcontainer level.
+  - **Test stack:** **Vitest + React Testing Library + jsdom** (unit/component), **MSW (Mock Service
+    Worker)** to mock the FastAPI endpoints (the "mocked API" the 10.5/10.6 acceptance tests
+    reference), and **Playwright** (E2E). React Query is tested via a `QueryClientProvider` wrapper +
+    MSW, asserting the optimistic update **and** the rollback path (AD-16.8).
+  - **Devcontainer** provides only what npm can't per-project: a **pinned Node major** (the current
+    LTS line — `22` in `.devcontainer/devcontainer.json`; the feature still resolves the latest
+    minor/patch) and, at 10.5, **Playwright's system browser libraries** via
+    `npx playwright install --with-deps`, run from a `frontend/` setup step — **not** baked into the
+    Python base image before the app exists (keeps the image lean).
+  - **`make check`** gains a `frontend` lane (lint + typecheck + Vitest; Playwright E2E as a separate
+    job) when 10.5 lands; until then the Python gate is unchanged.
 
 ### 16.4 API contract sketch (to be finalised in build 10.1–10.4)
 Thin, resource-oriented, all typed from `schema.py`:
