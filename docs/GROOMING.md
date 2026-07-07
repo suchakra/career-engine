@@ -2116,74 +2116,52 @@ DoD:
 
 ---
 
-### ✅ BUG-2 — Grill "Currently grilling" banner missing on the first question
+### ✅ BUG-2 — Grill "Currently grilling" banner missing on the first question after resume
 
-> Read first: `web/grill_ui.py` — `_frontier_label` (~L167), `_apply_pending_jump` (~L386),
-> `_try_resume` (~L300), `_submit_answer` (~L350), `render_grill` (~L558, the banner at ~L655:
-> `if not grill_complete and grill_entry_label: st.info(...)`), and `tests/test_grill_frontier_label.py`.
+> Read first: `web/grill_ui.py` — `_entry_label`/`_frontier_label`/`_effective_frontier_label`
+> (~L167), `_migrate_education_on_resume` (~L246), `_try_resume` (~L300), `render_grill` (banner at
+> ~L655: `if not grill_complete and grill_entry_label: st.info(...)`), and
+> `tests/test_grill_frontier_label.py`. Selection truth: `workflows/nodes.py::_get_frontier_entry`.
 
-**Symptom:** After using "Grill me about this" (or coming back to the Grill), the first question
-does NOT show the "📌 Currently grilling: **<experience>**" banner. It appears correctly on every
-subsequent turn.
+**Symptom (owner's words):** "grill me does not show the banner on the first question **after you
+come back to it**. It does show in subsequent steps." i.e. the bug is on the **resume** path, not
+on a fresh start or a "Grill me about this" jump.
 
-**Root cause:** the banner reads `st.session_state["grill_entry_label"]`, which is derived via
-`_frontier_label(state)` from `state.grill_frontier`. In `_apply_pending_jump`, after
-`session.advance()` asks the opening question, `grill_frontier` is cleared/consumed in state, so
-`_frontier_label(run_async(session.current_state()))` returns `""` → empty label → no banner on the
-first question. On the next `_submit_answer`, the graph re-pins the (still NEEDS_QUANTIFYING) entry,
-so the frontier is set again and the banner reappears.
+**Original groomed diagnosis was WRONG (kept here as a caution):** the first draft claimed
+`_apply_pending_jump`'s `session.advance()` clears `grill_frontier`, leaving an empty label on the
+first question. Live reproduction (Pylance) **refuted** this — after both a fresh start and a jump,
+`grill_frontier` stays SET and `_frontier_label` returns the correct label. The grill node's
+opening-question branch (`workflows/nodes.py` ~L855) explicitly *re-writes* `grill_frontier`; it
+never clears it. Lesson: verify a diagnosis against a reproduction before implementing.
 
-```text
-You are the BUG-2 fixer for CareerEngine. Make the Grill "Currently grilling: <experience>"
-banner appear on the FIRST question after a "Grill me about this" jump (and on resume), not just
-on later turns.
+**Real root cause (reproduced):** on resume, `_migrate_education_on_resume` **blanks**
+`grill_frontier` to `""` whenever the pinned entry is no longer grillable — e.g. the user finished
+that entry (status `GRILLED`) before leaving (`_frontier_needs_reset → True`). `_try_resume` then
+set `grill_entry_label = _frontier_label(state)`, which reads `grill_frontier` directly and returns
+`""` → no banner on the first question. The *next* turn's grill node auto-picks the next needs-work
+entry via `_get_frontier_entry` and re-pins the frontier, so the banner reappears from then on.
 
-Files to read BEFORE writing any code (in this order):
-1. web/grill_ui.py — _frontier_label (~L167), _apply_pending_jump (~L386), _try_resume (~L300),
-   _submit_answer (~L350), and render_grill's banner (~L655).
-2. schema.py::CareerEngineState — grill_frontier, work_timeline, current_question. Understand when
-   grill_frontier is set vs cleared across a turn (does the graph consume it after asking the opener?).
-3. tests/test_grill_frontier_label.py — the existing label test pattern.
+**Fix (implemented, web/grill_ui.py only, no contract change):**
+- Extracted `_entry_label(entry) -> str` ("Title · Org", title-only if no org, "" if None) and made
+  `_frontier_label` delegate to it.
+- Added `_effective_frontier_label(state) = _frontier_label(state) or _entry_label(_get_frontier_entry(state))`
+  — when the frontier is blank, derive the label from the entry the grill node WILL pick next, using
+  the graph's own selection function so the banner always matches the actual next question.
+- `_try_resume` now sets `grill_entry_label = _effective_frontier_label(state)`. Start/jump/submit
+  paths are unchanged (they already keep the frontier set; the helper is a safe superset).
+- `from workflows.nodes import _get_frontier_entry` (web → workflows domain; `workflows.nodes` has
+  "No UI imports", so no import cycle).
 
-PAUSE CONDITIONS:
-- If the graph does NOT reliably clear grill_frontier after the opening question (i.e. the real
-  cause differs from the stated diagnosis), STOP and report what you observe before changing code.
-- If deriving the label from the target entry would require a schema/contract change (it should
-  not — you already know the target entry_id in _apply_pending_jump).
+**Acceptance criteria (named tests, `tests/test_grill_frontier_label.py`):**
+- `test_entry_label_title_and_org`, `test_entry_label_title_only`, `test_entry_label_none_is_empty`
+- `test_effective_label_uses_frontier_when_set`
+- `test_effective_label_falls_back_to_next_grillable_when_frontier_blank` — the regression guard
+  reproducing the resume scenario (pinned entry GRILLED + frontier `""` → banner names the next
+  needs-work entry, not `""`).
+- `test_effective_label_empty_when_nothing_left_to_grill`
+- Existing grill/frontier tests remain green.
 
-Scope (web/grill_ui.py only):
-  - Add a small pure helper: def _entry_label_by_id(state, entry_id: str) -> str that returns the
-    same "Title · Org" label _frontier_label produces, but for an explicit entry_id (refactor
-    _frontier_label to delegate to it: _frontier_label(state) = _entry_label_by_id(state, state.grill_frontier)).
-  - In _apply_pending_jump: after advancing, set ss["grill_entry_label"] from the KNOWN `target`
-    entry_id via _entry_label_by_id(current_state, target) — NOT from post-advance grill_frontier.
-    Fall back to _frontier_label(state) only if the target entry can't be found.
-  - Verify _try_resume also sets a correct label on resume (if grill_frontier is empty on resume
-    but the last question targeted an entry, prefer that entry's label; otherwise leave as-is —
-    do not over-engineer, just ensure no regression).
-  - Do NOT change turn/advance logic or persistence.
-
-Tests (tests/test_grill_frontier_label.py or a new test module):
-  - test_entry_label_by_id_returns_title_org: state with an entry (title+org); assert the helper
-    returns "Title · Org".
-  - test_entry_label_by_id_unknown_returns_empty: unknown entry_id → "".
-  - test_apply_pending_jump_sets_label_from_target: simulate a jump where post-advance
-    grill_frontier is EMPTY but the target entry exists in work_timeline; assert grill_entry_label
-    is set to the target entry's label (the regression guard). Use the fake-st + fake-session
-    pattern already used in grill tests; monkeypatch run_async / session as needed.
-
-Acceptance criteria (named tests):
-- test_entry_label_by_id_returns_title_org
-- test_entry_label_by_id_unknown_returns_empty
-- test_apply_pending_jump_sets_label_from_target
-- Existing grill tests remain green.
-
-DoD:
-- make check green. No contract change.
-- Gemini/Copilot review PASS.
-- Report READY FOR REVIEW with: confirmation of the root cause (frontier cleared after opener) +
-  criterion→test map.
-```
+**DoD:** `make check` green; no contract change; Copilot review PASS.
 
 ---
 
