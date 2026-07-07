@@ -279,6 +279,7 @@ def _render_portfolio(*, user_id: str, today: str) -> None:
         _set_entry_highlight(user_id=user_id, entry_id=entry_id, highlighted=highlighted)
 
     def _on_save_profile(p: UserProfile) -> None:
+        from database.firestore_session import ContractVersionError
         from database.workspace_store import FirestoreWorkspaceStore
 
         if st.session_state.get("_profile_load_failed"):
@@ -286,6 +287,8 @@ def _render_portfolio(*, user_id: str, today: str) -> None:
             return
         try:
             save_profile(FirestoreWorkspaceStore(), user_id=user_id, profile=p)
+        except ContractVersionError:
+            raise  # schema mismatch must not masquerade as a transient save failure
         except Exception:
             st.error("Couldn't save your profile — please try again.")
 
