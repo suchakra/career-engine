@@ -3,7 +3,7 @@
 > Single source of truth for **what's done vs. pending**. Update this at the end of every work
 > session / sub-agent run. Keep entries terse. Legend: ✅ done · 🟡 in progress · ⬜ not started · 🚫 blocked.
 
-Last updated: **2026-07-07** — *Phase 10 groomed: PR #59 recorded the Streamlit→Next.js+FastAPI decision (ARCHITECTURE §16) + build tickets 10.1-10.7. master @ `db15e3c`, contract v2.8.0, 703 tests (1 skipped). 5-PR cycle complete. Next: begin Phase 10 build at 10.1 (FastAPI skeleton + auth boundary).*
+Last updated: **2026-07-07** — *Phase 10 groomed + design docs merged: PR #59 recorded the Streamlit→Next.js+FastAPI decision (ARCHITECTURE §16) + build tickets 10.1-10.7; PR #60 resolved the 10.1 auth shape (Firebase bearer, AD-16.4) + added the UI mockup + Phase 11 roadmap; PR #61 added the context-management strategy (CONTEXT_STRATEGY.md, skills/build-slice, GROOMING retire ritual). master @ `c3e0de5`, contract v2.8.0, 703 tests (1 skipped). Next: begin Phase 10 build at 10.1 (FastAPI skeleton + auth boundary).*
 
 ---
 

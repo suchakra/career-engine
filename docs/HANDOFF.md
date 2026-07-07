@@ -1,17 +1,18 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-07 — Phase 10 groomed + auth resolved; context strategy added; 2 docs PRs open)
-**`master` clean @ `db15e3c` · contract v2.8.0 · 703 tests (1 skipped) · all merged PRs green.**
+## 👉 YOU ARE HERE (updated 2026-07-07 — Phase 10 groomed + auth resolved; context strategy landed; ready to build 10.1)
+**`master` clean @ `c3e0de5` · contract v2.8.0 · 703 tests (1 skipped) · all merged PRs green.**
 **Phases 1–7 + 8A + 8B + 8C + 8D + 8G + all of Phase 9 (9A/9B/9C/9D/9E/9F/9G/9I/9J/9K) + BUG-1 + BUG-2 COMPLETE. Phase 10 is groomed (build not started).**
 
-**Open PRs (docs-only, not yet merged):**
+**Just merged (both docs-only):**
 - **PR #60** — Phase 10 design docs: resolves the 10.1 auth shape (Firebase bearer, AD-16.4),
-  adds `docs/PHASE10_UI_MOCKUP.md` (bitcrafty-branded Next.js mockup, reviewed), Phase 11 roadmap.
-- **branch `docs/context-engineering`** — context-management strategy: new
+  adds [PHASE10_UI_MOCKUP.md](PHASE10_UI_MOCKUP.md) (bitcrafty-branded Next.js mockup, reviewed),
+  Phase 11 roadmap.
+- **PR #61** — context-management strategy: new
   [CONTEXT_STRATEGY.md](CONTEXT_STRATEGY.md) + [skills/build-slice](../skills/build-slice/SKILL.md);
-  GROOMING trimmed to current-phase (2,281→~130 lines) with history in
+  GROOMING trimmed to current-phase (2,281→~144 lines) with history in
   [history/GROOMING_ARCHIVE.md](history/GROOMING_ARCHIVE.md); role-scoped reads wired into the
-  instruction files. (Open this PR next.)
+  instruction files.
 
 **▶ NEXT — Phase 10 build, slice 10.1 (FastAPI skeleton + auth boundary)**
 
