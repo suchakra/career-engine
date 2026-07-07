@@ -67,15 +67,22 @@ Decision + rationale recorded in [ARCHITECTURE.md §16](ARCHITECTURE.md); sequen
 [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) Phase 10. Unblocks 10.1–10.7.
 
 ### ✅ 10.1 — FastAPI skeleton + auth boundary  *(M · Backend)*
-Stand up the FastAPI app and the single identity edge. **PAUSE point:** pick the auth shape from
-ARCHITECTURE §16 AD-16.4 — (a) OIDC-at-FastAPI with httpOnly/Secure/SameSite session cookie, or
-(b) Firebase ID-token bearer verified at FastAPI — and confirm against `auth/` before building.
+Stand up the FastAPI app and the single identity edge. **PAUSE point resolved:** the auth shape is
+**AD-16.4 option (b) — Firebase ID-token bearer verified at FastAPI**, reusing the existing
+`auth/firebase_auth.py::FirebaseAuthProvider` (verified token → `sub` → `user_id`, injectable
+verifier for network-free tests). Rationale recorded in [ARCHITECTURE.md §16 AD-16.4](ARCHITECTURE.md).
+Do **not** build a cookie/OIDC-callback session store.
 - **Files:** new `api/` package (`api/main.py`, `api/deps.py`, `api/auth.py`); reuse `auth/`.
-- **Endpoints:** `GET /api/health`, `GET /api/me` (returns the verified `user_id` + display info).
+- **Auth mechanics:** FastAPI reads `Authorization: Bearer <id_token>`; an injectable
+  `get_current_user_id` dependency verifies the token via `FirebaseAuthProvider` and returns the
+  stable `user_id`. Missing/invalid/expired token → HTTP 401 (typed JSON, no stack leak, no token
+  logged). The provider/verifier must be injectable so tests never touch the network.
+- **Endpoints:** `GET /api/health` (unauthenticated liveness), `GET /api/me` (protected; returns the
+  verified `user_id` + safe display info from token claims, e.g. email — never the raw token).
 - **Acceptance:** an unauthenticated call to a protected route returns 401; a valid token resolves
   `user_id` via the same trust boundary the CLI/web use today; **no `asyncio.run` bridge** anywhere.
 - **Tests:** `test_api_auth_rejects_missing_token`, `test_api_me_resolves_user_id` (injected fake
-  verifier / store double, no network).
+  verifier / store double, no network), plus `test_api_health_ok` and an invalid-token → 401 case.
 
 ### ✅ 10.2 — Read APIs  *(M · Backend)*
 Typed GET endpoints wrapping existing read paths — **no behaviour change**.

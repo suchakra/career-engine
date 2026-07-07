@@ -202,6 +202,30 @@ React shell exists:
 auth callback/redirect URIs are fully controlled at the API boundary; the grill streams; and no domain
 behaviour or `CONTRACT_VERSION` changed as a result of the migration itself.
 
+### Phase 11 — Post-application & outreach toolkit  *(planned; builds on the Phase 10 shell)*
+Features named during Phase 10 UI design. The Next.js shell is built forward-compatibly for them —
+reserved nav group (`PREPARE`), a `ConsentDialog` + per-send confirm pattern, a `Settings` home for
+consents, and the reusable `StreamingTranscript` component — see
+[PHASE10_UI_MOCKUP.md §9](PHASE10_UI_MOCKUP.md). Each ships as its own additive-MINOR
+`CONTRACT_VERSION` bump; none blocks Phase 10.
+
+- **11.A — Outreach / emailer suite.** Agent-drafted recruiter follow-ups + thank-you notes. Requires
+  **consent pages** (one-time connected-account grant, send-only scope) **plus** mandatory
+  draft-review + **per-message send confirmation**; durable, `user_id`-scoped consent records + a send
+  log (recipient/subject/timestamp, not body). Reuses the Phase-10 `ConsentDialog` + `Settings →
+  Connected accounts & consents`. Privacy/HITL posture mirrors the grill checkpoint ethos.
+- **11.B — Interview prep.** Mock interviews with feedback, reusing the grill machinery
+  (`StreamingTranscript` + turn controller) + portfolio + web research — folds in the former
+  Future/Backlog interview-preparedness item ([ARCHITECTURE.md §13](ARCHITECTURE.md)). Its turn logic
+  differs from the grill (prompt → recorded answer), so it supplies its own controller over the shared
+  streaming surface.
+- **11.C — Salary negotiator.** Offer / comp inputs → scripted (streamed) negotiation guidance +
+  scenario-compare cards.
+- **11.D — Profile location & work-model preference.** Structured **base location** + **remote scope**
+  (`On-site` · `Hybrid` · `Remote within {region}` · `Remote anywhere`) setting in the Profile area
+  (e.g. "GTA, Canada" · "Remote within Canada"), which the **Jobs rubric inherits** (shown read-only
+  in Jobs preferences). Not a job-search preference today; additive-MINOR contract bump when built.
+
 ### Phase N — opportunistic value-adds (wanted; NOT v1-blocking; build when feasible)
 - **Outcome learning (positive-reinforcement)** ([ARCHITECTURE.md §8.1](ARCHITECTURE.md)): async-learn,
   per user + per job type, which résumé format/wording correlated with **reaching interview** — positive
@@ -210,9 +234,10 @@ behaviour or `CONTRACT_VERSION` changed as a result of the migration itself.
   once Phase 2 ships; nothing depends on it.
 
 ### Future / Backlog — post-v1 (NOT in scope)
-- **Interview preparedness** ([ARCHITECTURE.md §13](ARCHITECTURE.md)): on "interview scheduled," research
-  the company+role's typical interview shape (coding / system design / behavioral) and run agent-driven
-  **mock interviews** with feedback, reusing the grilling machinery + portfolio + web search. Distant future.
+- **Interview preparedness** ([ARCHITECTURE.md §13](ARCHITECTURE.md)): **promoted into Phase 11.B**
+  above — on "interview scheduled," research the company+role's typical interview shape (coding /
+  system design / behavioral) and run agent-driven **mock interviews** with feedback, reusing the
+  grilling machinery + portfolio + web search.
 
 ---
 

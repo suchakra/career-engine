@@ -675,12 +675,18 @@ editor (9M) are React-shaped; a rich client earns its keep given that committed 
   continues to gate compatibility end-to-end. The frontend consumes typed JSON (types generated from
   the OpenAPI schema); no hand-maintained parallel type set.
 - **AD-16.4 — Auth moves to the API boundary with an explicit, controlled flow.** Two acceptable
-  shapes, to be finalised in the 10.1 build: (a) OIDC at FastAPI (Authlib / Google Identity) issuing
-  an **httpOnly + Secure + SameSite** session cookie, or (b) **Firebase Auth** on the Next.js side
-  passing a verified **ID-token bearer** to FastAPI. Either gives full control of callback + redirect
-  URIs (fixing the class of bug that hung the custom domain) and a single explicit
-  **verified-token → `user_id`** trust boundary that mirrors today's `auth/` interfaces. BYOK-key
-  handling stays in `auth/key_vault.py` behind that boundary.
+  shapes were considered: (a) OIDC at FastAPI (Authlib / Google Identity) issuing an **httpOnly +
+  Secure + SameSite** session cookie, or (b) **Firebase Auth** on the Next.js side passing a verified
+  **ID-token bearer** to FastAPI. **Resolved for slice 10.1 → option (b), Firebase ID-token
+  bearer verified at FastAPI** (decision finalized; the 10.1 build is not yet implemented). Rationale: `auth/firebase_auth.py::FirebaseAuthProvider` already
+  implements exactly this trust boundary (verified token → `sub` → `user_id`) with a fully injectable
+  verifier for network-free tests, and it mirrors today's `st.user["sub"] → user_id` edge — so it
+  reuses proven code with no new cookie/callback/session machinery to build and audit. FastAPI reads
+  the `Authorization: Bearer <id_token>` header, verifies via `FirebaseAuthProvider`, and resolves
+  `user_id` at a single dependency. Option (a) was rejected for 10.1 as strictly more surface (a full
+  server-side OIDC callback + cookie-session store) for no reuse. Either shape gives full control of
+  callback + redirect URIs (fixing the class of bug that hung the custom domain); BYOK-key handling
+  stays in `auth/key_vault.py` behind that boundary.
 - **AD-16.5 — The grill turn streams over SSE (WebSocket only if bidirectional need appears).** The
   interactive grill is the one flow that benefits from token/step streaming; FastAPI serves it as
   Server-Sent Events over the existing `DiscoverySession`, preserving current grill semantics
