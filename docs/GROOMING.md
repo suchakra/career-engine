@@ -1191,6 +1191,11 @@ it is not the right tool for a multi-user SaaS:
 
 ### Pre-grooming design questions (resolve before writing any build specs)
 
+> **Resolved (2026-07-07):** the frontend/backend architecture decision is recorded in
+> [ARCHITECTURE.md §16](ARCHITECTURE.md) (Next.js App Router + FastAPI JSON API; auth at the API
+> boundary; grill over SSE; Cloud Run deploy) and broken into executable build tickets in **Phase 10**
+> below. Questions 1 and 2 are answered there; 3–5 are finalised inside the relevant Phase 10 slice.
+
 1. Next.js + FastAPI vs. a full Next.js fullstack (with API routes)? What does the deployment
    topology look like on Cloud Run?
 2. How does the grill loop (streaming, multi-turn, long-running) map to a REST or WebSocket API?
@@ -1215,9 +1220,9 @@ it is not the right tool for a multi-user SaaS:
 | 9D | Resume: better template — Inter/system-ui, multi-section layout | M | Streamlit | High | ✅ Ready |
 | 9A | Portfolio: delete/edit recorded bullets + STAR stories | M | Streamlit | High | ✅ Ready |
 | 9F | Jobs: tighten discovery parameters + smarter preference defaults | M | Streamlit | Medium | ✅ Ready |
-| 9H | Resume download: inline chat for résumé-specific edits | L | Frontend | Medium | ◐ Draft (frontend decision first) |
+| 9H | Resume download: inline chat for résumé-specific edits | L | Frontend | Medium | ◐ Draft (build on Phase 10) |
 | 9L | (Stretch) Monthly achievements email reminder | L | Streamlit | Low | ◐ Draft (email provider decision first) |
-| 9M | (Stretch) Visual drag-and-drop résumé section editor | XL | Frontend | Low | ◐ Draft (Next.js decision first) |
+| 9M | (Stretch) Visual drag-and-drop résumé section editor | XL | Frontend | Low | ◐ Draft (build on Phase 10) |
 
 ### Launch order
 
@@ -1979,11 +1984,13 @@ DoD:
 
 ---
 
-### ◐ 9H — Resume download: inline chat for résumé-specific edits *(frontend decision first)*
+### ◐ 9H — Resume download: inline chat for résumé-specific edits *(build on Phase 10)*
 
-Not groomed to build spec. Requires the Next.js / FastAPI architecture decision (design questions
-1–5 above). In Streamlit, an in-memory résumé edit chat is technically feasible but the UX is
-poor (every message requires a rerun). Defer until the frontend is decided.
+Not groomed to build spec. The frontend architecture decision is now recorded
+([ARCHITECTURE.md §16](ARCHITECTURE.md)): this ships on the Next.js + FastAPI stack, on top of
+Phase 10 slices 10.4/10.6 (streaming grill/tailor). In Streamlit an in-memory résumé edit chat is
+technically feasible but the UX is poor (every message requires a rerun), so this is deferred to
+the post-migration frontend rather than built on Streamlit.
 
 ---
 
@@ -1996,10 +2003,11 @@ from 8C. Groom when the email provider is decided.
 
 ---
 
-### ◐ 9M — (Stretch) Visual résumé section editor *(Next.js decision first)*
+### ◐ 9M — (Stretch) Visual résumé section editor *(build on Phase 10)*
 
 Not groomed to build spec. Requires React DnD or equivalent. No Streamlit equivalent is
-practical. Groom only after the Next.js frontend architecture decision.
+practical. The frontend decision is recorded ([ARCHITECTURE.md §16](ARCHITECTURE.md)); groom this
+once the Phase 10 Next.js frontend (10.5/10.6) is in place.
 
 ---
 
@@ -2165,64 +2173,102 @@ entry via `_get_frontier_entry` and re-pins the frontier, so the banner reappear
 
 ---
 
-## Phase 10 — Replace Streamlit with Next.js + FastAPI (grooming + recommendation)
+## Phase 10 — Replace Streamlit with Next.js + FastAPI (build tickets)
 
-> **Status: grooming only this session — no build.** Decision anchor: the owner has chosen a
-> **Next.js (React) frontend + FastAPI backend** split (design question resolved). This section
-> records the recommendation rationale and breaks the migration into launchable slices. The
-> detailed architecture (routes, auth, streaming) must be reconciled into
-> [ARCHITECTURE.md](ARCHITECTURE.md) before any Phase 10 build ticket is marked ✅ Ready.
+> **Status: 10.0 done (architecture decision recorded); 10.1–10.7 are ✅ Ready build specs — no
+> code shipped yet.** The accepted decision, rationale, auth model, streaming choice, deploy
+> topology, and API contract sketch are **canonical in [ARCHITECTURE.md §16](ARCHITECTURE.md)** — do
+> not restate them here. Sequencing is in [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) Phase 10;
+> status is canonical in [PROGRESS.md](PROGRESS.md). Build **API-first, one slice per PR**, in order —
+> each slice must be green (`make check` + any new frontend checks) before the next starts.
 
-### Why replace Streamlit (recorded rationale)
+### Decision anchor (one line)
+Retire the Streamlit surface for a **Next.js (App Router) frontend over a FastAPI JSON API**; the
+Python domain is unchanged; `schema.py` stays the wire contract; auth + streaming move to the API
+boundary. Full rationale + design decisions (AD-16.1..7): [ARCHITECTURE.md §16](ARCHITECTURE.md).
 
-Streamlit cost us real time and boxed in the design this session:
-- **Auth fragility.** Native OIDC (`st.login`) hard-codes the `/oauth2callback` path and hides the
-  callback handling; a wrong redirect path silently returns the app shell (200) and hangs — the
-  exact custom-domain outage we hit. No control over the session/cookie flow.
-- **Rerun model.** Every interaction reruns the whole script top-to-bottom. This forces the
-  `web/async_runner.py` background-loop hack (see BUG-1) and makes streaming, partial updates, and
-  multi-step forms awkward (every keystroke/submit is a full rerun).
-- **Layout/UX ceiling.** No real routing, limited component composition, no drag-and-drop (blocks
-  9M), poor inline-edit UX (blocks 9H), and embedding is gated by `allowedOrigins`.
-- **State coupling.** UI state lives in `st.session_state`; durable state needs bespoke Firestore
-  bridging. The trust boundary (`st.user` → user_id) is implicit.
+### Standing build rules for every 10.x ticket
 
-### Recommendation (short writeup)
+- **Do not change domain behaviour.** FastAPI handlers `await` the existing async stores / graph /
+  tailor / renderers directly. No business logic moves into the transport layer.
+- **`schema.py` is the wire contract.** Response/request models are the existing Pydantic types (or
+  thin DTOs over them); frontend types are generated from the OpenAPI schema, never hand-kept.
+  Anything requiring a new field is a separate additive-MINOR `CONTRACT_VERSION` bump, not folded in.
+- **Sub-agent instruction:** if a ticket's assumptions don't match the actual code (store signatures,
+  auth interfaces, session shape), **PAUSE and ask — do not assume.** Confirm the auth shape (10.1)
+  before wiring any protected route.
+- Each ticket ships with tests; do not report `DONE`, report `READY FOR REVIEW`.
 
-**Adopt Next.js (App Router, React Server Components where useful) + a FastAPI JSON API.**
-- **Backend (FastAPI):** thin HTTP layer over the ALREADY-BUILT Python domain — discovery graph,
-  portfolio/workspace stores, tailor, résumé render. FastAPI is natively async (no `asyncio.run`
-  bridge, no BUG-1 class of defect), gives typed request/response via Pydantic (reuse `schema.py`),
-  and supports Server-Sent Events / WebSockets for the grill's streaming turns.
-- **Frontend (Next.js):** real routing (Dashboard / Portfolio / Grill / Tailor / Jobs), proper
-  forms (Profile, preferences) without full-page reruns, component reuse, and a path to 9H (inline
-  résumé edit chat) and 9M (drag-and-drop editor). Deploy as static/SSR to Cloud Run or Vercel.
-- **Auth:** move OIDC to the API boundary (Authlib / Google Identity) with explicit session
-  cookies (httpOnly, Secure, SameSite) OR Firebase Auth on the Next.js side with an ID-token
-  bearer to FastAPI. Either gives full control of the callback + redirect URIs (fixes the class of
-  bug that hung the custom domain) and a clean `verified ID token → user_id` trust boundary.
-- **Why not FastAPI + HTMX/Jinja:** viable and lighter, but caps the interactive résumé/DnD UX the
-  roadmap (9H/9M) wants. Given those are on the plan, React earns its keep.
-- **Migration principle:** the Python DOMAIN does not change — only the presentation + transport.
-  Keep `schema.py` as the shared contract; FastAPI serializes it; Next.js consumes typed responses.
+### ✅ 10.0 — Architecture decision record  *(DONE — grooming)*
+Decision + rationale recorded in [ARCHITECTURE.md §16](ARCHITECTURE.md); sequencing in
+[REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) Phase 10. Unblocks 10.1–10.7.
 
-### Proposed migration slices (to be groomed into ✅ Ready tickets AFTER ARCHITECTURE.md is updated)
+### ✅ 10.1 — FastAPI skeleton + auth boundary  *(M · Backend)*
+Stand up the FastAPI app and the single identity edge. **PAUSE point:** pick the auth shape from
+ARCHITECTURE §16 AD-16.4 — (a) OIDC-at-FastAPI with httpOnly/Secure/SameSite session cookie, or
+(b) Firebase ID-token bearer verified at FastAPI — and confirm against `auth/` before building.
+- **Files:** new `api/` package (`api/main.py`, `api/deps.py`, `api/auth.py`); reuse `auth/`.
+- **Endpoints:** `GET /api/health`, `GET /api/me` (returns the verified `user_id` + display info).
+- **Acceptance:** an unauthenticated call to a protected route returns 401; a valid token resolves
+  `user_id` via the same trust boundary the CLI/web use today; **no `asyncio.run` bridge** anywhere.
+- **Tests:** `test_api_auth_rejects_missing_token`, `test_api_me_resolves_user_id` (injected fake
+  verifier / store double, no network).
 
-| ID | Slice | Notes / dependency |
-|----|-------|--------------------|
-| 10.0 | ARCHITECTURE.md decision record + API contract sketch | DO FIRST — routes, auth model, SSE for grill, deploy topology. Blocks all others. |
-| 10.1 | FastAPI skeleton + auth boundary (OIDC/Firebase → user_id) | Health, session, `me` endpoint; reuse `auth/`. |
-| 10.2 | Read APIs: dashboard, portfolio, jobs list (GET, typed from schema.py) | Wrap existing stores; no behavior change. |
-| 10.3 | Write APIs: profile save, add experience, track application, preferences | Reuse the (BUG-1-fixed) stores; transactional note from ARCHITECTURE §8. |
-| 10.4 | Grill API with streaming (SSE/WebSocket) over DiscoverySession | The interactive core; mirrors grill_ui behavior. |
-| 10.5 | Next.js app shell + routing + auth wiring | Consumes 10.1–10.3. |
-| 10.6 | Next.js Grill UI (streaming) + Tailor + résumé export | Consumes 10.4; enables 9H later. |
-| 10.7 | Cutover + delete `web/` Streamlit + docs/infra update | Redirect URIs, Cloud Run/Vercel, contract-gate. |
+### ✅ 10.2 — Read APIs  *(M · Backend)*
+Typed GET endpoints wrapping existing read paths — **no behaviour change**.
+- **Endpoints:** `GET /api/dashboard`, `GET /api/portfolio`, `GET /api/jobs`.
+- **Reuse:** `web/session_loader.py`, portfolio view builders, `discovery` ledger reads.
+- **Acceptance:** each returns the existing view model serialized from `schema.py`; load failure
+  degrades to an empty typed payload (mirrors `try_load_latest_discovery_state`), never 500 on a
+  missing session.
+- **Tests:** one per endpoint asserting the typed shape from a seeded fake store; empty-state case.
 
-**PAUSE before grooming any 10.x build ticket:** update [ARCHITECTURE.md](ARCHITECTURE.md) with the
-accepted decision (10.0), then reconcile [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) sequencing.
-Grooming build specs before the architecture record exists violates the docs-governance rule
-(architecture/plan first, then grooming).
+### ✅ 10.3 — Write APIs  *(M · Backend)*
+POST/PUT over the **BUG-1-fixed** stores; per-request async client, transactional note per
+ARCHITECTURE §8.
+- **Endpoints:** `POST /api/profile`, `POST /api/experience`, `POST /api/applications`,
+  `PUT /api/preferences`.
+- **Reuse:** `web/profile_store.py`, `web/portfolio_store.py`, `web/preferences_store.py`,
+  workspace store.
+- **Acceptance:** each round-trips through the store and re-reads the persisted value; validation
+  errors return 422 with the Pydantic error; empty/no-op edits behave exactly as the store already
+  does (e.g. blank bullet = no-op, per 9A).
+- **Tests:** round-trip per endpoint; validation-error case; empty-edit no-op case.
+
+### ✅ 10.4 — Grill API with SSE streaming  *(L · Backend — the interactive core)*
+Serve the grill turn over Server-Sent Events (WebSocket only if a bidirectional need surfaces).
+- **Endpoints:** `POST /api/grill` (submit answer / advance), `GET /api/grill/stream` (SSE of the
+  turn's steps/tokens) over the existing `DiscoverySession`.
+- **Acceptance:** frontier steering, checkpoints, and resume behave identically to the Streamlit
+  grill (reuse `workflows.nodes` / `DiscoverySession`; **no graph changes**); the "currently
+  grilling" label is derivable server-side (reuse the `_effective_frontier_label` logic from BUG-2).
+- **Tests:** a scripted multi-turn session asserting the SSE event sequence against a fake model;
+  resume-mid-grill emits the correct frontier label.
+
+### ✅ 10.5 — Next.js app shell + routing + auth wiring  *(L · Frontend)*
+The React shell consuming 10.1–10.3.
+- **Files:** new `frontend/` (Next.js App Router). Routes: Dashboard / Portfolio / Jobs / Tailor /
+  Grill.
+- **Acceptance:** login flow round-trips through the 10.1 auth boundary and sets the session; the
+  three read views render live data from 10.2; profile/preferences forms submit via 10.3 **without a
+  full-page reload**; frontend request/response types are generated from the FastAPI OpenAPI schema.
+- **Tests:** component/integration tests for auth-guarded routing + one form-submit happy path
+  (mocked API).
+
+### ✅ 10.6 — Next.js grill (streaming) + tailor + résumé export  *(L · Frontend)*
+The interactive surface consuming 10.4; unblocks 9H (inline résumé-edit chat) and 9M (DnD editor).
+- **Acceptance:** grill renders streamed turns from the 10.4 SSE endpoint with the currently-grilling
+  banner; tailor submits a JD and downloads PDF/DOCX/MD via the existing renderers behind the API.
+- **Tests:** grill streaming render against a mocked SSE stream; tailor → export happy path (mocked).
+
+### ✅ 10.7 — Cutover  *(M · Backend + Infra + Docs)*
+Make Next.js + FastAPI the deployed product and remove Streamlit.
+- **Acceptance:** delete `web/` Streamlit app + `web/async_runner.py`; update Dockerfile / Cloud Run
+  service(s) / `allowedOrigins` / redirect URIs; reconcile [ARCHITECTURE.md](ARCHITECTURE.md) (mark
+  Streamlit sections `superseded`, update the frontends diagram), [PROGRESS.md](PROGRESS.md),
+  [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md), [SECURITY.md](SECURITY.md), and
+  [HANDOFF.md](HANDOFF.md). `CONTRACT_VERSION` unchanged by the migration itself.
+- **Tests:** the API test suite is green with no import of `web/`; deploy config lints.
 
 ---
 

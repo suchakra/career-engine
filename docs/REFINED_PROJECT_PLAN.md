@@ -176,6 +176,32 @@ header, JD-aligned skills, reverse-chronological experience grouped by role with
 education — downloadable as PDF/DOCX/MD, with the internal reasoning removed; and a tailored résumé can be
 saved as a tracked application.
 
+### Phase 10 — Web platform migration: Streamlit → Next.js + FastAPI  *(SEQUENTIAL, API-first)*
+> Phases 6–9 (A2A discovery, web discovery surface, auth/deploy hardening, UI polish) shipped after
+> this plan's roadmap was last expanded; their sequencing/status is canonical in
+> [PROGRESS.md](PROGRESS.md) and their build specs in [GROOMING.md](GROOMING.md). Phase 10 is the next
+> planned macro-phase.
+
+Retire the Streamlit web surface in favour of a **Next.js (React, App Router) frontend over a FastAPI
+JSON API.** The Python **domain is unchanged** — only presentation + transport. Accepted decision
+(rationale, auth model, streaming, deploy topology, API sketch) recorded in
+[ARCHITECTURE.md §16](ARCHITECTURE.md); build slices + acceptance criteria in
+[GROOMING.md](GROOMING.md) Phase 10. Sequenced **API-first** so the backend is provable before the
+React shell exists:
+
+- **10.0** — architecture decision record (ARCHITECTURE.md §16) + this sequencing. **Done as grooming.**
+- **10.1** — FastAPI skeleton + auth boundary (verified token → `user_id`; reuse `auth/`).
+- **10.2** — read APIs (dashboard, portfolio, jobs), typed from `schema.py`, wrapping existing stores.
+- **10.3** — write APIs (profile, add experience, track application, preferences) over BUG-1-fixed stores.
+- **10.4** — grill API with SSE streaming over `DiscoverySession`.
+- **10.5** — Next.js app shell + routing + auth wiring (consumes 10.1–10.3).
+- **10.6** — Next.js grill (streaming) + tailor + résumé export (consumes 10.4; unblocks 9H/9M).
+- **10.7** — cutover: delete `web/` Streamlit, reconcile redirect URIs / infra / docs, contract-gate.
+
+**Exit criteria:** the deployed product runs on Next.js + FastAPI with the Streamlit surface removed;
+auth callback/redirect URIs are fully controlled at the API boundary; the grill streams; and no domain
+behaviour or `CONTRACT_VERSION` changed as a result of the migration itself.
+
 ### Phase N — opportunistic value-adds (wanted; NOT v1-blocking; build when feasible)
 - **Outcome learning (positive-reinforcement)** ([ARCHITECTURE.md §8.1](ARCHITECTURE.md)): async-learn,
   per user + per job type, which résumé format/wording correlated with **reaching interview** — positive
