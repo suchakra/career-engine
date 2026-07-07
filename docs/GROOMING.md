@@ -38,7 +38,7 @@ Canonical status for every phase is in [PROGRESS.md](PROGRESS.md).
 
 ## Phase 10 — Replace Streamlit with Next.js + FastAPI (build tickets)
 
-> **Status: 10.0 done + 10.1 & 10.2 SHIPPED (PR #63, #64); 10.3–10.7 are ✅ Ready build specs.** The accepted
+> **Status: 10.0 done + 10.1, 10.2 & 10.3 SHIPPED (PR #63, #64, #65); 10.4–10.7 are ✅ Ready build specs.** The accepted
 > decision, rationale, auth model, streaming choice, deploy
 > topology, and API contract sketch are **canonical in [ARCHITECTURE.md §16](ARCHITECTURE.md)** — do
 > not restate them here. Sequencing is in [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) Phase 10;
@@ -97,17 +97,8 @@ Typed GET endpoints wrapping existing read paths — **no behaviour change**.
   missing session.
 - **Tests:** one per endpoint asserting the typed shape from a seeded fake store; empty-state case.
 
-### ✅ 10.3 — Write APIs  *(M · Backend)*
-POST/PUT over the **BUG-1-fixed** stores; per-request async client, transactional note per
-ARCHITECTURE §8.
-- **Endpoints:** `POST /api/profile`, `POST /api/experience`, `POST /api/applications`,
-  `PUT /api/preferences`.
-- **Reuse:** `web/profile_store.py`, `web/portfolio_store.py`, `web/preferences_store.py`,
-  workspace store.
-- **Acceptance:** each round-trips through the store and re-reads the persisted value; validation
-  errors return 422 with the Pydantic error; empty/no-op edits behave exactly as the store already
-  does (e.g. blank bullet = no-op, per 9A).
-- **Tests:** round-trip per endpoint; validation-error case; empty-edit no-op case.
+### ✅ 10.3 — Write APIs  *(SHIPPED — PR #65)*
+> Merged: four protected async write endpoints — `POST /api/profile`, `POST /api/experience`, `POST /api/applications`, `PUT /api/preferences` — binding `schema.py` domain models directly (AD-16.3) and reusing the existing store write-seams (sync stores via `run_in_threadpool`; `web.portfolio_store.aadd_manual_entry` awaited natively — one additive async wrapper); malformed/required-field-omitted body = 422; two strict api-local DTOs in `api/schemas.py`; 13 tests. Status canonical in [PROGRESS.md](PROGRESS.md).
 
 ### ✅ 10.4 — Grill API with SSE streaming  *(L · Backend — the interactive core)*
 Serve the grill turn over Server-Sent Events (WebSocket only if a bidirectional need surfaces).

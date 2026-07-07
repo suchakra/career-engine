@@ -1,11 +1,18 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-07 — Phase 10 build: slices 10.1 + 10.2 MERGED; slice 10.3 next)
-**`master` clean @ `7950834` · contract v2.8.0 · 720 tests (1 skipped) · all merged PRs green.**
-**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + all of Phase 9 (9A/9B/9C/9D/9E/9F/9G/9I/9J/9K) + BUG-1 + BUG-2 COMPLETE. Phase 10 building API-first, one slice per PR — 10.1 + 10.2 done.**
+## 👉 YOU ARE HERE (updated 2026-07-07 — Phase 10 build: slices 10.1 + 10.2 + 10.3 MERGED; slice 10.4 next)
+**`master` clean @ `d76798c` · contract v2.8.0 · 733 tests (1 skipped) · all merged PRs green.**
+**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + all of Phase 9 (9A/9B/9C/9D/9E/9F/9G/9I/9J/9K) + BUG-1 + BUG-2 COMPLETE. Phase 10 building API-first, one slice per PR — 10.1 + 10.2 + 10.3 done.**
 
 **Just merged:**
-- **PR #64** — Phase 10.2 (read APIs, presentation only, no contract change): three protected typed
+- **PR #65** — Phase 10.3 (write APIs, presentation only, no contract change): four protected
+  async write endpoints — `POST /api/profile`, `POST /api/experience`, `POST /api/applications`,
+  `PUT /api/preferences` — binding `schema.py` domain models directly (AD-16.3 wire contract) and
+  reusing the existing store write-seams (`web.profile_store`/`web.preferences_store`/
+  `web.application_store` sync via `run_in_threadpool`; `web.portfolio_store.aadd_manual_entry`
+  awaited natively — one additive async wrapper over the private core). Malformed body = 422,
+  required-field omission = 422; two strict api-local DTOs (`ApplicationWriteRequest`,
+  `ExperienceWriteResponse`) in `api/schemas.py`. +13 tests (`tests/test_api_write.py`).
   GET endpoints — `GET /api/dashboard`, `/api/portfolio`, `/api/jobs` — wrapping the existing read
   paths (`web.dashboard`/`web.portfolio`/`web.jobs` pure view builders + discovery session/ledger
   reads). Async endpoints await a new additive `web.session_loader.atry_load_latest_discovery_state`;
@@ -23,17 +30,17 @@
   [history/GROOMING_ARCHIVE.md](history/GROOMING_ARCHIVE.md); role-scoped reads wired into the
   instruction files.
 
-**▶ NEXT — Phase 10 build, slices 10.3 → 10.7 (one PR each, API-first)**
+**▶ NEXT — Phase 10 build, slices 10.4 → 10.7 (one PR each, API-first)**
 
 The Streamlit→Next.js+FastAPI decision is recorded in [ARCHITECTURE.md §16](ARCHITECTURE.md)
 (AD-16.1..7: FastAPI over the unchanged domain, `schema.py` as wire contract, auth at the API
-boundary, SSE grill, Cloud Run). Executable **API-first** build tickets 10.3–10.7 are ✅ Ready in
+boundary, SSE grill, Cloud Run). Executable **API-first** build tickets 10.4–10.7 are ✅ Ready in
 [GROOMING.md §Phase 10](GROOMING.md); sequencing in [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md).
-Build one slice per PR, in order. **Next up = 10.3 write APIs** (profile / portfolio / preferences /
-workspace mutations) reusing `web/profile_store.py`, `web/portfolio_store.py`,
-`web/preferences_store.py`, and the workspace store (BUG-1 per-request async client); validation
-errors → 422, empty/no-op edits behave exactly as the store already does. Hand the builder the 10.3
-ticket + [skills/build-slice](../skills/build-slice/SKILL.md) — not the big docs.
+Build one slice per PR, in order. **Next up = 10.4 Grill API with SSE streaming** — the interactive
+core, reusing `workflows.nodes` / `DiscoverySession` and `_effective_frontier_label` (BUG-2);
+stream turns via SSE (AD-16.5). Before compiling the ticket, read the actual reuse-target
+signatures. Hand the builder the 10.4 ticket + [skills/build-slice](../skills/build-slice/SKILL.md)
+— not the big docs.
 
 **What shipped this session (5-PR cycle: 2 bug fixes + Phase 9 completion + Phase 10 groom):**
 
