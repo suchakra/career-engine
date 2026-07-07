@@ -55,6 +55,12 @@ variable "custom_domain" {
   default     = "career-engine.bitcrafty.cloud"
 }
 
+variable "auth_redirect_uri" {
+  type        = string
+  description = "OAuth2 redirect URI sent to Google and handled by the app. Defaults to the custom domain /_stcore/oauth2callback (correct for current code). Override to the *.run.app URL when the custom domain TLS cert is not yet ready, or when running an older image that uses /oauth2callback instead of /_stcore/oauth2callback."
+  default     = ""
+}
+
 variable "cloudflare_zone_id" {
   type        = string
   description = "Cloudflare zone ID for the bitcrafty.cloud domain (from Cloudflare Dashboard → Overview). Set via TF_VAR_cloudflare_zone_id."
@@ -71,4 +77,13 @@ variable "google_domain_verification_txt" {
   sensitive   = true
   default     = ""
   description = "Google domain ownership verification TXT value (google-site-verification=...). One-time bootstrap only — apply module.cloudflare_dns.cloudflare_dns_record.verification first, complete verification, then run full apply. Set via TF_VAR_google_domain_verification_txt. Leave empty (the default) for steady-state applies after verification is complete."
+}
+
+variable "dns_resource_records" {
+  type = list(object({
+    type   = string
+    rrdata = string
+  }))
+  default     = []
+  description = "A/AAAA records from the Cloud Run domain mapping — paste from `terraform output domain_mapping_resource_records` after Phase 1 apply. Empty on first apply (Terraform can't derive for_each keys from apply-time values). See README §Custom domain Phase 2."
 }

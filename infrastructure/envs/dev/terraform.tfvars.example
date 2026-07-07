@@ -22,3 +22,11 @@ auth_client_id = "your-oauth-client-id.apps.googleusercontent.com"
 cloudflare_zone_id = "your-cloudflare-zone-id"
 # custom_domain defaults to "career-engine.bitcrafty.cloud"; override here if needed:
 # custom_domain = "career-engine.example.com"
+
+# Phase 2 bootstrap only — paste the output of `terraform output domain_mapping_resource_records`
+# here after the first apply, then apply again to create the Cloudflare A/AAAA records.
+# Leave empty (the default) on the first apply.
+# dns_resource_records = [
+#   { type = "A",    rrdata = "216.239.32.21" },
+#   { type = "AAAA", rrdata = "2001:4860:4802:32::15" },
+# ]

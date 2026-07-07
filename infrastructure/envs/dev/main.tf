@@ -146,7 +146,7 @@ module "cloud_run" {
     GCP_PROJECT_ID       = var.project_id
     GCP_REGION           = var.region
     CE_AUTH_CLIENT_ID    = var.auth_client_id
-    CE_AUTH_REDIRECT_URI = "https://${var.custom_domain}/_stcore/oauth2callback"
+    CE_AUTH_REDIRECT_URI = var.auth_redirect_uri != "" ? var.auth_redirect_uri : "https://${var.custom_domain}/_stcore/oauth2callback"
     CE_AUTH_METADATA_URL = "https://accounts.google.com/.well-known/openid-configuration"
     # The web app is BYOK (every user brings their own key), so reasoning-heavy
     # steps route to Pro on the user's key instead of Flash. ACCESS_MODE drives
@@ -205,11 +205,12 @@ module "cloudflare_dns" {
   zone_id                 = var.cloudflare_zone_id
   subdomain               = "career-engine"
   google_verification_txt = var.google_domain_verification_txt
-  resource_records        = module.domain_mapping.resource_records
-  # No explicit depends_on needed: resource_records references module.domain_mapping.resource_records,
-  # which gives Terraform an implicit dependency for the A/AAAA records. Removing the explicit
-  # depends_on here allows `-target=module.cloudflare_dns.cloudflare_dns_record.verification` to
-  # create only the TXT record (Phase 1) without also creating the domain mapping.
+  # resource_records is decoupled from module.domain_mapping.resource_records
+  # because for_each keys must be known at plan time, but Cloud Run domain mapping
+  # A/AAAA records are only known after apply (GCP assigns IPs at provision time).
+  # Phase 2 bootstrap: after Phase 1 apply, run `terraform output domain_mapping_resource_records`,
+  # paste the result into terraform.tfvars as dns_resource_records, then apply again.
+  resource_records = var.dns_resource_records
 }
 
 output "service_uri" {
@@ -220,6 +221,11 @@ output "service_uri" {
 output "image_repository_url" {
   description = "Artifact Registry Docker repo URL for pushing images."
   value       = module.artifact_registry.repository_url
+}
+
+output "domain_mapping_resource_records" {
+  description = "A/AAAA DNS records from the Cloud Run domain mapping. After Phase 1 apply, paste these into terraform.tfvars as dns_resource_records, then apply again (Phase 2) to create the Cloudflare DNS records."
+  value       = module.domain_mapping.resource_records
 }
 
 output "secret_accessor_member" {
