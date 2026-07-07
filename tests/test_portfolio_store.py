@@ -279,6 +279,26 @@ class TestUpdateEntryBullet:
         assert sid is not None
         assert _read_latest(service).work_timeline[0].bullets == ["only bullet"]
 
+    def test_update_entry_bullet_empty_is_noop(self) -> None:
+        service = _service()
+        entry = Entry(
+            type=ExperienceType.PROJECT, title="Billing rewrite", bullets=["keep me"]
+        )
+        _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
+
+        # A whitespace-only edit must not persist a blank bullet (matches
+        # add_manual_entry, which filters empty bullets).
+        sid = update_entry_bullet(
+            service,
+            app_name=_APP,
+            user_id=_UID,
+            entry_id=str(entry.entry_id),
+            bullet_index=0,
+            new_text="   ",
+        )
+        assert sid is not None
+        assert _read_latest(service).work_timeline[0].bullets == ["keep me"]
+
     def test_returns_none_when_no_session(self) -> None:
         service = _service()
         assert (

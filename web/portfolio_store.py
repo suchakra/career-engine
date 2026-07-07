@@ -212,9 +212,19 @@ async def _aupdate_entry_bullet(
     """Replace one bullet on an entry with ``new_text`` on the canonical session.
 
     Guards against a missing entry or an out-of-range ``bullet_index`` (logs a
-    warning and leaves state untouched — no ``IndexError``). Returns the
-    session_id, or ``None`` if the user has no session.
+    warning and leaves state untouched — no ``IndexError``). An empty or
+    whitespace-only ``new_text`` is treated as a no-op so we never persist a
+    blank bullet (matching :func:`add_manual_entry`, which filters empties).
+    Returns the session_id, or ``None`` if the user has no session.
     """
+    clean_text = new_text.strip()
+    if not clean_text:
+        logger.warning(
+            "update_entry_bullet: empty edit for entry %s bullet %d ignored",
+            entry_id,
+            bullet_index,
+        )
+        return web_session_id(user_id)  # no-op: refuse to persist a blank bullet
     session_id = web_session_id(user_id)
     existing = await session_helpers.get_session_state_if_exists(
         session_service=session_service,
@@ -237,7 +247,7 @@ async def _aupdate_entry_bullet(
                 )
                 return session_id  # no-op: out of range
             updated_bullets = list(entry.bullets)
-            updated_bullets[bullet_index] = new_text.strip()
+            updated_bullets[bullet_index] = clean_text
             entry = entry.model_copy(update={"bullets": updated_bullets})
             found = True
         new_timeline.append(entry)
