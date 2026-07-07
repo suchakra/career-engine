@@ -2,7 +2,7 @@
 
 Defines the ``app`` and its first two routes: an unauthenticated liveness probe
 and a protected identity edge. Auth is enforced at a single dependency
-(:func:`api.deps.get_current_user_id`), reusing the existing Firebase token
+(:func:`api.deps.get_current_identity`), reusing the existing Firebase token
 verification (AD-16.4). No business logic lives in this layer.
 """
 

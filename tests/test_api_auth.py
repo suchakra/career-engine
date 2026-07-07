@@ -43,8 +43,19 @@ def _make_fake_verifier(
 
 
 def _override_provider(verifier: Any) -> FirebaseAuthProvider:
-    """Build a fully-injected provider (issuer pinned, aud check skipped)."""
-    return FirebaseAuthProvider(verifier=verifier, allowed_issuers=[_GOOGLE_ISSUER])
+    """Build a fully-injected provider decoupled from config.
+
+    Supplying BOTH ``expected_audiences`` and ``allowed_issuers`` keeps the
+    provider from importing ``config.get_settings()`` (and its dotenv side
+    effects), so the audience/issuer checks are deterministic and independent of
+    any ``GCP_PROJECT_ID`` / ``firebase_project_id`` in the environment. The
+    accepted audience matches the fake verifier's ``aud`` so the check passes.
+    """
+    return FirebaseAuthProvider(
+        verifier=verifier,
+        expected_audiences=["my-project"],
+        allowed_issuers=[_GOOGLE_ISSUER],
+    )
 
 
 @pytest.fixture
