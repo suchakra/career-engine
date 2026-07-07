@@ -283,6 +283,39 @@ class DiscoverySession:
             The opening question from the grill node, or an empty string if the
             workflow terminated immediately (e.g. no active gaps after ingest).
         """
+        await self.create(
+            raw_history_text,
+            reference_date=reference_date,
+            work_timeline=work_timeline,
+        )
+        await self._run_turn()
+        state = await session_helpers.read_state(
+            session_service=self._svc,
+            app_name=self._app_name,
+            user_id=self._user_id,
+            session_id=self._session_id,
+        )
+        return state.current_question
+
+    async def create(
+        self,
+        raw_history_text: str,
+        *,
+        reference_date: str = "",
+        work_timeline: list[Entry] | None = None,
+    ) -> None:
+        """Create the durable ADK session WITHOUT running a turn.
+
+        The create-only half of :meth:`start`: builds the initial
+        ``CareerEngineState`` and persists it via ``session_helpers.create_session``.
+        Used by the API transport (10.4) where the POST records state and a separate
+        GET stream runs the graph — the graph must NOT run on the record request.
+
+        Args:
+            raw_history_text: The user's raw career history (multi-decade text).
+            reference_date: ISO ``YYYY-MM-DD`` injected clock for the session.
+            work_timeline: Optional pre-parsed entries (vision ingest) to seed.
+        """
         initial_state = CareerEngineState(
             raw_history_text=raw_history_text,
             reference_date=reference_date,
@@ -295,14 +328,6 @@ class DiscoverySession:
             session_id=self._session_id,
             initial_state=initial_state,
         )
-        await self._run_turn()
-        state = await session_helpers.read_state(
-            session_service=self._svc,
-            app_name=self._app_name,
-            user_id=self._user_id,
-            session_id=self._session_id,
-        )
-        return state.current_question
 
     async def answer(self, user_answer: str) -> TurnResult:
         """Submit a user answer and run one grill turn.
@@ -317,6 +342,20 @@ class DiscoverySession:
             A ``TurnResult`` with the next question, checkpoint summary (if
             at turn 5), or a signal that the session is complete.
         """
+        await self.record_answer(user_answer)
+        await self._run_turn()
+        return await self._read_turn_result()
+
+    async def record_answer(self, user_answer: str) -> None:
+        """Patch ``pending_user_answer`` into the session WITHOUT running a turn.
+
+        The record-only half of :meth:`answer`: the API transport (10.4) records the
+        answer on POST and runs the turn later on the GET stream. The next turn (via
+        :meth:`advance`) consumes the patched answer.
+
+        Args:
+            user_answer: The user's answer to the most recent question.
+        """
         await session_helpers.patch_state(
             session_service=self._svc,
             app_name=self._app_name,
@@ -324,8 +363,6 @@ class DiscoverySession:
             session_id=self._session_id,
             pending_user_answer=user_answer,
         )
-        await self._run_turn()
-        return await self._read_turn_result()
 
     async def confirm_checkpoint(self) -> str:
         """Confirm the checkpoint and resume grilling.
@@ -338,13 +375,7 @@ class DiscoverySession:
             The next grill question, or empty string if the session is now
             complete.
         """
-        await session_helpers.patch_state(
-            session_service=self._svc,
-            app_name=self._app_name,
-            user_id=self._user_id,
-            session_id=self._session_id,
-            checkpoint_verified=True,
-        )
+        await self.record_checkpoint_confirmation()
         await self._run_turn()
         state = await session_helpers.read_state(
             session_service=self._svc,
@@ -353,6 +384,21 @@ class DiscoverySession:
             session_id=self._session_id,
         )
         return state.current_question
+
+    async def record_checkpoint_confirmation(self) -> None:
+        """Patch ``checkpoint_verified=True`` WITHOUT running a turn.
+
+        The record-only half of :meth:`confirm_checkpoint`: the API transport (10.4)
+        records the confirmation on POST and runs the turn later on the GET stream.
+
+        """
+        await session_helpers.patch_state(
+            session_service=self._svc,
+            app_name=self._app_name,
+            user_id=self._user_id,
+            session_id=self._session_id,
+            checkpoint_verified=True,
+        )
 
     async def advance(self) -> TurnResult:
         """Advance the workflow by one turn WITHOUT supplying a user answer.

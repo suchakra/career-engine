@@ -1,9 +1,9 @@
-"""Tests for the 'currently grilling' entry label (web/grill_ui)."""
+"""Tests for the 'currently grilling' entry label (web/grill_labels)."""
 
 from __future__ import annotations
 
 from schema import CareerEngineState, Entry, EntryStatus, ExperienceType
-from web.grill_ui import _effective_frontier_label, _entry_label, _frontier_label
+from web.grill_labels import _effective_frontier_label, _entry_label, _frontier_label
 
 
 def _entry(title: str, org: str = "", status: EntryStatus = EntryStatus.NEEDS_QUANTIFYING) -> Entry:
