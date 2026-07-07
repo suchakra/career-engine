@@ -719,7 +719,7 @@ editor (9M) are React-shaped; a rich client earns its keep given that committed 
     **Tripwire:** if the 10.5 bundle-size spike ([PHASE10_UI_MOCKUP.md §8](PHASE10_UI_MOCKUP.md)) shows
     the data layer materially over budget, fall back to SWR with the *same* optimistic/rollback rules;
     the component API is written to not care which library backs it.
-- **AD-16.9 — Frontend toolchain lives in `frontend/`; the devcontainer adds only Node + Playwright system deps.**
+- **AD-16.9 — Frontend toolchain lives in `frontend/`; the devcontainer pins only Node (Playwright system deps come at 10.5).**
   The Next.js app and **all** its JS tooling (TanStack Query, test runners, linters) are project
   dependencies in `frontend/package.json`, scaffolded at 10.5 — not global installs. TanStack Query is
   `npm i @tanstack/react-query`; it needs nothing at the devcontainer level.
