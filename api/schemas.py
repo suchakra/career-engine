@@ -10,6 +10,8 @@ models explicitly so no dataclass type ever leaks onto the wire.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
 
 from web.dashboard import DashboardView
@@ -207,3 +209,68 @@ class JobsResponse(_StrictModel):
             empty_text=view.empty_text,
             is_empty=view.is_empty,
         )
+
+
+# ── Grill transport DTOs (Phase 10.4 — SSE grill, api-local, not schema.py) ────
+
+
+class GrillActionRequest(_StrictModel):
+    """Request body for ``POST /api/grill`` (api-local, not ``schema.py``).
+
+    Records the caller's input into the durable canonical session WITHOUT running
+    the graph (the graph runs later on ``GET /api/grill/stream``). The user's answer
+    travels in the body (never a URL query), so grill PII never lands in access logs.
+
+    - ``start`` uses ``history`` (+ optional ``reference_date``) to create the session.
+    - ``answer`` uses ``answer`` (patched as ``pending_user_answer``).
+    - ``confirm`` uses neither (sets ``checkpoint_verified``).
+    """
+
+    action: Literal["start", "answer", "confirm"]
+    answer: str = ""
+    history: str = ""
+    reference_date: str = ""
+
+
+class GrillSnapshot(_StrictModel):
+    """Response for ``POST /api/grill``: a small post-record status snapshot.
+
+    Computed from the durable session AFTER the record (no turn was run), so the
+    client can render the "currently grilling" banner + await state before opening
+    the SSE stream.
+    """
+
+    phase: str
+    frontier_label: str
+    awaiting: Literal["question", "checkpoint", "complete"]
+
+
+class GrillTurnEvent(_StrictModel):
+    """SSE payload for one completed grill turn (``event: turn`` / ``event: done``).
+
+    Mirrors the fields of :class:`cli.app.TurnResult` plus the presentation-only
+    ``phase`` (the ``PhaseStatus`` value) and ``frontier_label`` (the effective
+    "currently grilling" label after the turn).
+    """
+
+    next_question: str
+    checkpoint_summary: str
+    is_complete: bool
+    upgrade_required: bool
+    upgrade_message: str
+    stories_count: int
+    phase: str
+    frontier_label: str
+
+
+class GrillErrorEvent(_StrictModel):
+    """SSE payload for a mid-stream model failure (``event: error``).
+
+    Emitted instead of letting the stream 500 when a :class:`ModelAPIError` is
+    raised while running a turn, so the client can surface a friendly message and
+    (when ``rate_limited``) advise trying again later.
+    """
+
+    message: str
+    rate_limited: bool
+

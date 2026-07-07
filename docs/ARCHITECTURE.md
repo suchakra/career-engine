@@ -691,6 +691,18 @@ editor (9M) are React-shaped; a rich client earns its keep given that committed 
   interactive grill is the one flow that benefits from token/step streaming; FastAPI serves it as
   Server-Sent Events over the existing `DiscoverySession`, preserving current grill semantics
   (frontier steering, checkpoints) with no graph changes.
+  - **Transport shape (build 10.4).** `POST /api/grill` **records** the user's input into the durable
+    canonical session (`web-{user_id}`) and does **not** run the graph: `action="start"` creates the
+    session from the history, `action="answer"` patches `pending_user_answer`, `action="confirm"` sets
+    `checkpoint_verified`. The user's answer therefore travels in the **request body**, never a URL query
+    string — so grill answers (PII) never land in access logs. `GET /api/grill/stream` (EventSource-native,
+    no body) then **runs** the pending turn sequence by looping `DiscoverySession.advance()` and emits one
+    SSE `event: turn` per completed turn, then a terminal `event: done`. Because the grill node returns a
+    whole turn (no intra-turn tokens, and no graph changes), the stream carries **per-turn step events**,
+    not sub-token deltas. The auto-advance loop mirrors the Streamlit driver exactly (advance only after a
+    story is accepted; bounded by `_MAX_AUTO_TURNS`; stop on next-question / checkpoint / complete /
+    upgrade). The "currently grilling" label is `_effective_frontier_label` (BUG-2), extracted to a
+    Streamlit-free module so both the API and `web/grill_ui.py` share one implementation.
 - **AD-16.6 — Deploy topology stays Cloud Run-first.** FastAPI as a Cloud Run service; Next.js as
   static/SSR on Cloud Run (or Vercel). Redirect URIs, `allowedOrigins`, and the single-user demo
   posture (`max_instances=1`) are reconciled at cutover (10.7); multi-user session isolation remains

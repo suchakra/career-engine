@@ -18,13 +18,21 @@ Exposes the injectable seams the routes depend on:
 
 from __future__ import annotations
 
-from fastapi import Depends, Header
+from fastapi import Depends, Header, HTTPException
+from google.adk.sessions import BaseSessionService
+from starlette.concurrency import run_in_threadpool
 
 from api.auth import VerifiedIdentity, verify_bearer
 from auth.firebase_auth import FirebaseAuthProvider
+from auth.key_vault import SecretManagerKeyVault
+from auth.provider import KeyVaultError
+from cli.app import DiscoverySession
+from config import AccessMode, get_settings
 from database.firestore_session import FirestoreSessionService
 from database.workspace_store import FirestoreWorkspaceStore
 from discovery.store import FirestoreLedgerStore
+from integration.model_client import GeminiModelClient
+from web.session_loader import web_session_id
 
 
 def get_auth_provider() -> FirebaseAuthProvider:
@@ -96,3 +104,47 @@ def get_ledger_store() -> FirestoreLedgerStore:
     fake exposing ``.list_accepted(user_id)`` and ``.load_ledger(user_id)``.
     """
     return FirestoreLedgerStore()
+
+
+async def get_discovery_session(
+    user_id: str = Depends(get_current_user_id),
+    session_service: BaseSessionService = Depends(get_session_service),
+) -> DiscoverySession:
+    """Build a BYOK :class:`DiscoverySession` over the caller's canonical session.
+
+    The grill runs on the user's OWN Gemini quota (BYOK): the key is fetched from
+    Secret Manager and passed to a per-request :class:`GeminiModelClient`. The
+    session is addressed by the stable per-user id
+    (:func:`web.session_loader.web_session_id`) so the API grill shares the SAME
+    durable session as the web grill + portfolio.
+
+    The vault ``fetch_key`` is SYNC, so it runs in a threadpool (this dep is async —
+    never block the event loop). If the caller has no BYOK key configured, raise 409
+    (never a 500) so the client can prompt for one. Tests override this dep wholesale
+    (returning a scripted session), so the vault + model client are never touched.
+
+    Args:
+        user_id: The verified caller's stable id (auth boundary).
+        session_service: The production Firestore session service (injectable).
+
+    Returns:
+        A ready-to-drive :class:`DiscoverySession`.
+
+    Raises:
+        HTTPException: 409 if no BYOK API key is configured for the caller.
+    """
+    vault = SecretManagerKeyVault()
+    try:
+        api_key = await run_in_threadpool(vault.fetch_key, user_id)
+    except KeyVaultError as exc:
+        raise HTTPException(status_code=409, detail="BYOK API key not configured") from exc
+    if not api_key:
+        raise HTTPException(status_code=409, detail="BYOK API key not configured")
+    return DiscoverySession(
+        user_id=user_id,
+        access_mode=AccessMode.BYOK,
+        model_client=GeminiModelClient(api_key=api_key),
+        session_service=session_service,
+        app_name=get_settings().app_name,
+        session_id=web_session_id(user_id),
+    )
