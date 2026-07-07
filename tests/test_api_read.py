@@ -127,15 +127,24 @@ class _FakeLedgerStore:
     """In-memory ledger store exposing ``list_accepted`` + ``load_ledger``."""
 
     def __init__(
-        self, accepted: list[JobOpportunity], *, rejected_companies: list[str] | None = None
+        self,
+        accepted: list[JobOpportunity],
+        *,
+        rejected_companies: list[str] | None = None,
+        error: Exception | None = None,
     ) -> None:
         self._accepted = accepted
         self._rejected = rejected_companies or []
+        self._error = error
 
     def list_accepted(self, user_id: str) -> list[JobOpportunity]:
+        if self._error is not None:
+            raise self._error
         return list(self._accepted)
 
     def load_ledger(self, user_id: str) -> InteractionLedger:
+        if self._error is not None:
+            raise self._error
         return InteractionLedger(rejected_companies=list(self._rejected))
 
 
@@ -361,6 +370,18 @@ def test_jobs_empty_state_degrades(client: TestClient) -> None:
     assert body["is_empty"] is True
     assert body["accepted"] == []
     assert body["for_review"] == []
+
+
+def test_jobs_backend_fault_degrades(client: TestClient) -> None:
+    """A transient ledger fault degrades to an empty payload (HTTP 200 not 500)."""
+    app.dependency_overrides[get_ledger_store] = lambda: _FakeLedgerStore(
+        [_seeded_job()], error=RuntimeError("firestore down")
+    )
+    resp = client.get("/api/jobs", headers=_auth_headers())
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["is_empty"] is True
+    assert body["accepted"] == []
 
 
 def test_jobs_requires_auth(client: TestClient) -> None:

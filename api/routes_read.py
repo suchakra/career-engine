@@ -38,7 +38,7 @@ from config import get_settings
 from database.firestore_session import ContractVersionError, FirestoreSessionService
 from database.workspace_store import FirestoreWorkspaceStore
 from discovery.store import FirestoreLedgerStore
-from schema import UserWorkspace
+from schema import JobOpportunity, UserWorkspace
 from web.dashboard import build_dashboard_view
 from web.jobs import build_jobs_view
 from web.portfolio import build_portfolio_view
@@ -65,6 +65,27 @@ def _safe_load_workspace(store: FirestoreWorkspaceStore, user_id: str) -> UserWo
     except Exception:
         _log.warning("could not load workspace; showing an empty view")
         return UserWorkspace()
+
+
+def _safe_load_jobs(
+    store: FirestoreLedgerStore, user_id: str
+) -> tuple[list[JobOpportunity], set[str]]:
+    """Load accepted jobs + dismissed companies, degrading a fault to empty.
+
+    The read APIs never 500 on a backend fault: a Firestore
+    outage/credential/parse failure yields no jobs (an empty list + no
+    dismissals) rather than an error, logged generically (no PII, no stack).
+    Runs synchronously — the caller invokes it via :func:`run_in_threadpool`.
+    (There is no contract-version gate on the ledger, so nothing propagates.)
+    """
+    try:
+        prior = store.list_accepted(user_id)
+        hidden = set(store.load_ledger(user_id).rejected_companies)
+        return prior, hidden
+    except Exception:
+        _log.warning("could not load job matches; showing none")
+        return [], set()
+
 
 
 @router.get("/api/dashboard")
@@ -118,11 +139,9 @@ async def jobs(
 ) -> JobsResponse:
     """Return the caller's persisted job matches. Requires a valid bearer token.
 
-    Shows previously-accepted jobs minus dismissed companies. No persisted jobs
-    yields an empty typed payload (never a 500).
+    Shows previously-accepted jobs minus dismissed companies. No persisted jobs —
+    or a transient ledger fault — yields an empty typed payload (never a 500).
     """
-    prior = await run_in_threadpool(ledger_store.list_accepted, user_id)
-    ledger = await run_in_threadpool(ledger_store.load_ledger, user_id)
-    hidden_companies = set(ledger.rejected_companies)
+    prior, hidden_companies = await run_in_threadpool(_safe_load_jobs, ledger_store, user_id)
     view = build_jobs_view(None, prior=prior, hidden_companies=hidden_companies)
     return JobsResponse.from_view(view)
