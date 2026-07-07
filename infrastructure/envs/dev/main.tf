@@ -25,7 +25,10 @@ terraform {
 }
 
 provider "cloudflare" {
-  api_token = var.cloudflare_api_token
+  # When cloudflare_api_token is empty (CI), use a syntactically valid placeholder.
+  # The provider requires a-z/A-Z/0-9/hyphens/underscores but won't make API calls
+  # because all cloudflare_dns resources have count=0 when the token is absent.
+  api_token = var.cloudflare_api_token != "" ? var.cloudflare_api_token : "placeholder-no-dns-resources-will-be-created"
 }
 
 provider "google" {
