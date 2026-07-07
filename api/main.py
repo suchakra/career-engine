@@ -13,8 +13,10 @@ from pydantic import BaseModel
 
 from api.auth import VerifiedIdentity
 from api.deps import get_current_identity
+from api.routes_read import router as read_router
 
 app = FastAPI(title="CareerEngine API")
+app.include_router(read_router)
 
 
 class HealthResponse(BaseModel):

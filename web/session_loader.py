@@ -123,3 +123,32 @@ def try_load_latest_discovery_state(
     except Exception:
         _log.warning("could not load discovery state for the meter; showing empty progress")
         return CareerEngineState(reference_date=reference_date)
+
+
+async def atry_load_latest_discovery_state(
+    session_service: BaseSessionService,
+    *,
+    app_name: str,
+    user_id: str,
+    reference_date: str,
+) -> CareerEngineState:
+    """Async best-effort loader: returns an empty state on ANY failure.
+
+    The native-async twin of :func:`try_load_latest_discovery_state` for callers
+    already inside an event loop (e.g. an async FastAPI endpoint), which MUST NOT
+    use the :func:`web.async_runner.run_async` sync bridge. Awaits the async core
+    directly and preserves the exact best-effort semantics: a missing session, an
+    unreachable/uncredentialed backend, or an incompatible-contract document
+    degrades to an empty state rather than raising, logged generically (no PII, no
+    stack).
+    """
+    try:
+        return await _aload_latest_discovery_state(
+            session_service,
+            app_name=app_name,
+            user_id=user_id,
+            reference_date=reference_date,
+        )
+    except Exception:
+        _log.warning("could not load discovery state for the meter; showing empty progress")
+        return CareerEngineState(reference_date=reference_date)
