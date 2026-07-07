@@ -65,3 +65,17 @@ decision, finish a chunk of work, change direction, or learn something worth kee
 - Don't mutate a spec that's mid-build — **version-gate** instead (see the contract-version
   convention in HANDOFF/ARCHITECTURE).
 - Validate changes with `make check` (ruff, mypy --strict, pytest).
+
+## Context governance
+How context is loaded, scoped, and retired is canonical in
+[`docs/CONTEXT_STRATEGY.md`](docs/CONTEXT_STRATEGY.md). Key rules:
+- **Role-scoped reads.** The orientation reads above are for the **orchestrator**. A **build
+  sub-agent** gets a self-contained ticket + the [`skills/build-slice`](skills/build-slice/SKILL.md)
+  invariants + the one [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) section its slice touches — it
+  does **not** read HANDOFF / PROGRESS / PLAN / GROOMING. On any mismatch it PAUSEs and asks; it does
+  not assume.
+- **Retrieve, don't ingest.** Hand a pointer, not a big doc; let search pull the section.
+- **Retire ritual.** When a phase's tickets are all ✅ and merged, move them from
+  [`docs/GROOMING.md`](docs/GROOMING.md) to
+  [`docs/history/GROOMING_ARCHIVE.md`](docs/history/GROOMING_ARCHIVE.md) the same session.
+  GROOMING stays current-phase only.
