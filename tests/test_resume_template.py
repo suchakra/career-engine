@@ -1,8 +1,8 @@
 """Tests for the classic_resume.html Jinja2 template (WS 9D).
 
-These tests render the template directly via Jinja2 to check structural
-requirements (Experience, Skills, Education sections) and also verify that the
-PDF render pipeline works end-to-end with a StructuredResume fixture.
+These tests render classic_resume.html directly via a fresh Jinja2 Environment
+and WeasyPrint — useful as a structural smoke test, but separate from the app
+render pipelines (web.resume_render / tools.pdf_renderer).
 """
 
 from __future__ import annotations
@@ -88,16 +88,12 @@ def test_resume_template_has_education_section() -> None:
 
 
 def test_resume_renders_to_pdf_without_error() -> None:
-    """classic_resume.html renders to a non-empty PDF via WeasyPrint."""
-    try:
-        import weasyprint
-    except ImportError:
-        import pytest
-        pytest.skip("weasyprint not installed")
+    """classic_resume.html renders to a valid PDF (%%PDF header) via WeasyPrint."""
+    import weasyprint
 
     html = _render_template(_FIXTURE_RESUME)
     pdf_bytes: bytes = weasyprint.HTML(
         string=html,
         base_url=str(_TEMPLATE_DIR),
     ).write_pdf()
-    assert len(pdf_bytes) > 0
+    assert pdf_bytes[:4] == b"%PDF", f"Expected PDF magic bytes, got {pdf_bytes[:4]!r}"
