@@ -19,6 +19,7 @@ Design:
 from __future__ import annotations
 
 import asyncio
+import inspect
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
@@ -49,9 +50,20 @@ class FirestoreWorkspaceStore:
                 by the store. Mutually exclusive with ``client_factory``.
             client_factory: Optional callable that returns a fresh AsyncClient.
                 Defaults to ``get_firestore_async_client``. The store creates a
-                new client per async operation and closes it when done. Ignored if
-                ``client`` is provided.
+                new client per async operation and closes it when done. Mutually
+                exclusive with ``client``.
+
+        Raises:
+            ValueError: if both ``client`` and ``client_factory`` are provided —
+                their lifecycle ownership differs (caller-owned vs store-owned),
+                so accepting both would hide a configuration mistake.
         """
+        if client is not None and client_factory is not None:
+            raise ValueError(
+                "Pass either 'client' or 'client_factory', not both: an injected "
+                "client is caller-owned (never closed), a factory client is "
+                "store-owned (closed after each operation)."
+            )
         self._prefix = collection_prefix
         self._client: Any | None = client
         self._client_factory = client_factory or get_firestore_async_client
@@ -76,8 +88,13 @@ class FirestoreWorkspaceStore:
         try:
             yield client
         finally:
-            if hasattr(client, "close"):
-                client.close()
+            close = getattr(client, "close", None)
+            if close is not None:
+                # The current google-cloud-firestore AsyncClient.close() is sync,
+                # but await the result if a future lib version makes it awaitable.
+                result = close()
+                if inspect.isawaitable(result):
+                    await result
 
     async def _alist_user_ids(self) -> list[str]:
         async with self._acquire() as client:

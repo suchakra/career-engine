@@ -125,7 +125,7 @@ class TestWorkspaceStore:
         assert all(c.close_called for c in clients_created)
 
     def test_workspace_store_load_then_save_uses_fresh_client_each_call(self) -> None:
-        """Load then save on ONE store uses a fresh client per call (regression guard for BUG-1)."""
+        """Load THEN save on ONE store uses a fresh client per call (regression guard for BUG-1)."""
         call_count = 0
         # Shared backing store across all created clients (they need to see each other's writes).
         shared_store: dict[str, dict[str, Any]] = {}
@@ -140,8 +140,12 @@ class TestWorkspaceStore:
 
         store = FirestoreWorkspaceStore(client_factory=factory)
         ws = _workspace()
-        store.save("u1", ws)  # First asyncio.run → factory called once
-        loaded = store.load("u1")  # Second asyncio.run → factory called again
-        assert loaded == ws
-        # The store did NOT reuse a single client across the two calls.
-        assert call_count == 2
+        store.save("u1", ws)  # seed a document so the load() below returns real data
+        # BUG-1 repro order: save_profile()/save_tailored_application() do load()
+        # THEN save() on ONE store. Reusing a single client bound its gRPC channel
+        # to the first (now-closed) asyncio.run loop → "Event loop is closed".
+        loaded = store.load("u1")  # load()  → asyncio.run
+        store.save("u1", loaded)  # save()  → another asyncio.run (previously reused a dead loop)
+        assert store.load("u1") == ws
+        # The store did NOT reuse a single client: one per async op (save + load + save + load).
+        assert call_count == 4
