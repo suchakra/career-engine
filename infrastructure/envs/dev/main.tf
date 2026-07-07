@@ -200,7 +200,11 @@ module "domain_mapping" {
   service_name = module.cloud_run.service_name
 }
 
+# Cloudflare DNS management is optional — skipped when cloudflare_api_token is
+# empty (the default). DNS is a one-time bootstrap; CI deploys only need GCP.
+# Run locally with TF_VAR_cloudflare_api_token set to manage DNS records.
 module "cloudflare_dns" {
+  count                   = var.cloudflare_api_token != "" ? 1 : 0
   source                  = "../../modules/cloudflare_dns"
   zone_id                 = var.cloudflare_zone_id
   subdomain               = "career-engine"

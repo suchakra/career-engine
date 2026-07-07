@@ -63,13 +63,15 @@ variable "auth_redirect_uri" {
 
 variable "cloudflare_zone_id" {
   type        = string
-  description = "Cloudflare zone ID for the bitcrafty.cloud domain (from Cloudflare Dashboard → Overview). Set via TF_VAR_cloudflare_zone_id."
+  default     = ""
+  description = "Cloudflare zone ID for the bitcrafty.cloud domain (from Cloudflare Dashboard → Overview). Required only when managing DNS from Terraform — leave empty in CI to skip Cloudflare resources."
 }
 
 variable "cloudflare_api_token" {
   type        = string
   sensitive   = true
-  description = "Cloudflare API token scoped to bitcrafty.cloud DNS Edit. Set via TF_VAR_cloudflare_api_token — never commit or store in state."
+  default     = ""
+  description = "Cloudflare API token scoped to bitcrafty.cloud DNS Edit. When empty, all Cloudflare resources are skipped (safe for CI — DNS is a one-time setup). Set via TF_VAR_cloudflare_api_token locally."
 }
 
 variable "google_domain_verification_txt" {

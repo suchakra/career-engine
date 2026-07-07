@@ -68,8 +68,8 @@ jobs:
           TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
           TF_VAR_image: ${{ steps.build.outputs.image }}
           TF_VAR_auth_client_id: ${{ vars.CE_AUTH_CLIENT_ID }}
-          TF_VAR_cloudflare_api_token: ${{ secrets.CF_API_TOKEN }}
-          TF_VAR_cloudflare_zone_id: ${{ vars.CF_ZONE_ID }}
+          # Cloudflare DNS is skipped in CI (token not provided — DNS is a one-time
+          # local bootstrap, not needed on every deploy). Manage locally with .env.
           # custom_domain default (career-engine.bitcrafty.cloud) is used unless overridden.
           # auth_redirect_uri is derived from custom_domain; override via TF_VAR_auth_redirect_uri if needed.
         run: |
