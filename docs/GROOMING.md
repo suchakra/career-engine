@@ -38,7 +38,7 @@ Canonical status for every phase is in [PROGRESS.md](PROGRESS.md).
 
 ## Phase 10 — Replace Streamlit with Next.js + FastAPI (build tickets)
 
-> **Status: 10.0 done + 10.1, 10.2 & 10.3 SHIPPED (PR #63, #64, #65); 10.4–10.7 are ✅ Ready build specs.** The accepted
+> **Status: 10.0 done + 10.1, 10.2, 10.3 & 10.4 SHIPPED (PR #63, #64, #65, #66); 10.5–10.7 are ✅ Ready build specs.** The accepted
 > decision, rationale, auth model, streaming choice, deploy
 > topology, and API contract sketch are **canonical in [ARCHITECTURE.md §16](ARCHITECTURE.md)** — do
 > not restate them here. Sequencing is in [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) Phase 10;
@@ -100,7 +100,7 @@ Typed GET endpoints wrapping existing read paths — **no behaviour change**.
 ### ✅ 10.3 — Write APIs  *(SHIPPED — PR #65)*
 > Merged: four protected async write endpoints — `POST /api/profile`, `POST /api/experience`, `POST /api/applications`, `PUT /api/preferences` — binding `schema.py` domain models directly (AD-16.3) and reusing the existing store write-seams (sync stores via `run_in_threadpool`; `web.portfolio_store.aadd_manual_entry` awaited natively — one additive async wrapper); malformed/required-field-omitted body = 422; two strict api-local DTOs in `api/schemas.py`; 13 tests. Status canonical in [PROGRESS.md](PROGRESS.md).
 
-### ✅ 10.4 — Grill API with SSE streaming  *(L · Backend — the interactive core)*
+### ✅ 10.4 — Grill API with SSE streaming  *(SHIPPED — PR #66)*
 Serve the grill turn over Server-Sent Events (WebSocket only if a bidirectional need surfaces).
 - **Endpoints:** `POST /api/grill` (submit answer / advance), `GET /api/grill/stream` (SSE of the
   turn's steps/tokens) over the existing `DiscoverySession`.

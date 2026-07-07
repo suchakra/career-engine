@@ -1,10 +1,25 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-07 — Phase 10 build: slices 10.1 + 10.2 + 10.3 MERGED; slice 10.4 next)
-**`master` clean @ `d76798c` · contract v2.8.0 · 733 tests (1 skipped) · all merged PRs green.**
-**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + all of Phase 9 (9A/9B/9C/9D/9E/9F/9G/9I/9J/9K) + BUG-1 + BUG-2 COMPLETE. Phase 10 building API-first, one slice per PR — 10.1 + 10.2 + 10.3 done.**
+## 👉 YOU ARE HERE (updated 2026-07-08 — Phase 10 build: slices 10.1 + 10.2 + 10.3 + 10.4 MERGED; slice 10.5 next)
+**`master` clean @ `ef141c6` · contract v2.8.0 · 741 tests (1 skipped) · all merged PRs green.**
+**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + all of Phase 9 (9A/9B/9C/9D/9E/9F/9G/9I/9J/9K) + BUG-1 + BUG-2 COMPLETE. Phase 10 building API-first, one slice per PR — 10.1 + 10.2 + 10.3 + 10.4 done.**
 
 **Just merged:**
+- **PR #66** — Phase 10.4 (streaming grill API, presentation only, no contract change): the
+  interactive grill over HTTP reusing `cli.app.DiscoverySession` + `workflows.nodes` (no graph
+  changes). **`POST /api/grill`** RECORDS the caller's input into the durable canonical session
+  (`web-{user_id}`) without running the graph (`start`→create from `history`, `answer`→patch
+  `pending_user_answer`, `confirm`→patch `checkpoint_verified`); the answer travels in the request
+  BODY (grill PII never lands in access logs); blank history/answer → 422, bad action → 422.
+  **`GET /api/grill/stream`** runs the pending turn sequence over **SSE** (`text/event-stream`),
+  looping `DiscoverySession.advance()` — one `event: turn` per completed turn + terminal
+  `event: done`; the auto-advance loop mirrors `web/grill_ui._submit_answer` exactly; a mid-stream
+  `ModelAPIError` ends the stream with `event: error` (never a 500). Additive, behavior-preserving
+  refactor of `DiscoverySession` (`create`/`record_answer`/`record_checkpoint_confirmation`); the
+  pure frontier-label helpers extracted verbatim to `web/grill_labels.py` (streamlit-free) so the
+  API + Streamlit share ONE impl (BUG-2). `api.deps.get_discovery_session` builds a BYOK session
+  (vault `fetch_key` via `run_in_threadpool` → 409 if no key). +8 tests (`tests/test_api_grill.py`,
+  network-free). Design in ARCHITECTURE AD-16.5 "Transport shape (build 10.4)".
 - **PR #65** — Phase 10.3 (write APIs, presentation only, no contract change): four protected
   async write endpoints — `POST /api/profile`, `POST /api/experience`, `POST /api/applications`,
   `PUT /api/preferences` — binding `schema.py` domain models directly (AD-16.3 wire contract) and
@@ -30,17 +45,21 @@
   [history/GROOMING_ARCHIVE.md](history/GROOMING_ARCHIVE.md); role-scoped reads wired into the
   instruction files.
 
-**▶ NEXT — Phase 10 build, slices 10.4 → 10.7 (one PR each, API-first)**
+**▶ NEXT — Phase 10 build, slices 10.5 → 10.7 (one PR each, API-first)**
 
 The Streamlit→Next.js+FastAPI decision is recorded in [ARCHITECTURE.md §16](ARCHITECTURE.md)
-(AD-16.1..7: FastAPI over the unchanged domain, `schema.py` as wire contract, auth at the API
-boundary, SSE grill, Cloud Run). Executable **API-first** build tickets 10.4–10.7 are ✅ Ready in
+(AD-16.1..9: FastAPI over the unchanged domain, `schema.py` as wire contract, auth at the API
+boundary, SSE grill, Cloud Run; AD-16.8 TanStack Query data layer; AD-16.9 Vitest/RTL/MSW/Playwright
+test stack). The five API slices (10.1 auth boundary + 10.2 reads + 10.3 writes + 10.4 grill SSE)
+are MERGED. Executable **frontend** build tickets 10.5–10.7 are ✅ Ready in
 [GROOMING.md §Phase 10](GROOMING.md); sequencing in [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md).
-Build one slice per PR, in order. **Next up = 10.4 Grill API with SSE streaming** — the interactive
-core, reusing `workflows.nodes` / `DiscoverySession` and `_effective_frontier_label` (BUG-2);
-stream turns via SSE (AD-16.5). Before compiling the ticket, read the actual reuse-target
-signatures. Hand the builder the 10.4 ticket + [skills/build-slice](../skills/build-slice/SKILL.md)
-— not the big docs.
+Build one slice per PR, in order. **Next up = 10.5 Next.js app shell** — scaffold `frontend/`
+(Next.js App Router; Dashboard/Portfolio/Jobs/Tailor/Grill routes), the foundational component
+inventory ([PHASE10_UI_MOCKUP.md §2](PHASE10_UI_MOCKUP.md)), the AD-16.8 TanStack Query data layer
+over the 10.2 reads + 10.3 writes, auth wiring through the 10.1 bearer boundary, and the AD-16.9
+test stack (Vitest/RTL/jsdom + MSW unit/integration + Playwright e2e; `npx playwright install
+--with-deps` from `frontend/`) with a `frontend` lane added to `make check`. Hand the builder the
+10.5 ticket + [skills/build-slice](../skills/build-slice/SKILL.md) — not the big docs.
 
 **What shipped this session (5-PR cycle: 2 bug fixes + Phase 9 completion + Phase 10 groom):**
 
