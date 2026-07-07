@@ -677,8 +677,8 @@ editor (9M) are React-shaped; a rich client earns its keep given that committed 
 - **AD-16.4 — Auth moves to the API boundary with an explicit, controlled flow.** Two acceptable
   shapes were considered: (a) OIDC at FastAPI (Authlib / Google Identity) issuing an **httpOnly +
   Secure + SameSite** session cookie, or (b) **Firebase Auth** on the Next.js side passing a verified
-  **ID-token bearer** to FastAPI. **Resolved in the 10.1 build → option (b), Firebase ID-token
-  bearer verified at FastAPI.** Rationale: `auth/firebase_auth.py::FirebaseAuthProvider` already
+  **ID-token bearer** to FastAPI. **Resolved for slice 10.1 → option (b), Firebase ID-token
+  bearer verified at FastAPI** (decision finalized; the 10.1 build is not yet implemented). Rationale: `auth/firebase_auth.py::FirebaseAuthProvider` already
   implements exactly this trust boundary (verified token → `sub` → `user_id`) with a fully injectable
   verifier for network-free tests, and it mirrors today's `st.user["sub"] → user_id` edge — so it
   reuses proven code with no new cookie/callback/session machinery to build and audit. FastAPI reads

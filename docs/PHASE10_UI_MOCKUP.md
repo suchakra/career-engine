@@ -78,7 +78,9 @@ The four standing product goals ([GROOMING.md](GROOMING.md)) translate to UI int
 - **Light / dark / system.** The app ships **both a light and a dark theme** driven by CSS variables
   (one token set, two value maps). Default = **follow the OS** (`prefers-color-scheme`); a manual
   **Light · Dark · System** toggle in the identity menu overrides it and the choice is **persisted**
-  per user (localStorage + workspace preference) so it survives reloads and devices. SSR renders with
+  client-side (localStorage) so it survives reloads on the same browser. This is a pure client
+  preference — **no theme field is added to `schema.py` and no server round-trip / contract change**
+  is implied. SSR renders with
   no theme flash (inline theme script sets the class before paint). Every mock in this doc is
   theme-agnostic — both themes use the same layout, only the token map changes.
 
@@ -520,7 +522,7 @@ placeholders showing where committed-roadmap features slot in.
 | Grill | `web/grill_ui.py`, `workflows.nodes`, `DiscoverySession`, `_effective_frontier_label` | `POST /api/grill` + `GET /api/grill/stream` (10.4) |
 | Jobs | `web/jobs.py`, `jobs_runner.py`, `preferences_store.py`, discovery ledger | `GET /api/jobs` (10.2); `PUT /api/preferences` (10.3) |
 | Tailor | `web/resume_builder.py`, `resume_render.py`, `jd_utils.py`, `application_store.py` | `POST /api/tailor`, `GET /api/resume/{fmt}`, `POST /api/applications` (10.3/10.6) |
-| Settings | `auth/key_vault.py` (BYOK), `web/preferences_store.py` (theme pref) | `GET/POST /api/settings`, key endpoints (10.3) |
+| Settings | `auth/key_vault.py` (BYOK); theme is a client-only preference (localStorage, no store) | key management endpoints (10.3) |
 
 No screen introduces a new domain concept or a `CONTRACT_VERSION` change — this is presentation +
 transport only (AD-16.2 / AD-16.7).
