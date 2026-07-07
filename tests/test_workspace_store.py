@@ -7,6 +7,7 @@ to async internally via asyncio.run, which must not run inside another loop).
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 import pytest
 
@@ -90,3 +91,57 @@ class TestWorkspaceStore:
         asyncio.run(_seed())
         with pytest.raises(ContractVersionError):
             store.load("u1")
+
+    def test_injected_client_not_closed_by_store(self) -> None:
+        """An injected client is used as-is and never closed by the store."""
+        client = FakeFirestoreClient()
+        store = FirestoreWorkspaceStore(client=client)
+        ws = _workspace()
+        store.save("u1", ws)
+        loaded = store.load("u1")
+        assert loaded == ws
+        # The injected client was used but never closed.
+        assert not client.close_called
+
+    def test_workspace_store_closes_created_client(self) -> None:
+        """A store-created client is closed after each async operation."""
+        call_count = 0
+        clients_created: list[FakeFirestoreClient] = []
+
+        def factory() -> FakeFirestoreClient:
+            nonlocal call_count
+            call_count += 1
+            client = FakeFirestoreClient()
+            clients_created.append(client)
+            return client
+
+        store = FirestoreWorkspaceStore(client_factory=factory)
+        store.save("u1", _workspace())
+        store.load("u1")
+
+        # Factory was called once per async operation (save + load = 2).
+        assert call_count == 2
+        # Each created client was closed.
+        assert all(c.close_called for c in clients_created)
+
+    def test_workspace_store_load_then_save_uses_fresh_client_each_call(self) -> None:
+        """Load then save on ONE store uses a fresh client per call (regression guard for BUG-1)."""
+        call_count = 0
+        # Shared backing store across all created clients (they need to see each other's writes).
+        shared_store: dict[str, dict[str, Any]] = {}
+
+        def factory() -> FakeFirestoreClient:
+            nonlocal call_count
+            call_count += 1
+            client = FakeFirestoreClient()
+            # Override the client's internal store with the shared one.
+            client._store = shared_store
+            return client
+
+        store = FirestoreWorkspaceStore(client_factory=factory)
+        ws = _workspace()
+        store.save("u1", ws)  # First asyncio.run → factory called once
+        loaded = store.load("u1")  # Second asyncio.run → factory called again
+        assert loaded == ws
+        # The store did NOT reuse a single client across the two calls.
+        assert call_count == 2
