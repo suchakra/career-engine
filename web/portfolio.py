@@ -47,6 +47,7 @@ class StoryCard:
     action: str
     result: str
     metric_validated: bool
+    story_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -127,6 +128,7 @@ def _entry_card(entry: Entry, stories: list[StarStory]) -> EntryCard:
                 action=s.action,
                 result=s.result,
                 metric_validated=s.metrics_validated,
+                story_id=str(s.story_id),
             )
             for s in stories
         ],
@@ -247,6 +249,8 @@ def render_portfolio(
     on_grill_entry: Callable[[str], None] | None = None,
     on_toggle_highlight: Callable[[str, bool], None] | None = None,
     on_save_profile: Callable[[UserProfile], None] | None = None,
+    on_delete_story: Callable[[str], None] | None = None,
+    on_edit_bullet: Callable[[str, int, str], None] | None = None,
     profile_view: ProfileView | None = None,
 ) -> None:
     """Render the portfolio via an injected ``st``-like module (thin pass-through).
@@ -262,6 +266,11 @@ def render_portfolio(
             ``(entry_id, new_highlighted)``. The persistence lives in the caller.
         on_save_profile: Optional callback for the editable Profile section (9C);
             receives a :class:`~schema.UserProfile`. Omitting it hides the section.
+        on_delete_story: Optional callback for the per-story delete control (9A);
+            receives the ``story_id``. Omitting it hides the delete buttons.
+        on_edit_bullet: Optional callback for editing an entry's résumé bullets in
+            place (9A); receives ``(entry_id, bullet_index, new_text)``. Omitting it
+            renders bullets read-only.
         profile_view: Pre-built :class:`ProfileView` to display in the editable
             section. Paired with ``on_save_profile``; ignored when that is None.
             Defaults to an empty ProfileView when omitted.
@@ -309,8 +318,26 @@ def render_portfolio(
         # any grilling has produced STAR stories).
         if entry.bullets:
             st.caption("From your resume:")
-            for bullet in entry.bullets:
-                st.write(f"• {bullet}")
+            for idx, bullet in enumerate(entry.bullets):
+                if on_edit_bullet is None:
+                    st.write(f"• {bullet}")
+                    continue
+                # Edit-in-place: a prefilled input + Save button per bullet, mirroring
+                # the Profile section's capture-return-value pattern (no session_state).
+                bc1, bc2 = st.columns([5, 1])
+                edited = bc1.text_input(
+                    "Bullet",
+                    value=bullet,
+                    key=f"bullet_{entry.entry_id}_{idx}",
+                    label_visibility="collapsed",
+                )
+                bc2.button(
+                    "Save",
+                    key=f"save_bullet_{entry.entry_id}_{idx}",
+                    on_click=lambda eid=entry.entry_id, i=idx, text=edited: on_edit_bullet(
+                        eid, i, text
+                    ),
+                )
 
         if entry.not_grilled_yet:
             st.write(f"_{_NOT_GRILLED_TEXT}_")
@@ -324,6 +351,13 @@ def render_portfolio(
                 for context in (story.situation, story.task, story.action):
                     if context:
                         st.caption(context)
+                # Delete this recorded story (9A).
+                if on_delete_story is not None and story.story_id:
+                    st.button(
+                        "🗑 Delete",
+                        key=f"delete_story_{story.story_id}",
+                        on_click=lambda sid=story.story_id: on_delete_story(sid),
+                    )
 
         # Steer the grill onto this specific experience (4C).
         if on_grill_entry is not None:

@@ -21,6 +21,8 @@ async clients). Do NOT call these from an async context.
 
 from __future__ import annotations
 
+import logging
+
 from google.adk.events import Event, EventActions
 from google.adk.sessions import BaseSessionService
 
@@ -29,6 +31,8 @@ from config import CONTRACT_VERSION
 from schema import CareerEngineState, Entry, EntryStatus, ExperienceType
 from web.async_runner import run_async
 from web.session_loader import web_session_id
+
+logger = logging.getLogger(__name__)
 
 
 async def _patch_session(
@@ -159,6 +163,100 @@ async def _aset_entry_highlight(
     return session_id
 
 
+async def _adelete_star_story(
+    session_service: BaseSessionService,
+    *,
+    app_name: str,
+    user_id: str,
+    story_id: str,
+) -> str | None:
+    """Remove the STAR story whose ``story_id`` matches from the canonical session.
+
+    Idempotent: if no story matches (or the session is empty of it), the state is
+    left untouched. Returns the session_id, or ``None`` if the user has no session.
+    """
+    session_id = web_session_id(user_id)
+    existing = await session_helpers.get_session_state_if_exists(
+        session_service=session_service,
+        app_name=app_name,
+        user_id=user_id,
+        session_id=session_id,
+    )
+    if existing is None:
+        return None
+    remaining = [s for s in existing.extracted_star_stories if str(s.story_id) != story_id]
+    if len(remaining) == len(existing.extracted_star_stories):
+        return session_id  # no-op: story_id not found
+    await _patch_session(
+        session_service,
+        app_name=app_name,
+        user_id=user_id,
+        session_id=session_id,
+        state_delta={
+            "extracted_star_stories": [s.model_dump(mode="json") for s in remaining],
+            "contract_version": CONTRACT_VERSION,
+        },
+    )
+    return session_id
+
+
+async def _aupdate_entry_bullet(
+    session_service: BaseSessionService,
+    *,
+    app_name: str,
+    user_id: str,
+    entry_id: str,
+    bullet_index: int,
+    new_text: str,
+) -> str | None:
+    """Replace one bullet on an entry with ``new_text`` on the canonical session.
+
+    Guards against a missing entry or an out-of-range ``bullet_index`` (logs a
+    warning and leaves state untouched — no ``IndexError``). Returns the
+    session_id, or ``None`` if the user has no session.
+    """
+    session_id = web_session_id(user_id)
+    existing = await session_helpers.get_session_state_if_exists(
+        session_service=session_service,
+        app_name=app_name,
+        user_id=user_id,
+        session_id=session_id,
+    )
+    if existing is None:
+        return None
+    found = False
+    new_timeline: list[Entry] = []
+    for entry in existing.work_timeline:
+        if str(entry.entry_id) == entry_id:
+            if not 0 <= bullet_index < len(entry.bullets):
+                logger.warning(
+                    "update_entry_bullet: bullet_index %d out of range for entry %s (has %d bullets)",
+                    bullet_index,
+                    entry_id,
+                    len(entry.bullets),
+                )
+                return session_id  # no-op: out of range
+            updated_bullets = list(entry.bullets)
+            updated_bullets[bullet_index] = new_text.strip()
+            entry = entry.model_copy(update={"bullets": updated_bullets})
+            found = True
+        new_timeline.append(entry)
+    if not found:
+        logger.warning("update_entry_bullet: entry %s not found", entry_id)
+        return session_id  # no-op: entry not found
+    await _patch_session(
+        session_service,
+        app_name=app_name,
+        user_id=user_id,
+        session_id=session_id,
+        state_delta={
+            "work_timeline": [e.model_dump(mode="json") for e in new_timeline],
+            "contract_version": CONTRACT_VERSION,
+        },
+    )
+    return session_id
+
+
 def add_manual_entry(
     session_service: BaseSessionService,
     *,
@@ -250,4 +348,57 @@ def set_entry_highlight(
     )
 
 
-__all__ = ["add_manual_entry", "set_entry_highlight", "set_grill_frontier"]
+def delete_star_story(
+    session_service: BaseSessionService,
+    *,
+    app_name: str,
+    user_id: str,
+    story_id: str,
+) -> str | None:
+    """Delete a recorded STAR story from the portfolio (9A; sync bridge).
+
+    Removes the story whose ``story_id`` matches. Idempotent — a non-existent
+    ``story_id`` is a no-op. Returns the session_id, or ``None`` if the user has no
+    session.
+    """
+    return run_async(
+        _adelete_star_story(
+            session_service, app_name=app_name, user_id=user_id, story_id=story_id
+        )
+    )
+
+
+def update_entry_bullet(
+    session_service: BaseSessionService,
+    *,
+    app_name: str,
+    user_id: str,
+    entry_id: str,
+    bullet_index: int,
+    new_text: str,
+) -> str | None:
+    """Edit one existing bullet on an experience in place (9A; sync bridge).
+
+    Replaces ``entry.bullets[bullet_index]`` with ``new_text`` (stripped). A missing
+    entry or an out-of-range index is a logged no-op (never raises). Returns the
+    session_id, or ``None`` if the user has no session.
+    """
+    return run_async(
+        _aupdate_entry_bullet(
+            session_service,
+            app_name=app_name,
+            user_id=user_id,
+            entry_id=entry_id,
+            bullet_index=bullet_index,
+            new_text=new_text,
+        )
+    )
+
+
+__all__ = [
+    "add_manual_entry",
+    "delete_star_story",
+    "set_entry_highlight",
+    "set_grill_frontier",
+    "update_entry_bullet",
+]

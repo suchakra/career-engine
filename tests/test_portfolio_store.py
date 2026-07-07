@@ -14,8 +14,14 @@ from typing import cast
 from google.adk.sessions import BaseSessionService, InMemorySessionService
 
 from config import CONTRACT_VERSION
-from schema import CareerEngineState, Entry, ExperienceType
-from web.portfolio_store import add_manual_entry, set_entry_highlight, set_grill_frontier
+from schema import CareerEngineState, Entry, ExperienceType, StarStory
+from web.portfolio_store import (
+    add_manual_entry,
+    delete_star_story,
+    set_entry_highlight,
+    set_grill_frontier,
+    update_entry_bullet,
+)
 from web.session_loader import web_session_id
 
 _APP = "career-engine"
@@ -182,6 +188,107 @@ class TestSetEntryHighlight:
         assert (
             set_entry_highlight(
                 service, app_name=_APP, user_id=_UID, entry_id="nonexistent", highlighted=True
+            )
+            is None
+        )
+
+
+class TestDeleteStarStory:
+    def test_delete_star_story_removes_from_state(self) -> None:
+        service = _service()
+        entry = Entry(type=ExperienceType.PROJECT, title="Billing rewrite")
+        story_a = StarStory(entry_id=str(entry.entry_id), pillar="delivery", result="cut latency 40%")
+        story_b = StarStory(entry_id=str(entry.entry_id), pillar="delivery", result="shipped X")
+        _seed(
+            service,
+            CareerEngineState(
+                reference_date=_REF,
+                work_timeline=[entry],
+                extracted_star_stories=[story_a, story_b],
+            ),
+        )
+
+        sid = delete_star_story(
+            service, app_name=_APP, user_id=_UID, story_id=str(story_a.story_id)
+        )
+        assert sid is not None
+        state = _read_latest(service)
+        remaining = [str(s.story_id) for s in state.extracted_star_stories]
+        assert remaining == [str(story_b.story_id)]
+
+    def test_delete_star_story_idempotent(self) -> None:
+        service = _service()
+        story = StarStory(pillar="delivery", result="did a thing")
+        _seed(
+            service,
+            CareerEngineState(reference_date=_REF, extracted_star_stories=[story]),
+        )
+
+        # Deleting a non-existent story is a no-op and must not raise.
+        sid = delete_star_story(
+            service, app_name=_APP, user_id=_UID, story_id="not-a-real-story-id"
+        )
+        assert sid is not None
+        state = _read_latest(service)
+        assert [str(s.story_id) for s in state.extracted_star_stories] == [str(story.story_id)]
+
+    def test_returns_none_when_no_session(self) -> None:
+        service = _service()
+        assert (
+            delete_star_story(service, app_name=_APP, user_id=_UID, story_id="anything") is None
+        )
+
+
+class TestUpdateEntryBullet:
+    def test_update_entry_bullet_mutates_correctly(self) -> None:
+        service = _service()
+        entry = Entry(
+            type=ExperienceType.PROJECT, title="Billing rewrite", bullets=["old bullet"]
+        )
+        _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
+
+        sid = update_entry_bullet(
+            service,
+            app_name=_APP,
+            user_id=_UID,
+            entry_id=str(entry.entry_id),
+            bullet_index=0,
+            new_text="new bullet",
+        )
+        assert sid is not None
+        state = _read_latest(service)
+        assert state.work_timeline[0].bullets == ["new bullet"]
+        assert state.contract_version == CONTRACT_VERSION
+
+    def test_update_entry_bullet_out_of_range(self) -> None:
+        service = _service()
+        entry = Entry(
+            type=ExperienceType.PROJECT, title="Billing rewrite", bullets=["only bullet"]
+        )
+        _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
+
+        # An out-of-range index is a logged no-op — must not raise IndexError.
+        sid = update_entry_bullet(
+            service,
+            app_name=_APP,
+            user_id=_UID,
+            entry_id=str(entry.entry_id),
+            bullet_index=5,
+            new_text="ignored",
+        )
+        assert sid is not None
+        assert _read_latest(service).work_timeline[0].bullets == ["only bullet"]
+
+    def test_returns_none_when_no_session(self) -> None:
+        service = _service()
+        assert (
+            update_entry_bullet(
+                service,
+                app_name=_APP,
+                user_id=_UID,
+                entry_id="x",
+                bullet_index=0,
+                new_text="y",
             )
             is None
         )
