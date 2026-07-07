@@ -329,6 +329,24 @@ def test_grill_rejects_bad_action(client: TestClient) -> None:
     assert resp.status_code == 422
 
 
+def test_grill_rejects_empty_input(client: TestClient) -> None:
+    """``start`` with blank history and ``answer`` with blank answer both 422 (no record)."""
+    _override_session(_build_session({}))
+    headers = _auth_headers()
+    assert (
+        client.post(
+            "/api/grill", json={"action": "start", "history": "   "}, headers=headers
+        ).status_code
+        == 422
+    )
+    assert (
+        client.post(
+            "/api/grill", json={"action": "answer", "answer": ""}, headers=headers
+        ).status_code
+        == 422
+    )
+
+
 def test_grill_model_error_emits_error_event(client: TestClient) -> None:
     """A ModelAPIError raised mid-turn ends the stream with an error frame, not a 500."""
 

@@ -29,7 +29,7 @@ from collections.abc import AsyncIterator
 from datetime import date
 from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -91,14 +91,20 @@ async def record_grill_action(
     default of today), ``answer`` records ``pending_user_answer``, ``confirm`` records
     ``checkpoint_verified``. Returns a small status snapshot read AFTER the record so
     the client can render the banner + await state before opening the SSE stream. A
-    malformed body / bad ``action`` yields 422 automatically.
+    malformed body / bad ``action`` yields 422 automatically. ``start`` with an
+    empty ``history`` and ``answer`` with an empty ``answer`` are also rejected with
+    422 (recording a turn with no user input is a client error, not a valid state).
     """
     if body.action == "start":
+        if not body.history.strip():
+            raise HTTPException(status_code=422, detail="history is required for 'start'")
         await session.create(
             body.history,
             reference_date=body.reference_date or date.today().isoformat(),
         )
     elif body.action == "answer":
+        if not body.answer.strip():
+            raise HTTPException(status_code=422, detail="answer is required for 'answer'")
         await session.record_answer(body.answer)
     else:  # "confirm" — the only remaining Literal value
         await session.record_checkpoint_confirmation()
@@ -130,9 +136,12 @@ async def stream_grill_turns(
         try:
             before = await session.current_state()
             turn = await session.advance()  # answer was pre-recorded by POST
-            yield _sse_frame("turn", _turn_event(turn, await session.current_state()))
-            after = await session.current_state()
-            accepted = len(after.extracted_star_stories) > len(
+            # Read state ONCE per completed turn and reuse it for the event, the
+            # accept check, and (below) the terminal frame — a Firestore-backed
+            # session makes each ``current_state()`` a network read.
+            state = await session.current_state()
+            yield _sse_frame("turn", _turn_event(turn, state))
+            accepted = len(state.extracted_star_stories) > len(
                 before.extracted_star_stories
             )
             if accepted:
@@ -145,10 +154,10 @@ async def stream_grill_turns(
                     ):
                         break
                     turn = await session.advance()
-                    yield _sse_frame(
-                        "turn", _turn_event(turn, await session.current_state())
-                    )
-            yield _sse_frame("done", _turn_event(turn, await session.current_state()))
+                    state = await session.current_state()
+                    yield _sse_frame("turn", _turn_event(turn, state))
+            # ``state`` already reflects the final turn — no extra read needed.
+            yield _sse_frame("done", _turn_event(turn, state))
         except ModelAPIError as exc:
             error = GrillErrorEvent(
                 message=str(exc), rate_limited=exc.is_rate_limited
