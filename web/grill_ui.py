@@ -42,7 +42,6 @@ from integration.model_client import GeminiModelClient, ModelAPIError
 from schema import CareerEngineState, Entry, EntryStatus, PhaseStatus
 from web.async_runner import run_async
 from web.session_loader import web_session_id
-from workflows.nodes import _get_frontier_entry
 
 _MAX_AUTO_TURNS = 6  # bound the non-interactive drive to finalize
 _METRIC_NUDGE = (
@@ -199,7 +198,14 @@ def _effective_frontier_label(state: CareerEngineState) -> str:
     Deriving from the same selection the graph uses keeps the banner correct from
     the first question.
     """
-    return _frontier_label(state) or _entry_label(_get_frontier_entry(state))
+    label = _frontier_label(state)
+    if label:
+        return label
+    # Local import: web/ modules import from workflows.nodes inside functions to keep
+    # the UI import path lightweight (matches _migrate_education_on_resume below).
+    from workflows.nodes import _get_frontier_entry
+
+    return _entry_label(_get_frontier_entry(state))
 
 
 _TRANSCRIPT_MAX_MESSAGES = 40  # keep the recent tail (bounds Firestore doc size)
