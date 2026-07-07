@@ -146,10 +146,14 @@ module "cloud_run" {
   allow_unauthenticated = true
 
   env = {
-    GCP_PROJECT_ID       = var.project_id
-    GCP_REGION           = var.region
-    CE_AUTH_CLIENT_ID    = var.auth_client_id
-    CE_AUTH_REDIRECT_URI = var.auth_redirect_uri != "" ? var.auth_redirect_uri : "https://${var.custom_domain}/_stcore/oauth2callback"
+    GCP_PROJECT_ID    = var.project_id
+    GCP_REGION        = var.region
+    CE_AUTH_CLIENT_ID = var.auth_client_id
+    # Streamlit's native OIDC handler lives at /oauth2callback (NOT /_stcore/...).
+    # The /_stcore/oauth2callback path only returns the app shell → the callback
+    # silently fails and login hangs. Keep this path in sync with the redirect URI
+    # registered in the Google OAuth client.
+    CE_AUTH_REDIRECT_URI = var.auth_redirect_uri != "" ? var.auth_redirect_uri : "https://${var.custom_domain}/oauth2callback"
     CE_AUTH_METADATA_URL = "https://accounts.google.com/.well-known/openid-configuration"
     # The web app is BYOK (every user brings their own key), so reasoning-heavy
     # steps route to Pro on the user's key instead of Flash. ACCESS_MODE drives

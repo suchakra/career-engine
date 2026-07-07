@@ -1803,6 +1803,10 @@ DoD:
 surface delete + edit-in-place controls in the Portfolio renderer. Includes a mandatory PAUSE if
 `StarStory` has no `story_id` field — the agent must ask before adding one (contract bump).
 
+> **PAUSE resolved (2026-07-07):** `StarStory` already has `story_id: UUID = Field(default_factory=uuid4)`
+> (`schema.py` L178) and `entry_id: str` (L179). No contract bump needed — proceed with the
+> `story_id`-based delete path. Do NOT re-pause on this.
+
 ```text
 You are WS 9A for CareerEngine. Let users delete STAR stories and edit entry bullets
 in the Portfolio view, turning the read-only portfolio into a correctable record.
@@ -1996,6 +2000,251 @@ from 8C. Groom when the email provider is decided.
 
 Not groomed to build spec. Requires React DnD or equivalent. No Streamlit equivalent is
 practical. Groom only after the Next.js frontend architecture decision.
+
+---
+
+## Phase 9 — live-testing bug fixes (found 2026-07-07)
+
+> These are regressions/defects found while demoing the deployed dev app. They point at the
+> Shared preamble + Definition of Done in [AGENT_EXECUTION_PROMPT.md](AGENT_EXECUTION_PROMPT.md).
+> Builders run on Sonnet; Opus reviews + merges. `make check` green per merge.
+
+| ID | Summary | Size | Compat | Priority | Grooming |
+|----|---------|------|--------|----------|----------|
+| BUG-1 | Workspace saves fail: "Event loop is closed" (profile + track-application) | S | Streamlit | **Critical** | ✅ Ready |
+| BUG-2 | Grill "Currently grilling" banner missing on first question after jump/resume | XS | Streamlit | Medium | ✅ Ready |
+
+### ✅ BUG-1 — Workspace saves fail with "Event loop is closed"
+
+> Read first (in this order): `web/async_runner.py` (FULL — read the module docstring, it
+> describes this exact bug and the fix), `database/workspace_store.py` (FULL —
+> `FirestoreWorkspaceStore`, note `asyncio.run` in `load`/`save`/`list_user_ids` and the client
+> built in `__init__`), `config.py::get_firestore_async_client` (note: NOT cached),
+> `web/profile_store.py` (`save_profile` = load-then-save), `web/application_store.py`
+> (`save_tailored_application` = load-then-save), `tests/test_workspace_store*.py` /
+> `tests/test_profile_store.py` / `tests/test_application_store.py` (test doubles + patterns).
+
+**Symptom (two user-visible bugs, one root cause):**
+- Saving Profile (name/email/phone/location/links) → *"Couldn't save your profile — please try again."*
+- Save-as-tracked-application → *"Couldn't save the application just now: Event loop is closed"*.
+
+**Root cause:** `FirestoreWorkspaceStore` bridges its async Firestore client to the sync
+`WorkspaceStore` protocol with `asyncio.run()` **per call**, and constructs the `AsyncClient`
+once in `__init__`. `save_profile` / `save_tailored_application` each call `store.load()` **then**
+`store.save()` on the SAME store instance → two `asyncio.run()` calls that each create and then
+**close** a fresh event loop, while REUSING the one `AsyncClient` whose gRPC channel bound to the
+first (now closed) loop. The second call raises `RuntimeError: Event loop is closed`. Pure single
+loads (dashboard) work because they are one `asyncio.run` on a fresh store. This is the exact
+failure mode `web/async_runner.py` was written to prevent (the grill uses `run_async` and is fine).
+
+```text
+You are the BUG-1 fixer for CareerEngine. Fix "Event loop is closed" on workspace saves
+(Profile save + Save-as-tracked-application) at the root cause in FirestoreWorkspaceStore.
+
+Files to read BEFORE writing any code (in this order):
+1. web/async_runner.py — FULL. The docstring describes this exact bug and the canonical fix
+   (one persistent background event loop shared process-wide via run_coroutine_threadsafe).
+2. database/workspace_store.py — FULL. Note asyncio.run() in load/save/list_user_ids and that
+   the AsyncClient is built once in __init__ (client=... injectable for tests).
+3. config.py::get_firestore_async_client — note it is NOT cached (fresh AsyncClient per call).
+4. web/profile_store.py::save_profile and web/application_store.py::save_tailored_application —
+   both do store.load(user_id) THEN store.save(user_id, ...) on ONE store instance.
+5. jobs/pending_action_sweep.py — confirm the sweep also uses FirestoreWorkspaceStore (sync,
+   standalone Cloud Run Job; no web loop). Your fix must not break the sweep.
+6. tests/test_profile_store.py, tests/test_application_store.py, and any workspace_store test —
+   understand the in-memory test double (InMemoryWorkspaceStore) and injected-client patterns.
+
+PAUSE CONDITIONS (stop and report before writing code):
+- If you find MORE than these two save paths reuse a single store across load+save, list them.
+- If importing web/async_runner from database/ would be needed (layering inversion: database
+  must NOT import from web). Report which approach you recommend (A vs B below) and WAIT if the
+  layering choice is non-obvious.
+
+Preferred fix (Approach A — minimal, layer-clean, self-contained per call):
+  In database/workspace_store.py, stop reusing one AsyncClient across event loops. Create the
+  AsyncClient INSIDE each async method (bound to that call's loop) when no client was injected,
+  and close it in a finally block so no gRPC transport outlives its loop:
+    - Keep __init__ accepting an optional injected `client` (tests pass InMemory double) AND an
+      optional `client_factory` defaulting to config.get_firestore_async_client. Do NOT build the
+      real client in __init__ anymore — store the factory; only use an injected client if given.
+    - In _aload/_asave/_alist_user_ids: `client = self._client or self._client_factory()`; if we
+      created it (not injected), `try: <use> finally: await client.close()`. Guard close() so an
+      injected in-memory double (no close) is untouched.
+  This makes every asyncio.run() self-contained: two asyncio.run calls in save_profile each get
+  their own client on their own loop; no reuse across a closed loop.
+
+Alternative (Approach B — only if the reviewer/owner prefers a shared loop): relocate the
+  persistent-loop helper from web/async_runner.py to a layer-neutral module (e.g. integration/
+  or a top-level async_bridge.py), update the web import, and route FirestoreWorkspaceStore's sync
+  methods through it instead of asyncio.run. More efficient (one long-lived client) but larger
+  blast radius. Do NOT choose B without explicit confirmation.
+
+Scope (Approach A):
+  database/workspace_store.py:
+    - Refactor client acquisition as above (factory + per-call create/close; injected client
+      short-circuits and is never closed by the store).
+    - Behavior of load/save/list_user_ids is otherwise unchanged.
+  Do NOT change web/profile_store.py or web/application_store.py logic (their load-then-save is
+  fine once the store no longer reuses a dead loop). You MAY improve the user-facing error copy
+  only if trivially in scope — otherwise leave it.
+
+Tests (tests/test_workspace_store*.py — create if absent):
+  - test_workspace_store_load_then_save_uses_fresh_client_each_call: inject a client_factory
+    (monkeypatched / passed) that returns a fresh recording fake per call; construct ONE store;
+    call load(user_id) then save(user_id, ws); assert the factory was invoked once per async op
+    (i.e. the store did NOT reuse a single client across the two calls). This is the regression
+    guard for the closed-loop reuse.
+  - test_workspace_store_closes_created_client: the per-call created fake records close(); assert
+    close() was awaited for a store-created client, and NOT called for an injected client.
+  - test_injected_client_not_closed_by_store: pass a client explicitly; assert store uses it and
+    never calls close() on it.
+  - Keep existing profile_store / application_store / sweep tests green (they use in-memory doubles).
+
+Acceptance criteria (named tests):
+- test_workspace_store_load_then_save_uses_fresh_client_each_call
+- test_workspace_store_closes_created_client
+- test_injected_client_not_closed_by_store
+- Existing test_profile_store.py, test_application_store.py, and pending-action-sweep tests green.
+
+DoD:
+- make check green (ruff, mypy --strict, pytest). No contract change.
+- No layering inversion (database/ does not import web/).
+- Gemini/Copilot review PASS.
+- Report READY FOR REVIEW with: chosen approach (A/B) + rationale; criterion→test map;
+  confirmation the sweep job path is unaffected.
+```
+
+---
+
+### ✅ BUG-2 — Grill "Currently grilling" banner missing on the first question
+
+> Read first: `web/grill_ui.py` — `_frontier_label` (~L167), `_apply_pending_jump` (~L386),
+> `_try_resume` (~L300), `_submit_answer` (~L350), `render_grill` (~L558, the banner at ~L655:
+> `if not grill_complete and grill_entry_label: st.info(...)`), and `tests/test_grill_frontier_label.py`.
+
+**Symptom:** After using "Grill me about this" (or coming back to the Grill), the first question
+does NOT show the "📌 Currently grilling: **<experience>**" banner. It appears correctly on every
+subsequent turn.
+
+**Root cause:** the banner reads `st.session_state["grill_entry_label"]`, which is derived via
+`_frontier_label(state)` from `state.grill_frontier`. In `_apply_pending_jump`, after
+`session.advance()` asks the opening question, `grill_frontier` is cleared/consumed in state, so
+`_frontier_label(run_async(session.current_state()))` returns `""` → empty label → no banner on the
+first question. On the next `_submit_answer`, the graph re-pins the (still NEEDS_QUANTIFYING) entry,
+so the frontier is set again and the banner reappears.
+
+```text
+You are the BUG-2 fixer for CareerEngine. Make the Grill "Currently grilling: <experience>"
+banner appear on the FIRST question after a "Grill me about this" jump (and on resume), not just
+on later turns.
+
+Files to read BEFORE writing any code (in this order):
+1. web/grill_ui.py — _frontier_label (~L167), _apply_pending_jump (~L386), _try_resume (~L300),
+   _submit_answer (~L350), and render_grill's banner (~L655).
+2. schema.py::CareerEngineState — grill_frontier, work_timeline, current_question. Understand when
+   grill_frontier is set vs cleared across a turn (does the graph consume it after asking the opener?).
+3. tests/test_grill_frontier_label.py — the existing label test pattern.
+
+PAUSE CONDITIONS:
+- If the graph does NOT reliably clear grill_frontier after the opening question (i.e. the real
+  cause differs from the stated diagnosis), STOP and report what you observe before changing code.
+- If deriving the label from the target entry would require a schema/contract change (it should
+  not — you already know the target entry_id in _apply_pending_jump).
+
+Scope (web/grill_ui.py only):
+  - Add a small pure helper: def _entry_label_by_id(state, entry_id: str) -> str that returns the
+    same "Title · Org" label _frontier_label produces, but for an explicit entry_id (refactor
+    _frontier_label to delegate to it: _frontier_label(state) = _entry_label_by_id(state, state.grill_frontier)).
+  - In _apply_pending_jump: after advancing, set ss["grill_entry_label"] from the KNOWN `target`
+    entry_id via _entry_label_by_id(current_state, target) — NOT from post-advance grill_frontier.
+    Fall back to _frontier_label(state) only if the target entry can't be found.
+  - Verify _try_resume also sets a correct label on resume (if grill_frontier is empty on resume
+    but the last question targeted an entry, prefer that entry's label; otherwise leave as-is —
+    do not over-engineer, just ensure no regression).
+  - Do NOT change turn/advance logic or persistence.
+
+Tests (tests/test_grill_frontier_label.py or a new test module):
+  - test_entry_label_by_id_returns_title_org: state with an entry (title+org); assert the helper
+    returns "Title · Org".
+  - test_entry_label_by_id_unknown_returns_empty: unknown entry_id → "".
+  - test_apply_pending_jump_sets_label_from_target: simulate a jump where post-advance
+    grill_frontier is EMPTY but the target entry exists in work_timeline; assert grill_entry_label
+    is set to the target entry's label (the regression guard). Use the fake-st + fake-session
+    pattern already used in grill tests; monkeypatch run_async / session as needed.
+
+Acceptance criteria (named tests):
+- test_entry_label_by_id_returns_title_org
+- test_entry_label_by_id_unknown_returns_empty
+- test_apply_pending_jump_sets_label_from_target
+- Existing grill tests remain green.
+
+DoD:
+- make check green. No contract change.
+- Gemini/Copilot review PASS.
+- Report READY FOR REVIEW with: confirmation of the root cause (frontier cleared after opener) +
+  criterion→test map.
+```
+
+---
+
+## Phase 10 — Replace Streamlit with Next.js + FastAPI (grooming + recommendation)
+
+> **Status: grooming only this session — no build.** Decision anchor: the owner has chosen a
+> **Next.js (React) frontend + FastAPI backend** split (design question resolved). This section
+> records the recommendation rationale and breaks the migration into launchable slices. The
+> detailed architecture (routes, auth, streaming) must be reconciled into
+> [ARCHITECTURE.md](ARCHITECTURE.md) before any Phase 10 build ticket is marked ✅ Ready.
+
+### Why replace Streamlit (recorded rationale)
+
+Streamlit cost us real time and boxed in the design this session:
+- **Auth fragility.** Native OIDC (`st.login`) hard-codes the `/oauth2callback` path and hides the
+  callback handling; a wrong redirect path silently returns the app shell (200) and hangs — the
+  exact custom-domain outage we hit. No control over the session/cookie flow.
+- **Rerun model.** Every interaction reruns the whole script top-to-bottom. This forces the
+  `web/async_runner.py` background-loop hack (see BUG-1) and makes streaming, partial updates, and
+  multi-step forms awkward (every keystroke/submit is a full rerun).
+- **Layout/UX ceiling.** No real routing, limited component composition, no drag-and-drop (blocks
+  9M), poor inline-edit UX (blocks 9H), and embedding is gated by `allowedOrigins`.
+- **State coupling.** UI state lives in `st.session_state`; durable state needs bespoke Firestore
+  bridging. The trust boundary (`st.user` → user_id) is implicit.
+
+### Recommendation (short writeup)
+
+**Adopt Next.js (App Router, React Server Components where useful) + a FastAPI JSON API.**
+- **Backend (FastAPI):** thin HTTP layer over the ALREADY-BUILT Python domain — discovery graph,
+  portfolio/workspace stores, tailor, résumé render. FastAPI is natively async (no `asyncio.run`
+  bridge, no BUG-1 class of defect), gives typed request/response via Pydantic (reuse `schema.py`),
+  and supports Server-Sent Events / WebSockets for the grill's streaming turns.
+- **Frontend (Next.js):** real routing (Dashboard / Portfolio / Grill / Tailor / Jobs), proper
+  forms (Profile, preferences) without full-page reruns, component reuse, and a path to 9H (inline
+  résumé edit chat) and 9M (drag-and-drop editor). Deploy as static/SSR to Cloud Run or Vercel.
+- **Auth:** move OIDC to the API boundary (Authlib / Google Identity) with explicit session
+  cookies (httpOnly, Secure, SameSite) OR Firebase Auth on the Next.js side with an ID-token
+  bearer to FastAPI. Either gives full control of the callback + redirect URIs (fixes the class of
+  bug that hung the custom domain) and a clean `verified ID token → user_id` trust boundary.
+- **Why not FastAPI + HTMX/Jinja:** viable and lighter, but caps the interactive résumé/DnD UX the
+  roadmap (9H/9M) wants. Given those are on the plan, React earns its keep.
+- **Migration principle:** the Python DOMAIN does not change — only the presentation + transport.
+  Keep `schema.py` as the shared contract; FastAPI serializes it; Next.js consumes typed responses.
+
+### Proposed migration slices (to be groomed into ✅ Ready tickets AFTER ARCHITECTURE.md is updated)
+
+| ID | Slice | Notes / dependency |
+|----|-------|--------------------|
+| 10.0 | ARCHITECTURE.md decision record + API contract sketch | DO FIRST — routes, auth model, SSE for grill, deploy topology. Blocks all others. |
+| 10.1 | FastAPI skeleton + auth boundary (OIDC/Firebase → user_id) | Health, session, `me` endpoint; reuse `auth/`. |
+| 10.2 | Read APIs: dashboard, portfolio, jobs list (GET, typed from schema.py) | Wrap existing stores; no behavior change. |
+| 10.3 | Write APIs: profile save, add experience, track application, preferences | Reuse the (BUG-1-fixed) stores; transactional note from ARCHITECTURE §8. |
+| 10.4 | Grill API with streaming (SSE/WebSocket) over DiscoverySession | The interactive core; mirrors grill_ui behavior. |
+| 10.5 | Next.js app shell + routing + auth wiring | Consumes 10.1–10.3. |
+| 10.6 | Next.js Grill UI (streaming) + Tailor + résumé export | Consumes 10.4; enables 9H later. |
+| 10.7 | Cutover + delete `web/` Streamlit + docs/infra update | Redirect URIs, Cloud Run/Vercel, contract-gate. |
+
+**PAUSE before grooming any 10.x build ticket:** update [ARCHITECTURE.md](ARCHITECTURE.md) with the
+accepted decision (10.0), then reconcile [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) sequencing.
+Grooming build specs before the architecture record exists violates the docs-governance rule
+(architecture/plan first, then grooming).
 
 ---
 

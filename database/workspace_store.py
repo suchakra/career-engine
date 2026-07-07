@@ -19,6 +19,9 @@ Design:
 from __future__ import annotations
 
 import asyncio
+import inspect
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from typing import Any
 
 from config import CONTRACT_VERSION, get_firestore_async_client
@@ -36,40 +39,76 @@ class FirestoreWorkspaceStore:
         *,
         collection_prefix: str = "workspaces",
         client: Any | None = None,
+        client_factory: Callable[[], Any] | None = None,
     ) -> None:
         """Initialise the store.
 
         Args:
             collection_prefix: Root collection holding one doc per user_id.
             client: Optional injected Firestore client (real async client or an
-                in-memory test double). ``None`` → ``get_firestore_client()``.
+                in-memory test double). If provided, used as-is and never closed
+                by the store. Mutually exclusive with ``client_factory``.
+            client_factory: Optional callable that returns a fresh AsyncClient.
+                Defaults to ``get_firestore_async_client``. The store creates a
+                new client per async operation and closes it when done. Mutually
+                exclusive with ``client``.
+
+        Raises:
+            ValueError: if both ``client`` and ``client_factory`` are provided —
+                their lifecycle ownership differs (caller-owned vs store-owned),
+                so accepting both would hide a configuration mistake.
         """
+        if client is not None and client_factory is not None:
+            raise ValueError(
+                "Pass either 'client' or 'client_factory', not both: an injected "
+                "client is caller-owned (never closed), a factory client is "
+                "store-owned (closed after each operation)."
+            )
         self._prefix = collection_prefix
-        self._client: Any = client if client is not None else get_firestore_async_client()
-
-    # ── Firestore refs ────────────────────────────────────────────────────────
-
-    def _doc_ref(self, user_id: str) -> Any:
-        """Document reference for a user's workspace: ``{prefix}/{user_id}``."""
-        return self._client.collection(self._prefix).document(user_id)
-
-    def _col_ref(self) -> Any:
-        """Collection reference holding all user workspace docs."""
-        return self._client.collection(self._prefix)
+        self._client: Any | None = client
+        self._client_factory = client_factory or get_firestore_async_client
 
     # ── Async internals ───────────────────────────────────────────────────────
 
+    @asynccontextmanager
+    async def _acquire(self) -> AsyncIterator[Any]:
+        """Yield a Firestore client for one async operation.
+
+        An INJECTED client is yielded as-is and never closed (the caller owns it —
+        e.g. an in-memory test double). Otherwise a FRESH client is created via the
+        factory and closed when the operation finishes. Creating the client per call
+        is what fixes the "Event loop is closed" bug: the async client's gRPC channel
+        binds to the loop it is used on, so a client must not outlive the
+        ``asyncio.run`` loop of a single sync call (see the class-level note below).
+        """
+        if self._client is not None:
+            yield self._client
+            return
+        client = self._client_factory()
+        try:
+            yield client
+        finally:
+            close = getattr(client, "close", None)
+            if close is not None:
+                # The current google-cloud-firestore AsyncClient.close() is sync,
+                # but await the result if a future lib version makes it awaitable.
+                result = close()
+                if inspect.isawaitable(result):
+                    await result
+
     async def _alist_user_ids(self) -> list[str]:
-        docs = await self._col_ref().list_documents()
-        return [ref.path.rsplit("/", 1)[-1] for ref in docs]
+        async with self._acquire() as client:
+            docs = await client.collection(self._prefix).list_documents()
+            return [ref.path.rsplit("/", 1)[-1] for ref in docs]
 
     async def _aload(self, user_id: str) -> UserWorkspace:
-        snapshot = await self._doc_ref(user_id).get()
-        if not snapshot.exists:
-            return UserWorkspace()  # a brand-new user has an empty workspace
-        data = snapshot.to_dict() or {}
-        check_version(data.get("contract_version", "0.0.0"))
-        return UserWorkspace.model_validate(data[_WORKSPACE_KEY])
+        async with self._acquire() as client:
+            snapshot = await client.collection(self._prefix).document(user_id).get()
+            if not snapshot.exists:
+                return UserWorkspace()  # a brand-new user has an empty workspace
+            data = snapshot.to_dict() or {}
+            check_version(data.get("contract_version", "0.0.0"))
+            return UserWorkspace.model_validate(data[_WORKSPACE_KEY])
 
     async def _asave(self, user_id: str, workspace: UserWorkspace) -> None:
         document = {
@@ -77,7 +116,8 @@ class FirestoreWorkspaceStore:
             "user_id": user_id,  # the doc key, for query/debug convenience
             _WORKSPACE_KEY: workspace.model_dump(mode="json"),
         }
-        await self._doc_ref(user_id).set(document)
+        async with self._acquire() as client:
+            await client.collection(self._prefix).document(user_id).set(document)
 
     # ── Sync WorkspaceStore protocol ──────────────────────────────────────────
     #

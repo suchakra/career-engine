@@ -68,10 +68,15 @@ jobs:
           TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
           TF_VAR_image: ${{ steps.build.outputs.image }}
           TF_VAR_auth_client_id: ${{ vars.CE_AUTH_CLIENT_ID }}
+          # Use the stable *.run.app URL as the OAuth redirect URI so that auth
+          # works regardless of custom-domain routing. The custom domain is fine for
+          # browsing; auth must round-trip through the URL registered in OAuth console.
+          # NOTE: the path is /oauth2callback (NO /_stcore/ prefix) — that is where
+          # Streamlit's native OIDC handler lives. The /_stcore/oauth2callback path
+          # only returns the app shell and silently fails the callback (auth hangs).
+          TF_VAR_auth_redirect_uri: "https://career-engine-dev-app-ontyg6kaja-uc.a.run.app/oauth2callback"
           # Cloudflare DNS is skipped in CI (token not provided — DNS is a one-time
           # local bootstrap, not needed on every deploy). Manage locally with .env.
-          # custom_domain default (career-engine.bitcrafty.cloud) is used unless overridden.
-          # auth_redirect_uri is derived from custom_domain; override via TF_VAR_auth_redirect_uri if needed.
         run: |
           terraform init -input=false \
             -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \

@@ -162,6 +162,7 @@ class FakeFirestoreClient:
     def __init__(self) -> None:
         """Initialise the in-memory store."""
         self._store: dict[str, dict[str, Any]] = {}
+        self.close_called = False
 
     def collection(self, path: str) -> _FakeCollectionReference:
         """Return a top-level collection reference.
@@ -173,6 +174,10 @@ class FakeFirestoreClient:
             A _FakeCollectionReference for the given path.
         """
         return _FakeCollectionReference(store=self._store, prefix=path.strip("/"))
+
+    def close(self) -> None:
+        """Close the client (for testing client lifecycle)."""
+        self.close_called = True
 
     @property
     def store(self) -> dict[str, dict[str, Any]]:
