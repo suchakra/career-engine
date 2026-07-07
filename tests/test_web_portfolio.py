@@ -33,6 +33,7 @@ class FakeSt:
         self.dividers = 0
         self.buttons: list[tuple[str, dict[str, Any]]] = []
         self.progress_calls: list[tuple[float, str]] = []
+        self._issued_cols: list[FakeSt] = []
 
     def title(self, body: str) -> None:
         self.titles.append(body)
@@ -60,7 +61,16 @@ class FakeSt:
 
     def columns(self, spec: int | list[int]) -> list[FakeSt]:
         n = spec if isinstance(spec, int) else len(spec)
-        return [FakeSt() for _ in range(n)]
+        cols = [FakeSt() for _ in range(n)]
+        self._issued_cols.extend(cols)
+        return cols
+
+    def all_buttons(self) -> list[tuple[str, dict[str, Any]]]:
+        """Buttons rendered on this st plus any it issued via columns()."""
+        result = list(self.buttons)
+        for col in self._issued_cols:
+            result.extend(col.all_buttons())
+        return result
 
     def expander(self, label: str, **kwargs: Any) -> FakeSt:
         return self
@@ -279,6 +289,67 @@ class TestRenderPortfolio:
         )
         assert any(label == "Grill me about this" for label, _ in st.buttons)
         assert not any("tailoring priority" in label for label, _ in st.buttons)
+
+    def test_portfolio_renders_delete_story_button(self) -> None:
+        """With on_delete_story, each recorded story gets a delete button (9A)."""
+        e1 = _entry("Senior Engineer", EntryStatus.GRILLED)
+        state = CareerEngineState(
+            work_timeline=[e1],
+            extracted_star_stories=[_story(str(e1.entry_id), "cut latency 40%")],
+        )
+        st = FakeSt()
+        render_portfolio(
+            build_portfolio_view(state), st=st, on_delete_story=lambda _sid: None
+        )
+        assert any("Delete" in label or "🗑" in label for label, _ in st.buttons)
+
+    def test_delete_story_button_invokes_callback_with_story_id(self) -> None:
+        """Clicking a story's delete button fires on_delete_story with its story_id (9A)."""
+        e1 = _entry("Senior Engineer", EntryStatus.GRILLED)
+        story = _story(str(e1.entry_id), "cut latency 40%")
+        state = CareerEngineState(work_timeline=[e1], extracted_star_stories=[story])
+        seen: list[str] = []
+        st = FakeSt()
+        render_portfolio(
+            build_portfolio_view(state), st=st, on_delete_story=lambda sid: seen.append(sid)
+        )
+        delete_btns = [
+            (label, kw) for label, kw in st.buttons if "Delete" in label or "🗑" in label
+        ]
+        assert len(delete_btns) == 1
+        delete_btns[0][1]["on_click"]()
+        assert seen == [str(story.story_id)]
+
+    def test_no_delete_button_without_callback(self) -> None:
+        """Without on_delete_story, recorded stories render read-only (no delete button)."""
+        e1 = _entry("Senior Engineer", EntryStatus.GRILLED)
+        state = CareerEngineState(
+            work_timeline=[e1],
+            extracted_star_stories=[_story(str(e1.entry_id), "cut latency 40%")],
+        )
+        st = FakeSt()
+        render_portfolio(build_portfolio_view(state), st=st)
+        assert not any("Delete" in label or "🗑" in label for label, _ in st.buttons)
+
+    def test_edit_bullet_button_invokes_callback(self) -> None:
+        """With on_edit_bullet, a bullet's Save button fires on_edit_bullet(entry_id, idx, text)."""
+        entry = Entry(
+            type=ExperienceType.FULL_TIME,
+            title="A",
+            org="Acme",
+            bullets=["first bullet", "second bullet"],
+        )
+        seen: list[tuple[str, int, str]] = []
+        st = FakeSt()
+        render_portfolio(
+            build_portfolio_view(CareerEngineState(work_timeline=[entry])),
+            st=st,
+            on_edit_bullet=lambda eid, idx, text: seen.append((eid, idx, text)),
+        )
+        save_btns = [(label, kw) for label, kw in st.all_buttons() if label == "Save"]
+        assert len(save_btns) == 2  # one per bullet
+        save_btns[1][1]["on_click"]()  # save the second bullet
+        assert seen == [(str(entry.entry_id), 1, "second bullet")]
 
     def test_progress_renders_zero_state(self) -> None:
         """EntryCard with story_count=0 renders a 'No stories recorded' caption (9K)."""

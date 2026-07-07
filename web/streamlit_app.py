@@ -211,6 +211,64 @@ def _set_entry_highlight(*, user_id: str, entry_id: str, highlighted: bool) -> N
         st.warning("Couldn't find that experience to update — refresh and try again.")
 
 
+def _delete_star_story(*, user_id: str, story_id: str) -> None:
+    """Delete a recorded STAR story from the portfolio (9A).
+
+    Runs as an on_click callback (before the rerun). A backend hiccup warns rather
+    than crashing the page.
+    """
+    from config import get_settings
+    from web.portfolio_store import delete_star_story
+
+    service = _session_service()
+    if service is None:
+        st.warning("Couldn't reach your saved portfolio just now — try again in a moment.")
+        return
+    try:
+        result = delete_star_story(
+            service,
+            app_name=get_settings().app_name,
+            user_id=user_id,
+            story_id=story_id,
+        )
+    except Exception:
+        st.warning("Couldn't delete that just now — try again in a moment.")
+        return
+    if result is None:
+        st.warning("Couldn't find your portfolio to update — refresh and try again.")
+
+
+def _update_entry_bullet(
+    *, user_id: str, entry_id: str, bullet_index: int, new_text: str
+) -> None:
+    """Edit one résumé bullet on an experience in place (9A).
+
+    Runs as an on_click callback (before the rerun). A backend hiccup warns rather
+    than crashing the page.
+    """
+    from config import get_settings
+    from web.portfolio_store import update_entry_bullet
+
+    service = _session_service()
+    if service is None:
+        st.warning("Couldn't reach your saved portfolio just now — try again in a moment.")
+        return
+    try:
+        result = update_entry_bullet(
+            service,
+            app_name=get_settings().app_name,
+            user_id=user_id,
+            entry_id=entry_id,
+            bullet_index=bullet_index,
+            new_text=new_text,
+        )
+    except Exception:
+        st.warning("Couldn't update that bullet just now — try again in a moment.")
+        return
+    if result is None:
+        st.warning("Couldn't find your portfolio to update — refresh and try again.")
+
+
 def _render_add_experience_form(*, user_id: str, today: str) -> None:
     """Form to add a remembered experience/project into the timeline (4D)."""
     from config import get_settings
@@ -278,6 +336,14 @@ def _render_portfolio(*, user_id: str, today: str) -> None:
     def _toggle_highlight(entry_id: str, highlighted: bool) -> None:
         _set_entry_highlight(user_id=user_id, entry_id=entry_id, highlighted=highlighted)
 
+    def _delete_story(story_id: str) -> None:
+        _delete_star_story(user_id=user_id, story_id=story_id)
+
+    def _edit_bullet(entry_id: str, bullet_index: int, new_text: str) -> None:
+        _update_entry_bullet(
+            user_id=user_id, entry_id=entry_id, bullet_index=bullet_index, new_text=new_text
+        )
+
     def _on_save_profile(p: UserProfile) -> None:
         from database.firestore_session import ContractVersionError
         from database.workspace_store import FirestoreWorkspaceStore
@@ -298,6 +364,8 @@ def _render_portfolio(*, user_id: str, today: str) -> None:
         st=st,
         on_grill_entry=_grill_entry,
         on_toggle_highlight=_toggle_highlight,
+        on_delete_story=_delete_story,
+        on_edit_bullet=_edit_bullet,
         on_save_profile=None if profile_load_failed else _on_save_profile,
         profile_view=build_profile_view(profile),
     )
