@@ -266,13 +266,13 @@ def render_portfolio(
             section. Paired with ``on_save_profile``; ignored when that is None.
             Defaults to an empty ProfileView when omitted.
     """
+    st.title("Your portfolio")
+
     if on_save_profile is not None:
         pv = profile_view if profile_view is not None else ProfileView(
             name="", email="", phone="", location="", links=[]
         )
         render_profile_section(pv, on_save=on_save_profile, st=st)
-
-    st.title("Your portfolio")
 
     if view.is_empty:
         st.info(view.empty_text)
