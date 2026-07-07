@@ -727,8 +727,9 @@ editor (9M) are React-shaped; a rich client earns its keep given that committed 
     Worker)** to mock the FastAPI endpoints (the "mocked API" the 10.5/10.6 acceptance tests
     reference), and **Playwright** (E2E). React Query is tested via a `QueryClientProvider` wrapper +
     MSW, asserting the optimistic update **and** the rollback path (AD-16.8).
-  - **Devcontainer** provides only what npm can't per-project: a **pinned Node LTS** (deterministic
-    toolchain) and, at 10.5, **Playwright's system browser libraries** via
+  - **Devcontainer** provides only what npm can't per-project: a **pinned Node major** (the current
+    LTS line — `22` in `.devcontainer/devcontainer.json`; the feature still resolves the latest
+    minor/patch) and, at 10.5, **Playwright's system browser libraries** via
     `npx playwright install --with-deps`, run from a `frontend/` setup step — **not** baked into the
     Python base image before the app exists (keeps the image lean).
   - **`make check`** gains a `frontend` lane (lint + typecheck + Vitest; Playwright E2E as a separate
