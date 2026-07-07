@@ -3,7 +3,7 @@
 > Single source of truth for **what's done vs. pending**. Update this at the end of every work
 > session / sub-agent run. Keep entries terse. Legend: ✅ done · 🟡 in progress · ⬜ not started · 🚫 blocked.
 
-Last updated: **2026-07-07** — *Ticket 9A (PR #57) merged. master @ `bb04625`, contract v2.8.0, 696 tests (1 skipped). Next: PR4 = 9F, then Phase 10 grooming.*
+Last updated: **2026-07-07** — *Tickets 9A (PR #57) + 9F (PR #58) merged — Phase 9 complete. master @ `8fd065f`, contract v2.8.0, 703 tests (1 skipped). Next: PR5 = Phase 10 grooming + tech writeup.*
 
 ---
 
@@ -23,7 +23,7 @@ Last updated: **2026-07-07** — *Ticket 9A (PR #57) merged. master @ `bb04625`,
 | Phase 6 — Two-agent (A2A) job discovery (capstone) | ✅ merged (packaging pending) | **Merged to master via PR #30, tagged `contract-v2.5.0`, 560 tests.** Sonnet review PASS + Copilot addressed. Ontology (`JobOpportunity`/`EvaluationDiff`/…) → real FastMCP server `discovery/mcp_server.py` over a live key-free source → stateless `Scout` (MCP client) → stateful `PrimaryAgent` (deterministic hard-reject gate + injectable agentic evaluator + bounded MAX_ITERATIONS=3 loop → `EvaluationDiff`) → `career-engine discover` + idempotent `LedgerStore` → Tailor reuse. LIVE end-to-end run verified. **Pending:** PACKAGING only (video/writeup/README/diagram — user-owned). Spec [ARCHITECTURE.md §15](ARCHITECTURE.md); demo [DISCOVERY_DEMO.md](DISCOVERY_DEMO.md). |
 | Phase 7 — Job Discovery web surface | ✅ COMPLETE | **7A** (PR #38, **contract v2.8.0**): `UserWorkspace.discovery_preferences` + `web/preferences_store.py`. **7B** (PR #39): Jobs nav view — `web/jobs.py`, `web/jobs_runner.py`, `_render_jobs` in `streamlit_app.py`. **7C**: "Tailor to this job." Post-7: HITL "Not interested" (PR #40), `StdioMcpClient` (PR #41), HITL "Keep this" (PR #42). ⚠️ Deploy gap — Jobs is wired in code; Cloud Run dev app needs Phase 8A redeploy. |
 | Phase 8 — Operational hardening | 🟡 in progress | ✅ 8A · ✅ 8B (PR #43) · ✅ 8C (PR #44) · ✅ 8D (PR #45) · ✅ 8G (PR #46) · ⬜ 8E deployer-SA · ⬜ 8F HITL TTL. Groomed in [GROOMING.md §Phase 8](GROOMING.md). |
-| Phase 9 — Replace Streamlit; proper product UI | 🟡 in progress | ✅ 9J · ✅ 9B · ✅ 9K · ✅ 9I · ✅ 9G · ✅ 9C · ✅ 9E · ✅ 9D · ✅ 9A · ⬜ 9F. |
+| Phase 9 — Replace Streamlit; proper product UI | ✅ done | ✅ 9J · ✅ 9B · ✅ 9K · ✅ 9I · ✅ 9G · ✅ 9C · ✅ 9E · ✅ 9D · ✅ 9A · ✅ 9F. |
 | Live bug fixes | 🟡 in progress | ✅ BUG-1 workspace-save "Event loop is closed" + auth-redirect pin (PR #55) · ✅ BUG-2 grill banner missing on first question after resume (PR #56). Groomed in [GROOMING.md §Bugs](GROOMING.md). |
 
 ---

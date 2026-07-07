@@ -1,19 +1,32 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-07 — Ticket 9A shipped: PR #57 merged)
-**`master` clean @ `bb04625` · contract v2.8.0 · 696 tests (1 skipped) · all PRs merged.**
-**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + 9J + 9B + 9K + 9I + 9G + 9C + 9E + 9D + 9A + BUG-1 + BUG-2 COMPLETE.**
+## 👉 YOU ARE HERE (updated 2026-07-07 — Ticket 9F shipped: PR #58 merged)
+**`master` clean @ `8fd065f` · contract v2.8.0 · 703 tests (1 skipped) · all PRs merged.**
+**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + 9J + 9B + 9K + 9I + 9G + 9C + 9E + 9D + 9A + 9F + BUG-1 + BUG-2 COMPLETE. Phase 9 is DONE.**
 
-**▶ NEXT — PR4: Ticket 9F (preferences UX + `derive_initial_roles`)**
+**▶ NEXT — PR5: Phase 10 grooming + tech writeup**
 
-9F: preferences-view help copy in `web/jobs.py`, `derive_initial_roles()` in
-`web/preferences_store.py`, and jobs-route prefill in `web/streamlit_app.py`. **No `scout.py`
-changes.** 4 named tests: `test_jobs_view_help_text_on_target_roles`,
-`test_derive_initial_roles_top_3`, `test_derive_initial_roles_empty_state`,
-`test_jobs_view_fallback_if_no_state`. PAUSE if an extra Firestore read is needed. Full spec in
-GROOMING.md §9F. Then PR5 (Phase 10 grooming + tech writeup).
+Groom Phase 10 (Next.js frontend + FastAPI backend) into GROOMING.md, plus a short tech
+recommendation writeup. Per docs-governance, do **10.0 first**: record the Phase-10 architecture
+decision (framework choice, API boundary, migration path off Streamlit) in `docs/ARCHITECTURE.md`
+as an accepted decision, THEN regenerate the executable build prompts in GROOMING.md §Phase 10.
+This PR is docs-only (no code): update ARCHITECTURE.md + GROOMING.md, and add the writeup.
 
-**What shipped this session (bug-fix batch):**
+**What shipped this session (Phase 9 completion batch):**
+
+- **9A (PR #57):** Portfolio — delete recorded STAR stories + edit résumé bullets in place.
+  `_adelete_star_story`/`_aupdate_entry_bullet` (+ sync wrappers) in `web/portfolio_store.py`;
+  `StoryCard.story_id` + `on_delete_story`/`on_edit_bullet` callbacks in `web/portfolio.py`;
+  on_click handlers in `web/streamlit_app.py`. Empty bullet edits are a no-op (Copilot review).
+  No contract change.
+- **9F (PR #58):** Jobs — preference-form guidance (`help=`/`placeholder=`) via injectable
+  `render_preferences_form`, and `derive_initial_roles(state)` seeding first-time target roles
+  from the user's own portfolio (gated to never-saved-rubric users, once per session). No
+  `scout.py` changes (query narrowing is the **9F-b** follow-up). Groom corrections recorded in
+  the PR: the form lived in `_render_jobs` not `render_jobs`; new users have empty prefs, not
+  operator defaults. No contract change.
+
+**What shipped earlier (bug-fix batch):**
 
 - **BUG-1 (PR #55):** Workspace saves failed with "Event loop is closed" (profile save +
   track-application). `FirestoreWorkspaceStore` reused one `AsyncClient` across two `asyncio.run()`
@@ -43,7 +56,7 @@ GROOMING.md §9F. Then PR5 (Phase 10 grooming + tech writeup).
 - **9B (PR #49):** Add-experience CTA moved before entry list.
 - **9K (PR #50):** Per-entry STAR story progress indicator.
 
-**Remaining Phase 9 tickets:** 9F (see GROOMING.md for spec).
+**Remaining Phase 9 tickets:** none — Phase 9 complete.
 
 ---
 *Historical session notes follow (most recent first):*
