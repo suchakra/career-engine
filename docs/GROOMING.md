@@ -38,8 +38,8 @@ Canonical status for every phase is in [PROGRESS.md](PROGRESS.md).
 
 ## Phase 10 — Replace Streamlit with Next.js + FastAPI (build tickets)
 
-> **Status: 10.0 done (architecture decision recorded); 10.1–10.7 are ✅ Ready build specs — no
-> code shipped yet.** The accepted decision, rationale, auth model, streaming choice, deploy
+> **Status: 10.0 done + 10.1 SHIPPED (PR #63); 10.2–10.7 are ✅ Ready build specs.** The accepted
+> decision, rationale, auth model, streaming choice, deploy
 > topology, and API contract sketch are **canonical in [ARCHITECTURE.md §16](ARCHITECTURE.md)** — do
 > not restate them here. Sequencing is in [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) Phase 10;
 > status is canonical in [PROGRESS.md](PROGRESS.md). Build **API-first, one slice per PR**, in order —
@@ -66,7 +66,9 @@ boundary. Full rationale + design decisions (AD-16.1..7): [ARCHITECTURE.md §16]
 Decision + rationale recorded in [ARCHITECTURE.md §16](ARCHITECTURE.md); sequencing in
 [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) Phase 10. Unblocks 10.1–10.7.
 
-### ✅ 10.1 — FastAPI skeleton + auth boundary  *(M · Backend)*
+### ✅ 10.1 — FastAPI skeleton + auth boundary  *(SHIPPED — PR #63)*
+> Merged: `api/` package (`main.py`/`deps.py`/`auth.py`), `GET /api/health` + `GET /api/me`, Firebase-bearer boundary with opaque 401, 4 tests. Status canonical in [PROGRESS.md](PROGRESS.md).
+
 Stand up the FastAPI app and the single identity edge. **PAUSE point resolved:** the auth shape is
 **AD-16.4 option (b) — Firebase ID-token bearer verified at FastAPI**, reusing the existing
 `auth/firebase_auth.py::FirebaseAuthProvider` (verified token → `sub` → `user_id`, injectable

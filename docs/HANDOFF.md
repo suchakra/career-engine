@@ -1,13 +1,16 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-07 — Phase 10 build STARTED; slice 10.1 in flight)
-**`master` clean @ `19df25c` · contract v2.8.0 · 703 tests (1 skipped) · all merged PRs green.**
-**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + all of Phase 9 (9A/9B/9C/9D/9E/9F/9G/9I/9J/9K) + BUG-1 + BUG-2 COMPLETE. Phase 10 is groomed; building API-first, one slice per PR.**
+## 👉 YOU ARE HERE (updated 2026-07-07 — Phase 10 build: slice 10.1 MERGED; slice 10.2 next)
+**`master` clean @ `6d7b163` · contract v2.8.0 · 707 tests (1 skipped) · all merged PRs green.**
+**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + all of Phase 9 (9A/9B/9C/9D/9E/9F/9G/9I/9J/9K) + BUG-1 + BUG-2 COMPLETE. Phase 10 building API-first, one slice per PR — 10.1 done.**
 
-**Just merged (all docs/design, no domain change):**
-- **PR #62** — UI grooming: component inventory (PHASE10_UI_MOCKUP §2) + **AD-16.8** (TanStack Query
-  client data/state layer, optimistic writes) + **AD-16.9** (frontend test stack = Vitest/RTL/MSW/
-  Playwright; devcontainer pins **Node 22**, Playwright system deps at 10.5).
+**Just merged:**
+- **PR #63** — Phase 10.1 (first build slice, presentation/transport only, no contract change):
+  new `api/` package — FastAPI `app` with `GET /api/health` (unauth liveness) + `GET /api/me`
+  (protected identity edge). Single auth boundary in `api/auth.py` verifies the `Authorization:
+  Bearer <id_token>` via the existing `FirebaseAuthProvider` (AD-16.4), maps failures to an
+  **opaque 401** (`WWW-Authenticate: Bearer`), and never logs/echoes the token or claims.
+  `api/deps.py` wires the `Depends` seam (network-free in tests). +4 tests (`tests/test_api_auth.py`).
 - **PR #60** — Phase 10 design docs: resolves the 10.1 auth shape (Firebase bearer, AD-16.4),
   adds [PHASE10_UI_MOCKUP.md](PHASE10_UI_MOCKUP.md) (bitcrafty-branded Next.js mockup, reviewed),
   Phase 11 roadmap.
@@ -17,15 +20,16 @@
   [history/GROOMING_ARCHIVE.md](history/GROOMING_ARCHIVE.md); role-scoped reads wired into the
   instruction files.
 
-**▶ NEXT — Phase 10 build, slices 10.1 → 10.7 (one PR each, API-first)**
+**▶ NEXT — Phase 10 build, slices 10.2 → 10.7 (one PR each, API-first)**
 
 The Streamlit→Next.js+FastAPI decision is recorded in [ARCHITECTURE.md §16](ARCHITECTURE.md)
 (AD-16.1..7: FastAPI over the unchanged domain, `schema.py` as wire contract, auth at the API
-boundary, SSE grill, Cloud Run). Executable **API-first** build tickets 10.1–10.7 are ✅ Ready in
+boundary, SSE grill, Cloud Run). Executable **API-first** build tickets 10.2–10.7 are ✅ Ready in
 [GROOMING.md §Phase 10](GROOMING.md); sequencing in [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md).
-Build one slice per PR, in order. **10.1 PAUSE point is RESOLVED:** auth = **Firebase ID-token bearer
-verified at FastAPI** reusing `auth/firebase_auth.py::FirebaseAuthProvider` (AD-16.4). Hand the builder
-the 10.1 ticket + [skills/build-slice](../skills/build-slice/SKILL.md) — not the big docs.
+Build one slice per PR, in order. **Next up = 10.2 read APIs** (`GET /api/dashboard`, `/api/portfolio`,
+`/api/jobs`) reusing `web/session_loader.py` + portfolio view builders + discovery ledger reads;
+degrade to an empty typed payload on load failure (never 500). Hand the builder the 10.2 ticket +
+[skills/build-slice](../skills/build-slice/SKILL.md) — not the big docs.
 
 **What shipped this session (5-PR cycle: 2 bug fixes + Phase 9 completion + Phase 10 groom):**
 
