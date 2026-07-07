@@ -504,12 +504,14 @@ def _render_jobs(*, user_id: str, today: str) -> None:
             from web.preferences_store import derive_initial_roles, load_discovery_preferences
 
             saved = load_discovery_preferences(_workspace_store(), user_id=user_id)
-            # A user who has never saved a rubric has empty target_roles. Seed that
-            # field from their own recent experience so the first run reflects them
-            # (one extra Firestore read, gated to this case and once per session;
-            # best-effort — an empty/unavailable state falls back cleanly).
+            # A user who has never saved a rubric has an entirely empty
+            # SessionPreferences. Seed the target-roles field from their own recent
+            # experience in that case (one extra Firestore read, gated here and once
+            # per session; best-effort — an empty/unavailable state falls back
+            # cleanly). Gate on all three fields so a user who deliberately saved
+            # roles-blank-but-others-set prefs is never re-seeded.
             roles_seed = saved.target_roles
-            if not saved.target_roles:
+            if not (saved.target_roles or saved.nice_to_haves or saved.dealbreakers):
                 derived = derive_initial_roles(
                     _load_discovery_state(user_id=user_id, today=today)
                 )

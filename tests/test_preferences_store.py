@@ -110,6 +110,21 @@ def test_derive_initial_roles_skips_empty_titles() -> None:
     assert derive_initial_roles(state) == ["Real Role"]
 
 
+def test_derive_initial_roles_blank_recent_titles_do_not_crowd_out_older() -> None:
+    # The 2 most recent entries have blank titles; derive must still return 3 valid
+    # (non-empty) titles from the older entries rather than fewer than 3.
+    state = CareerEngineState(
+        work_timeline=[
+            _entry("Analyst", end_date="2016"),
+            _entry("Consultant", end_date="2018"),
+            _entry("Director", end_date="2020"),
+            _entry("", end_date="2022"),
+            _entry("", end_date=""),  # present, but blank title
+        ]
+    )
+    assert derive_initial_roles(state) == ["Director", "Consultant", "Analyst"]
+
+
 def test_load_returns_a_defensive_copy() -> None:
     store = _FakeStore()
     store.save("u1", UserWorkspace(discovery_preferences=SessionPreferences(target_roles=["CTO"])))

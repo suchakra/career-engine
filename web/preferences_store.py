@@ -23,14 +23,17 @@ def derive_initial_roles(state: CareerEngineState) -> list[str]:
 
     Used to seed the Jobs preference form for a user who has never saved a rubric,
     so the very first discovery run reflects their own recent experience instead of
-    the operator's demo defaults. Entries are ordered by ``end_date`` descending (a
-    blank ``end_date`` means "present" and sorts newest); empty titles are skipped.
-    Pure — no I/O.
+    the operator's demo defaults. Entries with empty titles are dropped first, then
+    the remainder is ordered by ``end_date`` descending (a blank ``end_date`` means
+    "present" and sorts newest) and the top three titles are returned — so blank
+    recent titles never crowd out valid older ones. Pure — no I/O.
     """
-    sorted_entries = sorted(
-        state.work_timeline, key=lambda e: (e.end_date or "9999"), reverse=True
+    titled = sorted(
+        (e for e in state.work_timeline if e.title),
+        key=lambda e: (e.end_date or "9999"),
+        reverse=True,
     )
-    return [e.title for e in sorted_entries[:3] if e.title]
+    return [e.title for e in titled[:3]]
 
 
 def load_discovery_preferences(store: WorkspaceStore, *, user_id: str) -> SessionPreferences:
