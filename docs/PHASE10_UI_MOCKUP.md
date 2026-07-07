@@ -37,7 +37,8 @@ The four standing product goals ([GROOMING.md](GROOMING.md)) translate to UI int
 - **Progressive disclosure.** Forms (profile, preferences, contact header, add-experience) live in
   collapsible sections so the default view is calm; power actions are one click away.
 - **Optimistic, no full-page reloads.** Every write posts via the API and updates in place (the whole
-  reason for leaving Streamlit's rerun model — AD-16.2).
+  reason for leaving Streamlit's rerun model — AD-16.2); the client data layer that implements this
+  (optimistic mutation + rollback + cache invalidation) is **AD-16.8** ([ARCHITECTURE.md §16](ARCHITECTURE.md)).
 - **Streaming is first-class.** The grill renders token/step-by-step over SSE (AD-16.5), not as a
   frozen page waiting for a turn.
 - **Recoverable by default.** Load failures degrade to a typed empty state and disable *save* (never
@@ -83,6 +84,27 @@ The four standing product goals ([GROOMING.md](GROOMING.md)) translate to UI int
   is implied. SSR renders with
   no theme flash (inline theme script sets the class before paint). Every mock in this doc is
   theme-agnostic — both themes use the same layout, only the token map changes.
+
+**Foundational components (built first in 10.5, before screens).** The visual system above is realized
+by a small set of shared, shadcn/ui-backed components; screens **compose** these — no screen
+re-implements a card, badge, or form row. Standing this inventory up first is what lets 10.5/10.6
+assemble rather than reinvent.
+
+| Component | Realizes / used by | Notes |
+|-----------|--------------------|-------|
+| `AppShell` + `SidebarNav` | grouped BUILD/APPLY/PREPARE nav, identity + key chips, theme toggle (§3/§9) | Feature-flagged rows stay hidden until live. |
+| `StatusBadge` | strong / for-review / skipped status across **Jobs tiers + Portfolio entries** (§2) | Color **plus label + glyph** always (● / ◑ / ✓ / ✗) — never color alone. |
+| `ActionCard` | dashboard pending-actions, job tiles, portfolio entries | 12px radius; **one primary CTA** per card. |
+| `PrimaryButton` / `SplitButton` | the single primary CTA per screen; **Build résumé → PDF/Word/MD** split | Enforces "one primary action per screen." |
+| `StreamingTranscript` | grill (10.6); reused by interview-prep + negotiator (§9) | Transcript + SSE stream + composer; **turn controller injected** (AD-16.5). |
+| `ConsentDialog` + `ConfirmSendDialog` | one-time connected-account grant + per-send confirm (§9) | Reused by the Phase-11 emailer; consent recorded to Settings. |
+| `CollapsibleSection` + `Field` | progressive-disclosure forms: profile, preferences, contact header, add-experience | Calm default view; power actions one click away. |
+| `EmptyState` | typed load-failure / empty read views | Disables **save** (never silent overwrite) — "recoverable by default." |
+| `MetricStat` | discovery progress + coverage meters | Tabular numerals (§2). |
+| `ResumePreview` | master + tailored résumé preview | Server-rendered WeasyPrint HTML in an iframe vs a lighter React view is the §8 open item; one component either way. |
+| `Toast` / `InlineError` | optimistic-write rollback + inline validation surface | Backed by the data layer (AD-16.8). |
+
+All are thin wrappers over shadcn/ui (Radix) primitives (§2) — accessible-by-default, not bespoke.
 
 ---
 
@@ -534,14 +556,16 @@ transport only (AD-16.2 / AD-16.7).
 **Resolved by the independent design review (now folded into this doc):** first-run key setup on
 Dashboard (§4.1) · explicit mobile spec (§6.1) · light/dark theme + toggle (§2/§3) · grill-component
 reuse boundary as `StreamingTranscript` (§9) · concrete color/type/focus tokens (§2) · locked
-empty-state copy (§5).
+empty-state copy (§5) · **foundational component inventory** (§2) · **client data layer** = TanStack
+Query with optimistic writes ([ARCHITECTURE.md §16 AD-16.8](ARCHITECTURE.md)).
 
 **Still open (decide during build):**
 1. **Jobs layout** — side-by-side tiers vs a single ranked list with a "for review" filter toggle.
 2. **Résumé preview fidelity** — render the real WeasyPrint HTML in an iframe vs a lighter React
    approximation (exact bytes still come from the server renderer).
 3. **Component lib** — shadcn/ui is the proposal; confirm via a 10.5 spike against bundle-size / SSR
-   constraints, and validate the palette (dark-mode contrast + colorblind) before freezing tokens.
+   constraints (the same spike checks the AD-16.8 data-layer bundle budget), and validate the palette
+   (dark-mode contrast + colorblind) before freezing tokens.
 4. **Sidebar grouping labels** — `BUILD / APPLY / PREPARE` wording; confirm `Dashboard`/`Settings`
    sit outside the groups.
 
