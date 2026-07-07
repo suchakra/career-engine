@@ -1,16 +1,19 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-07 — Phase 10 build: slice 10.1 MERGED; slice 10.2 next)
-**`master` clean @ `6d7b163` · contract v2.8.0 · 707 tests (1 skipped) · all merged PRs green.**
-**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + all of Phase 9 (9A/9B/9C/9D/9E/9F/9G/9I/9J/9K) + BUG-1 + BUG-2 COMPLETE. Phase 10 building API-first, one slice per PR — 10.1 done.**
+## 👉 YOU ARE HERE (updated 2026-07-07 — Phase 10 build: slices 10.1 + 10.2 MERGED; slice 10.3 next)
+**`master` clean @ `7950834` · contract v2.8.0 · 720 tests (1 skipped) · all merged PRs green.**
+**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + all of Phase 9 (9A/9B/9C/9D/9E/9F/9G/9I/9J/9K) + BUG-1 + BUG-2 COMPLETE. Phase 10 building API-first, one slice per PR — 10.1 + 10.2 done.**
 
 **Just merged:**
-- **PR #63** — Phase 10.1 (first build slice, presentation/transport only, no contract change):
-  new `api/` package — FastAPI `app` with `GET /api/health` (unauth liveness) + `GET /api/me`
-  (protected identity edge). Single auth boundary in `api/auth.py` verifies the `Authorization:
-  Bearer <id_token>` via the existing `FirebaseAuthProvider` (AD-16.4), maps failures to an
-  **opaque 401** (`WWW-Authenticate: Bearer`), and never logs/echoes the token or claims.
-  `api/deps.py` wires the `Depends` seam (network-free in tests). +4 tests (`tests/test_api_auth.py`).
+- **PR #64** — Phase 10.2 (read APIs, presentation only, no contract change): three protected typed
+  GET endpoints — `GET /api/dashboard`, `/api/portfolio`, `/api/jobs` — wrapping the existing read
+  paths (`web.dashboard`/`web.portfolio`/`web.jobs` pure view builders + discovery session/ledger
+  reads). Async endpoints await a new additive `web.session_loader.atry_load_latest_discovery_state`;
+  sync store calls run in `run_in_threadpool`; response models are a strict api-local presentation
+  contract (`api/schemas.py`); all reads degrade to a typed empty payload (never 500) except a
+  workspace `ContractVersionError` which propagates. +13 tests (`tests/test_api_read.py`).
+- **PR #63** — Phase 10.1: `api/` FastAPI skeleton + single Firebase-bearer auth boundary
+  (`GET /api/health` + `GET /api/me`, opaque 401, no token/claims logging). +4 tests.
 - **PR #60** — Phase 10 design docs: resolves the 10.1 auth shape (Firebase bearer, AD-16.4),
   adds [PHASE10_UI_MOCKUP.md](PHASE10_UI_MOCKUP.md) (bitcrafty-branded Next.js mockup, reviewed),
   Phase 11 roadmap.
@@ -20,16 +23,17 @@
   [history/GROOMING_ARCHIVE.md](history/GROOMING_ARCHIVE.md); role-scoped reads wired into the
   instruction files.
 
-**▶ NEXT — Phase 10 build, slices 10.2 → 10.7 (one PR each, API-first)**
+**▶ NEXT — Phase 10 build, slices 10.3 → 10.7 (one PR each, API-first)**
 
 The Streamlit→Next.js+FastAPI decision is recorded in [ARCHITECTURE.md §16](ARCHITECTURE.md)
 (AD-16.1..7: FastAPI over the unchanged domain, `schema.py` as wire contract, auth at the API
-boundary, SSE grill, Cloud Run). Executable **API-first** build tickets 10.2–10.7 are ✅ Ready in
+boundary, SSE grill, Cloud Run). Executable **API-first** build tickets 10.3–10.7 are ✅ Ready in
 [GROOMING.md §Phase 10](GROOMING.md); sequencing in [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md).
-Build one slice per PR, in order. **Next up = 10.2 read APIs** (`GET /api/dashboard`, `/api/portfolio`,
-`/api/jobs`) reusing `web/session_loader.py` + portfolio view builders + discovery ledger reads;
-degrade to an empty typed payload on load failure (never 500). Hand the builder the 10.2 ticket +
-[skills/build-slice](../skills/build-slice/SKILL.md) — not the big docs.
+Build one slice per PR, in order. **Next up = 10.3 write APIs** (profile / portfolio / preferences /
+workspace mutations) reusing `web/profile_store.py`, `web/portfolio_store.py`,
+`web/preferences_store.py`, and the workspace store (BUG-1 per-request async client); validation
+errors → 422, empty/no-op edits behave exactly as the store already does. Hand the builder the 10.3
+ticket + [skills/build-slice](../skills/build-slice/SKILL.md) — not the big docs.
 
 **What shipped this session (5-PR cycle: 2 bug fixes + Phase 9 completion + Phase 10 groom):**
 

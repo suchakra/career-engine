@@ -38,7 +38,7 @@ Canonical status for every phase is in [PROGRESS.md](PROGRESS.md).
 
 ## Phase 10 — Replace Streamlit with Next.js + FastAPI (build tickets)
 
-> **Status: 10.0 done + 10.1 SHIPPED (PR #63); 10.2–10.7 are ✅ Ready build specs.** The accepted
+> **Status: 10.0 done + 10.1 & 10.2 SHIPPED (PR #63, #64); 10.3–10.7 are ✅ Ready build specs.** The accepted
 > decision, rationale, auth model, streaming choice, deploy
 > topology, and API contract sketch are **canonical in [ARCHITECTURE.md §16](ARCHITECTURE.md)** — do
 > not restate them here. Sequencing is in [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) Phase 10;
@@ -86,7 +86,9 @@ Do **not** build a cookie/OIDC-callback session store.
 - **Tests:** `test_api_auth_rejects_missing_token`, `test_api_me_resolves_user_id` (injected fake
   verifier / store double, no network), plus `test_api_health_ok` and an invalid-token → 401 case.
 
-### ✅ 10.2 — Read APIs  *(M · Backend)*
+### ✅ 10.2 — Read APIs  *(SHIPPED — PR #64)*
+> Merged: protected `GET /api/dashboard` + `/api/portfolio` + `/api/jobs` wrapping the pure view builders + session/ledger reads; async endpoints + `run_in_threadpool` for sync stores; strict `api/schemas.py` response models; degrade-to-empty (never 500); 13 tests. Status canonical in [PROGRESS.md](PROGRESS.md).
+
 Typed GET endpoints wrapping existing read paths — **no behaviour change**.
 - **Endpoints:** `GET /api/dashboard`, `GET /api/portfolio`, `GET /api/jobs`.
 - **Reuse:** `web/session_loader.py`, portfolio view builders, `discovery` ledger reads.
