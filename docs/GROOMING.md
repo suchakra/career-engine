@@ -132,8 +132,10 @@ The React shell consuming 10.1–10.3.
   full-page reload** (optimistic update + rollback on error); frontend request/response types are
   generated from the FastAPI OpenAPI schema.
 - **Tests:** component/integration tests for auth-guarded routing + one form-submit happy path
-  (mocked API) **including an optimistic-write rollback on a failed mutation**; a bundle-size check
-  gates the shadcn + data-layer choice (§8 spike).
+  (mocked API via **MSW**; **Vitest + React Testing Library**) **including an optimistic-write rollback
+  on a failed mutation**; a bundle-size check gates the shadcn + data-layer choice
+  ([PHASE10_UI_MOCKUP.md §8](PHASE10_UI_MOCKUP.md) spike). Frontend toolchain + test stack per
+  [ARCHITECTURE.md §16 AD-16.9](ARCHITECTURE.md).
 
 ### ✅ 10.6 — Next.js grill (streaming) + tailor + résumé export  *(L · Frontend)*
 The interactive surface consuming 10.4; unblocks 9H (inline résumé-edit chat) and 9M (DnD editor).

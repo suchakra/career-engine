@@ -557,7 +557,8 @@ transport only (AD-16.2 / AD-16.7).
 Dashboard (§4.1) · explicit mobile spec (§6.1) · light/dark theme + toggle (§2/§3) · grill-component
 reuse boundary as `StreamingTranscript` (§9) · concrete color/type/focus tokens (§2) · locked
 empty-state copy (§5) · **foundational component inventory** (§2) · **client data layer** = TanStack
-Query with optimistic writes ([ARCHITECTURE.md §16 AD-16.8](ARCHITECTURE.md)).
+Query with optimistic writes ([ARCHITECTURE.md §16 AD-16.8](ARCHITECTURE.md)) · **frontend test stack** =
+Vitest + React Testing Library + MSW + Playwright ([ARCHITECTURE.md §16 AD-16.9](ARCHITECTURE.md)).
 
 **Still open (decide during build):**
 1. **Jobs layout** — side-by-side tiers vs a single ranked list with a "for review" filter toggle.
