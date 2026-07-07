@@ -23,6 +23,36 @@ class _StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class ApplicationWriteRequest(_StrictModel):
+    """Request body for ``POST /api/applications`` (api-local, not ``schema.py``).
+
+    A strict, no-extra-fields DTO the endpoint maps onto the existing
+    ``web.application_store.save_tailored_application`` seam. ``applied_on`` is NOT
+    part of the request: it is the injected clock computed at the endpoint boundary
+    (``datetime.date.today()``), never supplied by the caller.
+    """
+
+    company: str
+    job_title: str
+    jd_text: str
+    tailored_resume_json: str
+
+
+class ExperienceWriteResponse(_StrictModel):
+    """Response for ``POST /api/experience`` (api-local, not ``schema.py``).
+
+    Confirms the persisted manual entry by echoing its ``entry_id`` and the
+    ``title``/``org`` re-read from the discovery session, plus the resulting
+    ``entry_count``. If the write can't be re-read, the endpoint still returns the
+    echoed ``entry_id`` (with the submitted ``title``/``org``) rather than 500.
+    """
+
+    entry_id: str
+    title: str
+    org: str
+    entry_count: int
+
+
 class DashboardResponse(_StrictModel):
     """Mirror of :class:`web.dashboard.DashboardView` (display-ready)."""
 

@@ -96,6 +96,31 @@ async def _aadd_manual_entry(
     return session_id
 
 
+async def aadd_manual_entry(
+    session_service: BaseSessionService,
+    *,
+    app_name: str,
+    user_id: str,
+    reference_date: str,
+    entry: Entry,
+) -> str:
+    """Public async wrapper over :func:`_aadd_manual_entry` (no behavior change).
+
+    The native-async twin of :func:`add_manual_entry` for callers already inside
+    an event loop (e.g. an async FastAPI endpoint), which MUST NOT use the
+    :func:`web.async_runner.run_async` sync bridge. It simply awaits the existing
+    private async core — no logic is duplicated or altered — and returns the
+    session_id the entry was written to.
+    """
+    return await _aadd_manual_entry(
+        session_service,
+        app_name=app_name,
+        user_id=user_id,
+        reference_date=reference_date,
+        entry=entry,
+    )
+
+
 async def _aset_grill_frontier(
     session_service: BaseSessionService,
     *,
@@ -406,6 +431,7 @@ def update_entry_bullet(
 
 
 __all__ = [
+    "aadd_manual_entry",
     "add_manual_entry",
     "delete_star_story",
     "set_entry_highlight",
