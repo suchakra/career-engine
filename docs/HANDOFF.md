@@ -1,32 +1,28 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-07 — Ticket 9F shipped: PR #58 merged)
-**`master` clean @ `8fd065f` · contract v2.8.0 · 703 tests (1 skipped) · all PRs merged.**
-**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + 9J + 9B + 9K + 9I + 9G + 9C + 9E + 9D + 9A + 9F + BUG-1 + BUG-2 COMPLETE. Phase 9 is DONE.**
+## 👉 YOU ARE HERE (updated 2026-07-07 — Phase 10 groomed: PR #59 merged; 5-PR cycle complete)
+**`master` clean @ `db15e3c` · contract v2.8.0 · 703 tests (1 skipped) · all PRs merged.**
+**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + all of Phase 9 (9A/9B/9C/9D/9E/9F/9G/9I/9J/9K) + BUG-1 + BUG-2 COMPLETE. Phase 10 is groomed (build not started).**
 
-**▶ NEXT — PR5: Phase 10 grooming + tech writeup**
+**▶ NEXT — Phase 10 build, slice 10.1 (FastAPI skeleton + auth boundary)**
 
-Groom Phase 10 (Next.js frontend + FastAPI backend) into GROOMING.md, plus a short tech
-recommendation writeup. Per docs-governance, do **10.0 first**: record the Phase-10 architecture
-decision (framework choice, API boundary, migration path off Streamlit) in `docs/ARCHITECTURE.md`
-as an accepted decision, THEN regenerate the executable build prompts in GROOMING.md §Phase 10.
-This PR is docs-only (no code): update ARCHITECTURE.md + GROOMING.md, and add the writeup.
+The Streamlit→Next.js+FastAPI decision is recorded in [ARCHITECTURE.md §16](ARCHITECTURE.md)
+(AD-16.1..7: FastAPI over the unchanged domain, `schema.py` as wire contract, auth at the API
+boundary, SSE grill, Cloud Run). Executable **API-first** build tickets 10.1–10.7 are ✅ Ready in
+[GROOMING.md §Phase 10](GROOMING.md); sequencing in [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md).
+Build one slice per PR, in order. **10.1 has a PAUSE point:** pick the auth shape (OIDC-at-FastAPI
+session cookie vs Firebase ID-token bearer) and confirm against `auth/` before wiring protected routes.
 
-**What shipped this session (Phase 9 completion batch):**
+**What shipped this session (5-PR cycle: 2 bug fixes + Phase 9 completion + Phase 10 groom):**
 
-- **9A (PR #57):** Portfolio — delete recorded STAR stories + edit résumé bullets in place.
-  `_adelete_star_story`/`_aupdate_entry_bullet` (+ sync wrappers) in `web/portfolio_store.py`;
-  `StoryCard.story_id` + `on_delete_story`/`on_edit_bullet` callbacks in `web/portfolio.py`;
-  on_click handlers in `web/streamlit_app.py`. Empty bullet edits are a no-op (Copilot review).
-  No contract change.
-- **9F (PR #58):** Jobs — preference-form guidance (`help=`/`placeholder=`) via injectable
-  `render_preferences_form`, and `derive_initial_roles(state)` seeding first-time target roles
-  from the user's own portfolio (gated to never-saved-rubric users, once per session). No
-  `scout.py` changes (query narrowing is the **9F-b** follow-up). Groom corrections recorded in
-  the PR: the form lived in `_render_jobs` not `render_jobs`; new users have empty prefs, not
-  operator defaults. No contract change.
-
-**What shipped earlier (bug-fix batch):**
+- **PR5 — Phase 10 groom (PR #59, docs-only):** recorded the web-platform migration decision in
+  ARCHITECTURE §16 (the tech recommendation writeup), added Phase 10 to the plan roadmap, and rebuilt
+  GROOMING §Phase 10 into ✅ Ready API-first build tickets 10.1–10.7. Copilot review: clean (no
+  comments). No code / contract change.
+- **9F (PR #58):** Jobs — preference-form guidance + `derive_initial_roles` portfolio-seeded defaults.
+- **9A (PR #57):** Portfolio — delete STAR stories + edit résumé bullets (empty edit = no-op).
+- **BUG-2 (PR #56):** Grill "currently grilling" banner missing on first question after resume.
+- **BUG-1 (PR #55):** Workspace saves failing with "event loop is closed" + auth redirect-URI hotfix.
 
 - **BUG-1 (PR #55):** Workspace saves failed with "Event loop is closed" (profile save +
   track-application). `FirestoreWorkspaceStore` reused one `AsyncClient` across two `asyncio.run()`

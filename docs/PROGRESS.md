@@ -3,7 +3,7 @@
 > Single source of truth for **what's done vs. pending**. Update this at the end of every work
 > session / sub-agent run. Keep entries terse. Legend: ✅ done · 🟡 in progress · ⬜ not started · 🚫 blocked.
 
-Last updated: **2026-07-07** — *Tickets 9A (PR #57) + 9F (PR #58) merged — Phase 9 complete. master @ `8fd065f`, contract v2.8.0, 703 tests (1 skipped). Next: PR5 = Phase 10 grooming + tech writeup.*
+Last updated: **2026-07-07** — *Phase 10 groomed: PR #59 recorded the Streamlit→Next.js+FastAPI decision (ARCHITECTURE §16) + build tickets 10.1-10.7. master @ `db15e3c`, contract v2.8.0, 703 tests (1 skipped). 5-PR cycle complete. Next: begin Phase 10 build at 10.1 (FastAPI skeleton + auth boundary).*
 
 ---
 
@@ -24,6 +24,7 @@ Last updated: **2026-07-07** — *Tickets 9A (PR #57) + 9F (PR #58) merged — P
 | Phase 7 — Job Discovery web surface | ✅ COMPLETE | **7A** (PR #38, **contract v2.8.0**): `UserWorkspace.discovery_preferences` + `web/preferences_store.py`. **7B** (PR #39): Jobs nav view — `web/jobs.py`, `web/jobs_runner.py`, `_render_jobs` in `streamlit_app.py`. **7C**: "Tailor to this job." Post-7: HITL "Not interested" (PR #40), `StdioMcpClient` (PR #41), HITL "Keep this" (PR #42). ⚠️ Deploy gap — Jobs is wired in code; Cloud Run dev app needs Phase 8A redeploy. |
 | Phase 8 — Operational hardening | 🟡 in progress | ✅ 8A · ✅ 8B (PR #43) · ✅ 8C (PR #44) · ✅ 8D (PR #45) · ✅ 8G (PR #46) · ⬜ 8E deployer-SA · ⬜ 8F HITL TTL. Groomed in [GROOMING.md §Phase 8](GROOMING.md). |
 | Phase 9 — Replace Streamlit; proper product UI | ✅ done | ✅ 9J · ✅ 9B · ✅ 9K · ✅ 9I · ✅ 9G · ✅ 9C · ✅ 9E · ✅ 9D · ✅ 9A · ✅ 9F. |
+| Phase 10 — Migrate to Next.js + FastAPI | 🟡 groomed (build not started) | ✅ 10.0 decision recorded ([ARCHITECTURE.md §16](ARCHITECTURE.md), PR #59); 10.1-10.7 are ✅ Ready build tickets in [GROOMING.md §Phase 10](GROOMING.md). API-first; build one slice per PR. |
 | Live bug fixes | 🟡 in progress | ✅ BUG-1 workspace-save "Event loop is closed" + auth-redirect pin (PR #55) · ✅ BUG-2 grill banner missing on first question after resume (PR #56). Groomed in [GROOMING.md §Bugs](GROOMING.md). |
 
 ---
