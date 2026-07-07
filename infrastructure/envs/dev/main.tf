@@ -146,9 +146,9 @@ module "cloud_run" {
   allow_unauthenticated = true
 
   env = {
-    GCP_PROJECT_ID       = var.project_id
-    GCP_REGION           = var.region
-    CE_AUTH_CLIENT_ID    = var.auth_client_id
+    GCP_PROJECT_ID    = var.project_id
+    GCP_REGION        = var.region
+    CE_AUTH_CLIENT_ID = var.auth_client_id
     # Streamlit's native OIDC handler lives at /oauth2callback (NOT /_stcore/...).
     # The /_stcore/oauth2callback path only returns the app shell → the callback
     # silently fails and login hangs. Keep this path in sync with the redirect URI
