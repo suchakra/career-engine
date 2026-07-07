@@ -23,7 +23,7 @@ import streamlit as st
 if TYPE_CHECKING:
     from web.resume_builder import StructuredResume
 
-from schema import CareerEngineState, UserWorkspace
+from schema import CareerEngineState, UserProfile, UserWorkspace
 from web.dashboard import build_dashboard_view, render_dashboard
 
 
@@ -89,6 +89,24 @@ def _load_discovery_state(*, user_id: str, today: str) -> CareerEngineState:
         user_id=user_id,
         reference_date=today,
     )
+
+
+def _load_user_profile(user_id: str) -> UserProfile:
+    """Load the user's persisted profile (empty for a new user). Monkeypatchable in tests."""
+    from database.firestore_session import ContractVersionError
+    from database.workspace_store import FirestoreWorkspaceStore
+    from web.profile_store import load_profile
+
+    try:
+        profile = load_profile(FirestoreWorkspaceStore(), user_id=user_id)
+        st.session_state.pop("_profile_load_failed", None)
+        return profile
+    except ContractVersionError:
+        raise  # schema mismatch must not masquerade as empty (lost) profile
+    except Exception:
+        st.warning("Couldn't load your profile just now — profile editing is disabled.")
+        st.session_state["_profile_load_failed"] = True
+        return UserProfile()
 
 
 def _render_signin() -> None:
@@ -246,10 +264,13 @@ def _render_add_experience_form(*, user_id: str, today: str) -> None:
 
 
 def _render_portfolio(*, user_id: str, today: str) -> None:
-    """Read-only Portfolio view + steer/add controls (4B/4C/4D)."""
-    from web.portfolio import build_portfolio_view, render_portfolio
+    """Portfolio view with entry controls and editable Profile section (4B/4C/4D/9C)."""
+    from web.portfolio import build_portfolio_view, build_profile_view, render_portfolio
+    from web.profile_store import save_profile
 
     state = _load_discovery_state(user_id=user_id, today=today)
+    profile = _load_user_profile(user_id)
+    profile_load_failed = st.session_state.get("_profile_load_failed", False)
 
     def _grill_entry(entry_id: str) -> None:
         _jump_grill_to_entry(user_id=user_id, entry_id=entry_id)
@@ -257,12 +278,28 @@ def _render_portfolio(*, user_id: str, today: str) -> None:
     def _toggle_highlight(entry_id: str, highlighted: bool) -> None:
         _set_entry_highlight(user_id=user_id, entry_id=entry_id, highlighted=highlighted)
 
+    def _on_save_profile(p: UserProfile) -> None:
+        from database.firestore_session import ContractVersionError
+        from database.workspace_store import FirestoreWorkspaceStore
+
+        if st.session_state.get("_profile_load_failed"):
+            st.error("Profile save disabled — initial load failed. Please refresh.")
+            return
+        try:
+            save_profile(FirestoreWorkspaceStore(), user_id=user_id, profile=p)
+        except ContractVersionError:
+            raise  # schema mismatch must not masquerade as a transient save failure
+        except Exception:
+            st.error("Couldn't save your profile — please try again.")
+
     _render_add_experience_form(user_id=user_id, today=today)
     render_portfolio(
         build_portfolio_view(state),
         st=st,
         on_grill_entry=_grill_entry,
         on_toggle_highlight=_toggle_highlight,
+        on_save_profile=None if profile_load_failed else _on_save_profile,
+        profile_view=build_profile_view(profile),
     )
     _render_master_resume_download(user_id=user_id, state=state)
 
