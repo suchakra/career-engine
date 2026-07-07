@@ -1,10 +1,13 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-07 — Phase 10 groomed + auth resolved; context strategy landed; ready to build 10.1)
-**`master` clean @ `c3e0de5` · contract v2.8.0 · 703 tests (1 skipped) · all merged PRs green.**
-**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + all of Phase 9 (9A/9B/9C/9D/9E/9F/9G/9I/9J/9K) + BUG-1 + BUG-2 COMPLETE. Phase 10 is groomed (build not started).**
+## 👉 YOU ARE HERE (updated 2026-07-07 — Phase 10 build STARTED; slice 10.1 in flight)
+**`master` clean @ `19df25c` · contract v2.8.0 · 703 tests (1 skipped) · all merged PRs green.**
+**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + all of Phase 9 (9A/9B/9C/9D/9E/9F/9G/9I/9J/9K) + BUG-1 + BUG-2 COMPLETE. Phase 10 is groomed; building API-first, one slice per PR.**
 
-**Just merged (both docs-only):**
+**Just merged (all docs/design, no domain change):**
+- **PR #62** — UI grooming: component inventory (PHASE10_UI_MOCKUP §2) + **AD-16.8** (TanStack Query
+  client data/state layer, optimistic writes) + **AD-16.9** (frontend test stack = Vitest/RTL/MSW/
+  Playwright; devcontainer pins **Node 22**, Playwright system deps at 10.5).
 - **PR #60** — Phase 10 design docs: resolves the 10.1 auth shape (Firebase bearer, AD-16.4),
   adds [PHASE10_UI_MOCKUP.md](PHASE10_UI_MOCKUP.md) (bitcrafty-branded Next.js mockup, reviewed),
   Phase 11 roadmap.
@@ -14,7 +17,7 @@
   [history/GROOMING_ARCHIVE.md](history/GROOMING_ARCHIVE.md); role-scoped reads wired into the
   instruction files.
 
-**▶ NEXT — Phase 10 build, slice 10.1 (FastAPI skeleton + auth boundary)**
+**▶ NEXT — Phase 10 build, slices 10.1 → 10.7 (one PR each, API-first)**
 
 The Streamlit→Next.js+FastAPI decision is recorded in [ARCHITECTURE.md §16](ARCHITECTURE.md)
 (AD-16.1..7: FastAPI over the unchanged domain, `schema.py` as wire contract, auth at the API
