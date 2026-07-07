@@ -1,16 +1,17 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-07 — BUG-1 + BUG-2 fixed: PR #55 + #56 merged)
-**`master` clean @ `ccb7518` · contract v2.8.0 · 685 tests (1 skipped) · all PRs merged.**
-**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + 9J + 9B + 9K + 9I + 9G + 9C + 9E + 9D + BUG-1 + BUG-2 COMPLETE.**
+## 👉 YOU ARE HERE (updated 2026-07-07 — Ticket 9A shipped: PR #57 merged)
+**`master` clean @ `bb04625` · contract v2.8.0 · 696 tests (1 skipped) · all PRs merged.**
+**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + 9J + 9B + 9K + 9I + 9G + 9C + 9E + 9D + 9A + BUG-1 + BUG-2 COMPLETE.**
 
-**▶ NEXT — PR3: Ticket 9A (delete STAR story + edit entry bullet)**
+**▶ NEXT — PR4: Ticket 9F (preferences UX + `derive_initial_roles`)**
 
-9A: delete STAR stories + edit entry bullets in Portfolio. PAUSE condition **resolved** —
-`StarStory.story_id` already exists (schema.py:178), so **no contract bump**. Add
-`delete_star_story` + `update_entry_bullet` to `web/portfolio_store.py`, UI controls in
-`web/portfolio.py`, 5 named tests. Full spec in GROOMING.md §9A.
-Then PR4 (9F: prefs UX + `derive_initial_roles`) and PR5 (Phase 10 grooming + tech writeup).
+9F: preferences-view help copy in `web/jobs.py`, `derive_initial_roles()` in
+`web/preferences_store.py`, and jobs-route prefill in `web/streamlit_app.py`. **No `scout.py`
+changes.** 4 named tests: `test_jobs_view_help_text_on_target_roles`,
+`test_derive_initial_roles_top_3`, `test_derive_initial_roles_empty_state`,
+`test_jobs_view_fallback_if_no_state`. PAUSE if an extra Firestore read is needed. Full spec in
+GROOMING.md §9F. Then PR5 (Phase 10 grooming + tech writeup).
 
 **What shipped this session (bug-fix batch):**
 
@@ -42,7 +43,7 @@ Then PR4 (9F: prefs UX + `derive_initial_roles`) and PR5 (Phase 10 grooming + te
 - **9B (PR #49):** Add-experience CTA moved before entry list.
 - **9K (PR #50):** Per-entry STAR story progress indicator.
 
-**Remaining Phase 9 tickets:** 9A · 9F (see GROOMING.md for specs).
+**Remaining Phase 9 tickets:** 9F (see GROOMING.md for spec).
 
 ---
 *Historical session notes follow (most recent first):*
