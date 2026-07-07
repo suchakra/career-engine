@@ -2,8 +2,21 @@
 
 from __future__ import annotations
 
-from schema import Application, PendingAction, SessionPreferences, UserProfile, UserWorkspace
-from web.preferences_store import load_discovery_preferences, save_discovery_preferences
+from schema import (
+    Application,
+    CareerEngineState,
+    Entry,
+    ExperienceType,
+    PendingAction,
+    SessionPreferences,
+    UserProfile,
+    UserWorkspace,
+)
+from web.preferences_store import (
+    derive_initial_roles,
+    load_discovery_preferences,
+    save_discovery_preferences,
+)
 
 
 class _FakeStore:
@@ -59,6 +72,42 @@ def test_save_does_not_mutate_loaded_workspace_in_place() -> None:
     )
     assert original.discovery_preferences == SessionPreferences()  # untouched
     assert store.load("u1").discovery_preferences.target_roles == ["CTO"]
+
+
+def _entry(title: str, *, end_date: str) -> Entry:
+    return Entry(type=ExperienceType.FULL_TIME, title=title, org="Acme", end_date=end_date)
+
+
+def test_derive_initial_roles_top_3() -> None:
+    # Five entries provided oldest-first; derive must return the 3 most recent titles.
+    state = CareerEngineState(
+        work_timeline=[
+            _entry("Junior Engineer", end_date="2015"),
+            _entry("Engineer", end_date="2018"),
+            _entry("Senior Engineer", end_date="2020"),
+            _entry("Staff Engineer", end_date="2022"),
+            _entry("Principal Engineer", end_date=""),  # blank = present = newest
+        ]
+    )
+    assert derive_initial_roles(state) == [
+        "Principal Engineer",
+        "Staff Engineer",
+        "Senior Engineer",
+    ]
+
+
+def test_derive_initial_roles_empty_state() -> None:
+    assert derive_initial_roles(CareerEngineState()) == []
+
+
+def test_derive_initial_roles_skips_empty_titles() -> None:
+    state = CareerEngineState(
+        work_timeline=[
+            _entry("Real Role", end_date="2024"),
+            _entry("", end_date="2023"),
+        ]
+    )
+    assert derive_initial_roles(state) == ["Real Role"]
 
 
 def test_load_returns_a_defensive_copy() -> None:

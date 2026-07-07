@@ -164,7 +164,7 @@ def main() -> None:
         _render_portfolio(user_id=user_id, today=today)
         return
     if view_name == "jobs":
-        _render_jobs(user_id=user_id)
+        _render_jobs(user_id=user_id, today=today)
         return
 
     state = _load_discovery_state(user_id=user_id, today=today)
@@ -480,9 +480,9 @@ def _prefs_from_session(ss: Any) -> Any:
     )
 
 
-def _render_jobs(*, user_id: str) -> None:
+def _render_jobs(*, user_id: str, today: str) -> None:
     """Job Discovery view (7B): preferences → live two-agent loop → ranked matches."""
-    from web.jobs import build_jobs_view, render_jobs
+    from web.jobs import build_jobs_view, render_jobs, render_preferences_form
     from web.jobs_runner import build_web_primary, run_web_discovery
 
     st.title("Find jobs")
@@ -501,10 +501,21 @@ def _render_jobs(*, user_id: str) -> None:
     if not ss.get("_jobs_prefs_loaded"):
         ss["_jobs_prefs_loaded"] = True
         try:
-            from web.preferences_store import load_discovery_preferences
+            from web.preferences_store import derive_initial_roles, load_discovery_preferences
 
             saved = load_discovery_preferences(_workspace_store(), user_id=user_id)
-            ss.setdefault("jobs_target_roles", "\n".join(saved.target_roles))
+            # A user who has never saved a rubric has empty target_roles. Seed that
+            # field from their own recent experience so the first run reflects them
+            # (one extra Firestore read, gated to this case and once per session;
+            # best-effort — an empty/unavailable state falls back cleanly).
+            roles_seed = saved.target_roles
+            if not saved.target_roles:
+                derived = derive_initial_roles(
+                    _load_discovery_state(user_id=user_id, today=today)
+                )
+                if derived:
+                    roles_seed = derived
+            ss.setdefault("jobs_target_roles", "\n".join(roles_seed))
             ss.setdefault("jobs_nice", "\n".join(saved.nice_to_haves))
             ss.setdefault("jobs_deal", "\n".join(saved.dealbreakers))
         except Exception:
@@ -516,10 +527,7 @@ def _render_jobs(*, user_id: str) -> None:
     )
     # Explicit widget keys → Streamlit owns the state under these keys (the prefill
     # above seeds them via setdefault); no manual value=/mirror-assign (avoids drift).
-    with st.expander("Your job preferences", expanded=not ss.get("jobs_target_roles")):
-        st.text_area("Target roles (one per line)", key="jobs_target_roles")
-        st.text_area("Nice to have (one per line)", key="jobs_nice")
-        st.text_area("Dealbreakers (one per line)", key="jobs_deal")
+    render_preferences_form(st=st, expanded=not ss.get("jobs_target_roles"))
 
     if st.button("Find jobs", type="primary"):
         from discovery.scout import Scout
