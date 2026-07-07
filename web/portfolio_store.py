@@ -104,7 +104,7 @@ async def aadd_manual_entry(
     reference_date: str,
     entry: Entry,
 ) -> str:
-    """Public async wrapper over :func:`_aadd_manual_entry` (no behaviour change).
+    """Public async wrapper over :func:`_aadd_manual_entry` (no behavior change).
 
     The native-async twin of :func:`add_manual_entry` for callers already inside
     an event loop (e.g. an async FastAPI endpoint), which MUST NOT use the

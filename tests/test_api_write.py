@@ -232,8 +232,21 @@ def test_preferences_write_requires_auth(client: TestClient) -> None:
 # ── POST /api/applications ────────────────────────────────────────────────────
 
 
-def test_application_write_round_trip(client: TestClient) -> None:
+def test_application_write_round_trip(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """POST /api/applications records the application and re-reads it (round-trip)."""
+    # Freeze the endpoint's injected clock so the applied_on assertion below is
+    # deterministic (never flakes around midnight when test and endpoint could
+    # otherwise observe different dates).
+    fixed = date(2025, 1, 15)
+
+    class _FixedDate:
+        @staticmethod
+        def today() -> date:
+            return fixed
+
+    monkeypatch.setattr("api.routes_write.date", _FixedDate)
     store = _FakeWorkspaceStore()
     app.dependency_overrides[get_workspace_store] = lambda: store
     req = {
@@ -248,8 +261,8 @@ def test_application_write_round_trip(client: TestClient) -> None:
     assert body["company"] == "Globex"
     assert body["job_title"] == "Product Manager"
     assert body["status"] == "applied"
-    # applied_on is the injected clock computed at the endpoint boundary.
-    assert body["applied_on"] == date.today().isoformat()
+    # applied_on is the frozen injected clock computed at the endpoint boundary.
+    assert body["applied_on"] == fixed.isoformat()
     # Persisted in the store.
     apps = store.load(_USER_ID).applications
     assert len(apps) == 1
