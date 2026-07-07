@@ -234,3 +234,52 @@ class TestBuildRunnerThreadsFactory:
 
         assert call_count[0] > 0, "fake_factory was never called by the runner"
         assert fake_client.calls, "fake_client.generate was never called"
+
+
+class TestBuildRunnerThreadsTailorInstructions:
+    """test_build_runner_threads_tailor_instructions: tailor_instructions flows into tailor_node."""
+
+    def test_build_runner_threads_tailor_instructions(self) -> None:
+        fake_client = _SentinelClient("tailor_instructions_test")
+
+        svc: Any = InMemorySessionService()  # type: ignore[no-untyped-call]
+        session_id = str(uuid.uuid4())
+        app_name = "test_tailor_instructions"
+        user_id = "test_user"
+
+        # Phase=COMPLETE so router → finalize → tailor runs in one pass.
+        state = CareerEngineState(
+            current_phase=PhaseStatus.COMPLETE,
+            master_resume_json='{"summary": "test"}',
+            jd_text="Build distributed systems.",
+            reference_date="2026-07-06",
+        )
+
+        async def _run() -> None:
+            await svc.create_session(
+                app_name=app_name,
+                user_id=user_id,
+                session_id=session_id,
+                state=state.model_dump(mode="json"),
+            )
+            runner = build_runner(
+                session_service=svc,
+                app_name=app_name,
+                model_factory=lambda: fake_client,
+                tailor_instructions="be concise",
+            )
+            async for _ in runner.run_async(
+                user_id=user_id,
+                session_id=session_id,
+                state_delta={},
+            ):
+                pass
+
+        asyncio.run(_run())
+
+        # tailor_node is the last node; its generate() call carries the instructions in user prompt.
+        assert fake_client.calls, "client was never called"
+        tailor_call = fake_client.calls[-1]
+        assert "be concise" in tailor_call["user"], (
+            f"tailor_instructions not found in user prompt: {tailor_call['user']!r}"
+        )

@@ -1107,6 +1107,42 @@ class TestTailorNode:
         assert "MASTER_MARKER" in prompt
         assert "JD_MARKER" in prompt
 
+    def test_tailor_node_appends_instructions(self) -> None:
+        """_instructions text is appended to the user prompt (not system) (CLI path)."""
+        client = ScriptedClient(
+            responses={"tailoring a master resume": "{}"}
+        )
+        _install_client(client)
+
+        state = CareerEngineState(
+            current_phase=PhaseStatus.COMPLETE,
+            master_resume_json='{"summary": "master"}',
+            jd_text="We need a backend engineer.",
+        )
+        tailor_node(state, _instructions="use formal tone")
+
+        assert client.calls, "tailor never called the model"
+        assert "use formal tone" in client.calls[-1]["user"]
+
+    def test_tailor_node_empty_instructions_unchanged(self) -> None:
+        """Empty _instructions leaves the system prompt exactly as TAILOR_SYSTEM_PROMPT."""
+        from workflows.prompts import TAILOR_SYSTEM_PROMPT
+        client = ScriptedClient(
+            responses={"tailoring a master resume": "{}"}
+        )
+        _install_client(client)
+
+        state = CareerEngineState(
+            current_phase=PhaseStatus.COMPLETE,
+            master_resume_json='{"summary": "master"}',
+            jd_text="We need a backend engineer.",
+        )
+        tailor_node(state, _instructions="")
+
+        assert client.calls, "tailor never called the model"
+        assert client.calls[-1]["system"] == TAILOR_SYSTEM_PROMPT
+        assert "Additional instructions" not in client.calls[-1]["user"]
+
 
 # ── Purity — same input -> same output, no external mutation ──────────────────
 

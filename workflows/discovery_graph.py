@@ -177,6 +177,7 @@ def _write_state(ctx: object, new_state: CareerEngineState) -> None:
 
 def build_discovery_workflow(
     model_factory: Callable[[], ModelClient] | None = None,
+    tailor_instructions: str = "",
 ) -> Workflow:
     """Build and return the ADK 2.0 Workflow for the discovery loop.
 
@@ -186,6 +187,10 @@ def build_discovery_workflow(
             so each workflow instance is isolated from the process-global
             factory.  When ``None``, nodes fall back to ``_get_model_client()``
             (CLI / test path).
+        tailor_instructions: Optional per-application instructions forwarded
+            to ``tailor_node`` as ``_instructions``.  Appended to the *user*
+            prompt (not the system prompt) so the fixed system rules remain
+            intact.  Defaults to ``""`` (no extra instructions).
 
     Graph:
         START → ingest → router → execute_grill_turn
@@ -256,7 +261,7 @@ def build_discovery_workflow(
         """Tailor shim: passes explicit client when model_factory is set."""
         state = _read_state(ctx)
         _c = model_factory() if model_factory is not None else None
-        new_state = tailor_node(state, _client=_c)
+        new_state = tailor_node(state, _client=_c, _instructions=tailor_instructions)
         _write_state(ctx, new_state)
 
     # ── Create FunctionNode instances ─────────────────────────────────────────
@@ -315,6 +320,7 @@ def build_runner(
     session_service: BaseSessionService | None = None,
     app_name: str = "career_engine_discovery",
     model_factory: Callable[[], ModelClient] | None = None,
+    tailor_instructions: str = "",
 ) -> Runner:
     """Build and return an ADK 2.0 Runner wired to the discovery workflow.
 
@@ -328,6 +334,10 @@ def build_runner(
             ``build_discovery_workflow`` so every node in this runner instance
             uses the same per-request client instead of the process-global
             factory.  When ``None``, nodes fall back to ``_get_model_client()``.
+        tailor_instructions: Optional per-application instructions forwarded
+            through ``build_discovery_workflow`` to ``tailor_node``.  Appended
+            to the *user* prompt so the system prompt rules remain intact.
+            Defaults to ``""`` (no extra instructions).
 
     Returns:
         google.adk.runners.Runner instance ready to call run_async().
@@ -340,7 +350,7 @@ def build_runner(
             InMemorySessionService(),  # type: ignore[no-untyped-call]
         )
 
-    workflow = build_discovery_workflow(model_factory=model_factory)
+    workflow = build_discovery_workflow(model_factory=model_factory, tailor_instructions=tailor_instructions)
     return Runner(
         node=workflow,
         session_service=session_service,

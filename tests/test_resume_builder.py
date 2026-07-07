@@ -204,3 +204,45 @@ class TestTailorStructuredResume:
             client=cast(GeminiModelClient, ScriptedNodeClient(responses={})),
         )
         assert resume.is_empty is True
+
+    def test_tailor_structured_resume_appends_instructions(self) -> None:
+        """_instructions text is appended to the user prompt (not system) sent to the model."""
+        job = _job()
+        s1 = _story(job, "Cut p99 latency 40%")
+        state = CareerEngineState(work_timeline=[job], extracted_star_stories=[s1])
+        client = ScriptedNodeClient(
+            responses={
+                "tailoring a candidate's real": json.dumps(
+                    {"tailored_summary": "S", "skills": [], "selected_achievement_ids": [str(s1.story_id)]}
+                )
+            }
+        )
+        tailor_structured_resume(
+            state, "JD", Contact(),
+            client=cast(GeminiModelClient, client),
+            _instructions="use formal tone",
+        )
+        assert client.calls, "model was never called"
+        assert "use formal tone" in client.calls[-1]["user"]
+
+    def test_tailor_structured_resume_empty_instructions_unchanged(self) -> None:
+        """Empty _instructions leaves the system prompt exactly as STRUCTURED_TAILOR_SYSTEM_PROMPT."""
+        from workflows.prompts import STRUCTURED_TAILOR_SYSTEM_PROMPT
+        job = _job()
+        s1 = _story(job, "Cut p99 latency 40%")
+        state = CareerEngineState(work_timeline=[job], extracted_star_stories=[s1])
+        client = ScriptedNodeClient(
+            responses={
+                "tailoring a candidate's real": json.dumps(
+                    {"tailored_summary": "S", "skills": [], "selected_achievement_ids": [str(s1.story_id)]}
+                )
+            }
+        )
+        tailor_structured_resume(
+            state, "JD", Contact(),
+            client=cast(GeminiModelClient, client),
+            _instructions="",
+        )
+        assert client.calls, "model was never called"
+        assert client.calls[-1]["system"] == STRUCTURED_TAILOR_SYSTEM_PROMPT
+        assert "Additional instructions" not in client.calls[-1]["user"]
