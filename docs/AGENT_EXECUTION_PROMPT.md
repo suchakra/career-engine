@@ -4,6 +4,13 @@ Copy the block below to direct an implementation agent (or a fan-out of sub-agen
 plan. It encodes the non-negotiables so agents don't drift. Use the **Phase 0 prompt first and alone**;
 only after the contract is frozen use the **fan-out prompt**.
 
+> **Status: `historical` playbook (the original Phase 0–3 multi-agent fan-out).** The reusable
+> per-slice builder invariants now live in [`skills/build-slice`](../skills/build-slice/SKILL.md),
+> and how context is scoped per role is canonical in
+> [CONTEXT_STRATEGY.md](CONTEXT_STRATEGY.md). Current work hands a builder a **self-contained ticket +
+> the build-slice skill + one ARCHITECTURE §** — not a "read the big docs in full" list. The Phase 0
+> *contract* builder is the one exception (it writes the contract, so it reads the design docs whole).
+
 ---
 
 ## Model assignment & cost strategy
@@ -93,7 +100,9 @@ preamble + its workstream block. Then run the **integration** and **review** age
 ### Shared preamble (prepend to every workstream agent)
 ```
 You are one of several parallel agents building CareerEngine on Google ADK 2.0.
-READ FIRST: docs/ARCHITECTURE.md, docs/REFINED_PROJECT_PLAN.md, docs/PROGRESS.md.
+READ the Phase-0 contract surface you code against (schema.py, config.py, models/registry.py) + the
+ONE docs/ARCHITECTURE.md section your workstream touches. You do NOT need docs/REFINED_PROJECT_PLAN.md
+or docs/PROGRESS.md in full — your workstream block below is self-contained (see docs/CONTEXT_STRATEGY.md).
 The Phase-0 contract (schema.py, config.py, interfaces, CONTRACT_VERSION) is FROZEN — code against
 it, do not change it. If you believe the contract is wrong, STOP and escalate; do not work around it.
 
