@@ -26,6 +26,14 @@ _EMPTY_TEXT = (
     "postings and the Primary agent ranks them against your rubric."
 )
 
+# Guidance copy for the preferences form (9F). Kept module-level so the exact text
+# is asserted in tests without duplicating string literals.
+_TARGET_ROLES_HELP = (
+    "Be specific: 'Senior Product Manager, B2B SaaS' beats 'Product Manager'. List 2-4 roles."
+)
+_NICE_TO_HAVES_HELP = "Technologies, industries, or company types you prefer."
+_DEALBREAKERS_HELP = "Hard requirements only — things you'd truly decline an offer for."
+
 
 @dataclass(frozen=True)
 class JobCard:
@@ -227,4 +235,39 @@ def render_jobs(
                 _render_card(card, st=st, on_tailor=on_tailor, on_reject=on_reject, on_keep=on_keep)
 
 
-__all__ = ["JobCard", "JobsView", "build_jobs_view", "job_tailor_index", "render_jobs"]
+def render_preferences_form(*, st: Any, expanded: bool = True) -> None:
+    """Render the editable job-preferences form via an injected ``st``-like module.
+
+    Streamlit owns the widget state under the fixed keys ``jobs_target_roles`` /
+    ``jobs_nice`` / ``jobs_deal``; the caller seeds first-use defaults through
+    ``st.session_state`` before calling (including the portfolio-derived role hints
+    from :func:`web.preferences_store.derive_initial_roles`). Pure pass-through —
+    no persistence, no logic here. The ``help=``/``placeholder=`` copy (9F) makes
+    the rubric expectations obvious so users write specific, high-signal criteria.
+
+    Args:
+        st: A Streamlit-like module (real ``streamlit`` in the app; a fake in tests).
+        expanded: Whether the preferences expander starts open (open on first use).
+    """
+    with st.expander("Your job preferences", expanded=expanded):
+        st.text_area(
+            "Target roles (one per line)",
+            key="jobs_target_roles",
+            help=_TARGET_ROLES_HELP,
+            placeholder="Senior Product Manager, B2B SaaS\nStaff Engineer, ML platform",
+        )
+        st.text_area(
+            "Nice to have (one per line)",
+            key="jobs_nice",
+            help=_NICE_TO_HAVES_HELP,
+            placeholder="AWS\nfintech\nremote-first startups",
+        )
+        st.text_area(
+            "Dealbreakers (one per line)",
+            key="jobs_deal",
+            help=_DEALBREAKERS_HELP,
+            placeholder="100% on-site\nW2 middle-management",
+        )
+
+
+__all__ = ["JobCard", "JobsView", "build_jobs_view", "job_tailor_index", "render_jobs", "render_preferences_form"]

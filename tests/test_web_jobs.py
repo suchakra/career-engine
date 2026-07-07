@@ -10,7 +10,13 @@ from typing import Any
 
 from discovery.primary import DiscoveryResult
 from schema import EmploymentType, JobMetadata, JobOpportunity, MatchStatus, WorkModel, make_job_id
-from web.jobs import JobsView, build_jobs_view, job_tailor_index, render_jobs
+from web.jobs import (
+    JobsView,
+    build_jobs_view,
+    job_tailor_index,
+    render_jobs,
+    render_preferences_form,
+)
 
 
 class _SelfContext:
@@ -35,6 +41,7 @@ class FakeSt:
         self.infos: list[str] = []
         self.dividers = 0
         self.buttons: list[tuple[str, dict[str, Any]]] = []
+        self.text_areas: list[tuple[str, dict[str, Any]]] = []
 
     def markdown(self, body: str) -> None:
         self.markdowns.append(body)
@@ -59,6 +66,13 @@ class FakeSt:
 
     def container(self, **kwargs: Any) -> _SelfContext:
         return _SelfContext(self)
+
+    def expander(self, label: str, **kwargs: Any) -> _SelfContext:
+        return _SelfContext(self)
+
+    def text_area(self, label: str, **kwargs: Any) -> str:
+        self.text_areas.append((label, kwargs))
+        return str(kwargs.get("value", ""))
 
 
 def _job(ext: str, *, title: str, company: str, status: MatchStatus, rationale: str) -> JobOpportunity:
@@ -231,3 +245,33 @@ class TestJobTailorIndex:
 
     def test_empty_input(self) -> None:
         assert job_tailor_index([]) == {}
+
+
+class TestRenderPreferencesForm:
+    """render_preferences_form renders the three rubric inputs with guidance copy (9F)."""
+
+    def test_jobs_view_help_text_on_target_roles(self) -> None:
+        st = FakeSt()
+        render_preferences_form(st=st, expanded=True)
+        target = [(label, kw) for label, kw in st.text_areas if label.startswith("Target roles")]
+        assert len(target) == 1
+        help_text = target[0][1].get("help", "")
+        assert help_text and help_text.strip(), "target_roles input must carry non-empty help text"
+
+    def test_all_three_inputs_have_help_and_placeholder(self) -> None:
+        st = FakeSt()
+        render_preferences_form(st=st, expanded=False)
+        assert len(st.text_areas) == 3
+        for _label, kw in st.text_areas:
+            assert kw.get("help", "").strip(), "each input needs help text"
+            assert kw.get("placeholder", "").strip(), "each input needs placeholder text"
+
+    def test_jobs_view_fallback_if_no_state(self) -> None:
+        """With no seeded session defaults, the form still renders all three inputs."""
+        st = FakeSt()
+        render_preferences_form(st=st, expanded=True)
+        labels = [label for label, _ in st.text_areas]
+        assert any(label.startswith("Target roles") for label in labels)
+        assert any(label.startswith("Nice to have") for label in labels)
+        assert any(label.startswith("Dealbreakers") for label in labels)
+
