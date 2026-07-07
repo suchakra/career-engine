@@ -1,47 +1,44 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-06 — Phase 9: 9J+9B+9K shipped, 9I+9G+9C in review)
-**`master` clean @ `37368b4` · contract v2.8.0 · 652 tests (1 skipped) · PR #48 (9I) + PR #51 (9G) + PR #52 (9C) open.**
-**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + 9J + 9B + 9K COMPLETE.**
+## 👉 YOU ARE HERE (updated 2026-07-07 — Phase 9 batch 2 complete: 9I+9G+9C+9E+9D merged)
+**`master` clean @ `11614c0` · contract v2.8.0 · 676 tests (1 skipped) · all PRs merged.**
+**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + 9J + 9B + 9K + 9I + 9G + 9C + 9E + 9D COMPLETE.**
 
-**In review — 9C (PR #52):**
-- **9C:** Editable Profile section in Portfolio view.
-  - `web/portfolio.py`: `ProfileView` dataclass; `build_profile_view()`; `render_profile_section()` (expander, 2-col layout, links CRUD, Save button); `render_portfolio()` gains `on_save_profile` + `profile_view` kwargs, renders profile section at very top when set.
-  - `web/streamlit_app.py`: `_load_user_profile()` monkeypatchable helper; `_render_portfolio()` loads profile, passes `on_save_profile` + `profile_view` to `render_portfolio()`.
-  - `tests/test_web_portfolio.py`: 3 new tests (`TestBuildProfileView`, `TestRenderProfileSection`); existing `FakeSt` upgraded with `columns()` + `expander()`; integration test patched for `_load_user_profile`.
-  - `make check`: 653 passed, 1 skipped. No contract change.
+**▶ NEXT — Launch 9A and 9F (last two Phase 9 tickets)**
 
-**What shipped (9B — PR #49):**
-- **9B:** Add-experience CTA precedes portfolio entry list.
-  - `_render_portfolio()`: `_render_add_experience_form(...)` now called **before** `render_portfolio(...)`.
-  - `_render_add_experience_form()`: `st.caption("Add a role, project, or experience to your portfolio.")` added immediately before `st.expander()`.
-  - New test `test_add_experience_cta_precedes_entry_list` in `tests/test_web_portfolio.py` (recording fake-st verifies CTA caption precedes entry subheaders in widget stream).
-  - `make check`: 648 passed, 1 skipped. No contract change.
+9A: delete STAR stories + edit entry bullets in Portfolio — has a PAUSE condition (check if `StarStory` has `story_id`; if not, confirm contract bump to v2.9.0 before adding it).
+9F: read GROOMING.md §9F for spec before starting.
 
-**What shipped (9J — PR #47):**
-- **9J:** Grill checkpoint info copy: `st.info("💡 You've reached a checkpoint — stories completed so far are visible in Portfolio.")` shown above checkpoint summary when `grill_checkpoint` is set. No logic changes. Test: `test_checkpoint_leave_copy_shown`. Copilot review addressed: removed persistence claims (accurate under both InMemory + Firestore); fixed `_FakeSt.columns()` spec-sized.
+**What shipped this session (batch 2):**
 
-**What shipped (8G — PR #46):**
-- **8G:** Custom domain `career-engine.bitcrafty.cloud` — two new Terraform modules:
-  - `infrastructure/modules/cloud_run_domain_mapping/`: `google_cloud_run_domain_mapping` + `resource_records` output
-  - `infrastructure/modules/cloudflare_dns/`: Cloudflare provider v5+; verification TXT + A/AAAA records; `proxied = false`; `count`-conditional verification resource
-  - `envs/dev/main.tf`: Cloudflare provider + both modules wired; `CE_AUTH_REDIRECT_URI` → `https://${custom_domain}/_stcore/oauth2callback`
-  - `envs/dev/variables.tf`: 4 new vars (`custom_domain`, `cloudflare_zone_id`, `cloudflare_api_token`, `google_domain_verification_txt`); `auth_redirect_uri` removed
-  - `.github/workflows/deploy.yml`: `TF_VAR_auth_redirect_uri` removed (now derived)
-  - Copilot review (4 comments) all addressed: `for_each` key collision fix, `depends_on` Phase-1 apply fix, dead `auth_redirect_uri` refs, `google_domain_verification_txt` made optional
-  - `make tf-check` green. No application code changes.
+- **9I (PR #48):** Tailor — optional Specific instructions textarea. Instructions placed in **user prompt** (not system) to prevent prompt injection. `_instructions` kwarg on `tailor_node` + `tailor_structured_resume`; threaded through `build_discovery_workflow`/`build_runner`. Help text says "not persisted to your profile".
+- **9G (PR #51):** Track application — auto-extract title + company from JD via `web/jd_utils.py`. Null-safe with `_safe_str()`, markdown-fence stripping, `ModelAPIError` propagates, `UpgradeRequired.user_message` surfaced, form stays visible after API error.
+- **9C (PR #52):** Portfolio — editable Profile section. `ProfileView` + `build_profile_view()` + `render_profile_section()` (expander, 2-col, links CRUD, Save). Load failure disables save (data-loss prevention). `ContractVersionError` re-raised in both load and save paths.
+- **9E (PR #53):** Jobs — sort for-review and accepted lists by `ai_rationale` length descending (both fresh-result and prior/initial-entry paths). Lists wrapped in `st.container(height=420)`.
+- **9D (PR #54):** Professional résumé template — `templates/classic_resume.html` rewritten with Inter/system-ui, A4 @page, Experience bullets, Skills pills, Education section. PDF test exercises the template directly via WeasyPrint.
 
-**Phase 9 UI haul backlog captured:**
-- 13-item backlog (9A–9M) in GROOMING.md §Phase 9.
-- 9A–9K + 9I: Streamlit-compatible, can ship as incremental PRs.
-- 9H, 9M: require Next.js frontend (wait on architecture decision).
+**What shipped earlier (batch 1):**
+- **9J (PR #47):** Checkpoint info copy in Grill view.
+- **9B (PR #49):** Add-experience CTA moved before entry list.
+- **9K (PR #50):** Per-entry STAR story progress indicator.
 
-**▶ NEXT — Wait for Copilot review on PR #48 (9I); then 9B.**
-PR #48 (9I: tailor specific instructions textarea) is open. Copilot review requested.
-While waiting: launch 9B (portfolio add-experience CTA) in parallel.
+**Remaining Phase 9 tickets:** 9A · 9F (see GROOMING.md for specs).
 
-After 9I merged: launch batch 9C + 9K + 9G in parallel.
-After that: batch 9E + 9D + 9F. Then 9A (may need story_id contract decision).
+---
+*Historical session notes follow (most recent first):*
+
+**Latest this session:**
+- **DURABLE WEB SESSIONS (data-loss root cause fixed):** the web grill was on `InMemorySessionService`
+  (RAM only) AND `FirestoreSessionService` never persisted per-turn `append_event` deltas → grilling was
+  never durable. Fixed: `append_event` override persists each turn; grill now uses `FirestoreSessionService`
+  under a stable per-user id (`web_session_id`) with resume-on-load; portfolio seam shares that canonical
+  id. No contract change (469 tests; regression test proves the persist). Older in-memory data is
+  unrecoverable (was never written); new grilling persists + resumes. (PR pending — see below.)
+- **Live bugs fixed & deployed (PR #14):** async Firestore client (`get_firestore_async_client`) →
+  fixes "Couldn't reach your saved workspace"; reverted Cloud Run `concurrency=1` → fixes "Rate
+  exceeded"/"Failed to fetch module".
+- **Phase 4 "Portfolio Workbench" SHIPPED & deployed (PRs #15/#16/#17, 467 tests, no contract change):**
+  - **4A** sidebar nav (`web/navigation.py`) — the empty left panel is now Dashboard/Portfolio/Grill/
 
 ---
 *Historical session notes follow (most recent first):*
