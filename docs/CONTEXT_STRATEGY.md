@@ -86,8 +86,9 @@ flowchart LR
 ## Retrieve, don't ingest
 
 Never paste a large doc into a sub-agent. Give a pointer and let the agent pull the one section it
-needs with the workspace search tools (`grep_search`, `semantic_search`, `file_search`). Those tools
-**are** the retrieval layer. To keep them effective, keep docs greppable: stable headers, clear
+needs with whatever workspace search tools its runtime provides (grep / glob / semantic search — e.g.
+`grep_search` / `semantic_search` / `file_search` in some runtimes, `grep` / `glob` in others). Those
+tools **are** the retrieval layer. To keep them effective, keep docs greppable: stable headers, clear
 section anchors, and freshness banners on anything durable.
 
 ## The retire ritual (keeps WARM small forever)

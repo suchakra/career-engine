@@ -14,8 +14,8 @@
 
 ## Phase 1.5 status (archived)
 
-Phase 1.5 is complete (contract v2.0.0; 317 tests). This file now grooms what remains:
-Phase 1.7 + Phase 2.
+Phase 1.5 is complete (contract v2.0.0; 317 tests). _(Historical: at the time this was written, the
+live grooming file tracked what remained — Phase 1.7 + Phase 2.)_
 
 ---
 
@@ -41,7 +41,7 @@ Recommended order to keep master green and minimize merge conflict:
 4. 1.7-D can run in parallel with 1.7-C (low coupling), then merge before Phase 2 fan-out.
 
 ### ✅ 1.7-B — session resume semantics (build first)
-Read first: [ARCHITECTURE.md §2](ARCHITECTURE.md) + [ARCHITECTURE.md §4](ARCHITECTURE.md) + Shared preamble.
+Read first: [ARCHITECTURE.md §2](../ARCHITECTURE.md) + [ARCHITECTURE.md §4](../ARCHITECTURE.md) + Shared preamble.
 
 ```text
 You are WS 1.7-B for CareerEngine. Implement true resumed-session behavior for the discovery return
@@ -71,7 +71,7 @@ DoD:
 ```
 
 ### ✅ 1.7-A — resume-file upload CLI wiring
-Read first: [ARCHITECTURE.md §12.2](ARCHITECTURE.md) + [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md).
+Read first: [ARCHITECTURE.md §12.2](../ARCHITECTURE.md) + [REFINED_PROJECT_PLAN.md](../REFINED_PROJECT_PLAN.md).
 
 ```text
 You are WS 1.7-A for CareerEngine. Wire resume-file upload into the grill command so users can start
@@ -100,7 +100,7 @@ DoD:
 ```
 
 ### ✅ 1.7-C — discovery_turn graph wiring
-Read first: [ARCHITECTURE.md §12.3-§12.4](ARCHITECTURE.md) + [HANDOFF.md](HANDOFF.md).
+Read first: [ARCHITECTURE.md §12.3-§12.4](../ARCHITECTURE.md) + [HANDOFF.md](../HANDOFF.md).
 
 ```text
 You are WS 1.7-C for CareerEngine. Wire discovery_turn_node into the main graph/CLI flow so the
@@ -130,7 +130,7 @@ DoD:
 ```
 
 ### ✅ 1.7-D — persistence module hygiene (test fakes out of prod)
-Read first: [PROGRESS.md](PROGRESS.md) Phase 1.3 deferred note.
+Read first: [PROGRESS.md](../PROGRESS.md) Phase 1.3 deferred note.
 
 ```text
 You are WS 1.7-D for CareerEngine. Move FakeFirestore test doubles out of the production persistence
@@ -183,7 +183,7 @@ Phase 1.7 is complete only when all four items above are merged and this end-to-
 4. Launch 2E after 2A-2D are merged to produce a capstone-ready submission artifact set.
 
 ### ✅ 2C — infrastructure baseline (build first)
-Read first: [ARCHITECTURE.md §5](ARCHITECTURE.md) + [ARCHITECTURE.md §8](ARCHITECTURE.md).
+Read first: [ARCHITECTURE.md §5](../ARCHITECTURE.md) + [ARCHITECTURE.md §8](../ARCHITECTURE.md).
 
 ```text
 You are WS 2C for CareerEngine. Build the deployable GCP baseline for dev/prod.
@@ -210,7 +210,7 @@ DoD:
 ```
 
 ### ✅ 2A — Streamlit workspace and UX surface
-Read first: [ARCHITECTURE.md §2](ARCHITECTURE.md) + [ARCHITECTURE.md §8](ARCHITECTURE.md).
+Read first: [ARCHITECTURE.md §2](../ARCHITECTURE.md) + [ARCHITECTURE.md §8](../ARCHITECTURE.md).
 
 ```text
 You are WS 2A for CareerEngine. Build the Streamlit workspace as a thin presentation layer over the
@@ -238,7 +238,7 @@ DoD:
 ```
 
 ### ✅ 2B — web auth/session bootstrap
-Read first: [ARCHITECTURE.md §5](ARCHITECTURE.md).
+Read first: [ARCHITECTURE.md §5](../ARCHITECTURE.md).
 
 ```text
 You are WS 2B for CareerEngine. Wire web identity and session bootstrap for the Streamlit path.
@@ -262,7 +262,7 @@ DoD:
 ```
 
 ### ✅ 2D — async pending-action sweep
-Read first: [ARCHITECTURE.md §8](ARCHITECTURE.md).
+Read first: [ARCHITECTURE.md §8](../ARCHITECTURE.md).
 
 ```text
 You are WS 2D for CareerEngine. Implement async pending-action sweep and scheduler integration.
@@ -286,7 +286,7 @@ DoD:
 ```
 
 ### ✅ 2E — capstone packaging and evidence set
-Read first: [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) decision D9.
+Read first: [REFINED_PROJECT_PLAN.md](../REFINED_PROJECT_PLAN.md) decision D9.
 
 ```text
 You are WS 2E for CareerEngine. Produce capstone submission artifacts for the Google X Kaggle 5-day
@@ -322,7 +322,7 @@ Phase 2 is complete when:
 
 ## Phase 4 — grooming status (Portfolio Workbench: visible, navigable, steerable data)
 
-Spec: [ARCHITECTURE.md §14](ARCHITECTURE.md). Roadmap: [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md)
+Spec: [ARCHITECTURE.md §14](../ARCHITECTURE.md). Roadmap: [REFINED_PROJECT_PLAN.md](../REFINED_PROJECT_PLAN.md)
 Phase 4 / decision D10. These are **UI-forward** slices over already-persisted state — most need no
 contract change. Builds run as normal PRs (Opus in-context or a Sonnet builder), each green on
 `make check`, reviewed, merged, then deployed via `deploy.yml`.
@@ -344,10 +344,10 @@ contract change. Builds run as normal PRs (Opus in-context or a Sonnet builder),
 3. **4C and 4D** can follow 4B (4C is a frontier write; 4D adds the mutation seam). Low coupling; either order.
 4. **4E deferred** — build only on explicit request (it's the one contract bump).
 
-Shared read-first for every 4x builder: [ARCHITECTURE.md §14](ARCHITECTURE.md) + §2 (layering: no
+Shared read-first for every 4x builder: [ARCHITECTURE.md §14](../ARCHITECTURE.md) + §2 (layering: no
 workflow logic in UI) + the current `web/` modules (`streamlit_app.py`, `dashboard.py`, `grill_ui.py`,
 `session_loader.py`) + the Shared preamble & Definition of Done in
-[AGENT_EXECUTION_PROMPT.md](AGENT_EXECUTION_PROMPT.md).
+[AGENT_EXECUTION_PROMPT.md](../AGENT_EXECUTION_PROMPT.md).
 
 ### ✅ 4A — sidebar navigation shell (build first)
 
@@ -503,7 +503,7 @@ contract break**.
 
 > **Status: ✅ COMPLETE 2026-07-06** (7A PR #38 · 7B PR #39 · 7C). Turned the Phase 6 two-agent discovery
 > loop (was CLI-only, `career-engine discover`) into a **product feature**: the "Jobs" view in the web app.
-> Spec: [ARCHITECTURE.md §15.6](ARCHITECTURE.md). Reused the discovery engine wholesale (`discovery/`); this
+> Spec: [ARCHITECTURE.md §15.6](../ARCHITECTURE.md). Reused the discovery engine wholesale (`discovery/`); this
 > phase was the **web surface + preference persistence** around it — no change to the agents/loop.
 
 ### The flow (user journey)
@@ -561,8 +561,8 @@ Phase 3 hardening/eval and post-v1 backlog remain intentionally out of launch sc
 ## Phase 8 — Operational hardening (post-Phase-7 productionisation)
 
 > **Status: ⬜ Not started.** All Phase 7 code (PRs #38–42) is on master and `make check` green.
-> [PROGRESS.md §Phase 8](PROGRESS.md) is the canonical status tracker.
-> Spec context: [ARCHITECTURE.md §15.5–15.6](ARCHITECTURE.md); security context: [SECURITY.md](SECURITY.md).
+> [PROGRESS.md §Phase 8](../PROGRESS.md) is the canonical status tracker.
+> Spec context: [ARCHITECTURE.md §15.5–15.6](../ARCHITECTURE.md); security context: [SECURITY.md](../SECURITY.md).
 
 ### How to launch these tickets
 
@@ -637,7 +637,7 @@ gh workflow run deploy.yml --ref master -f environment=dev
 confirm the sidebar shows **Dashboard / Portfolio / Grill / Jobs / Tailor**. Click Jobs and confirm the
 preferences form + "Find jobs" button appear (no Gemini key → the info message is expected).
 
-**No PR needed.** Record the outcome in [HANDOFF.md](HANDOFF.md).
+**No PR needed.** Record the outcome in [HANDOFF.md](../HANDOFF.md).
 
 ---
 
@@ -688,7 +688,7 @@ DoD:
 
 > Read first: `jobs/pending_action_sweep.py`, `jobs/sweep_endpoint.py`, `main.py` (existing CLI
 > commands pattern), `infrastructure/modules/` (Cloud Run + Scheduler modules),
-> `infrastructure/envs/dev/main.tf`, [ARCHITECTURE.md §8](ARCHITECTURE.md).
+> `infrastructure/envs/dev/main.tf`, [ARCHITECTURE.md §8](../ARCHITECTURE.md).
 
 **What / Why:** `jobs/pending_action_sweep.py` (`run_sweep`) exists and is tested. `jobs/sweep_endpoint.py`
 is a framework-agnostic OIDC-verified HTTP handler built to be mounted behind a route — but nothing mounts
@@ -886,7 +886,7 @@ DoD:
 
 ### ◐ 8E — Deployer-SA least-privilege curation (Terraform-only)
 
-> Read first: [SECURITY.md](SECURITY.md) "Required next review" section; `infrastructure/modules/`.
+> Read first: [SECURITY.md](../SECURITY.md) "Required next review" section; `infrastructure/modules/`.
 
 **What:** The `career-engine-deployer` service account was granted broad project-level roles to get the
 initial deploy working. Narrow them to only what each Terraform resource actually needs (Cloud Run deploy,
@@ -896,12 +896,12 @@ Artifact Registry push, Firestore rules, Secret Manager reads for the runtime SA
 
 Acceptance criteria:
 - `make tf-check` green in both envs.
-- The deployer SA's bound roles are listed in [SECURITY.md](SECURITY.md) "Post-8E role inventory" section.
+- The deployer SA's bound roles are listed in [SECURITY.md](../SECURITY.md) "Post-8E role inventory" section.
 - A `terraform plan` on a fresh environment shows no diff from the stated desired state.
 
 DoD:
 - `make tf-check` green.
-- [SECURITY.md](SECURITY.md) updated with the role inventory.
+- [SECURITY.md](../SECURITY.md) updated with the role inventory.
 - No application code changes.
 
 ---
@@ -1125,7 +1125,7 @@ Phase 8 is complete when:
 - A written concurrency test proves two simultaneous grill contexts use different model clients (8D).
 - `https://career-engine.bitcrafty.cloud` serves the app with a valid TLS certificate (8G).
 - `make check` green and `make tf-check` green at every merged PR.
-- [SECURITY.md](SECURITY.md) has a "Post-8E role inventory" section (8E).
+- [SECURITY.md](../SECURITY.md) has a "Post-8E role inventory" section (8E).
 - Every PR passed both Gemini 2.5 Pro review (pre-push) and Copilot review (on the PR).
 
 ---
@@ -1174,7 +1174,7 @@ it is not the right tool for a multi-user SaaS:
 ### Pre-grooming design questions (resolve before writing any build specs)
 
 > **Resolved (2026-07-07):** the frontend/backend architecture decision is recorded in
-> [ARCHITECTURE.md §16](ARCHITECTURE.md) (Next.js App Router + FastAPI JSON API; auth at the API
+> [ARCHITECTURE.md §16](../ARCHITECTURE.md) (Next.js App Router + FastAPI JSON API; auth at the API
 > boundary; grill over SSE; Cloud Run deploy) and broken into executable build tickets in **Phase 10**
 > below. Questions 1 and 2 are answered there; 3–5 are finalised inside the relevant Phase 10 slice.
 
@@ -1969,7 +1969,7 @@ DoD:
 ### ◐ 9H — Resume download: inline chat for résumé-specific edits *(build on Phase 10)*
 
 Not groomed to build spec. The frontend architecture decision is now recorded
-([ARCHITECTURE.md §16](ARCHITECTURE.md)): this ships on the Next.js + FastAPI stack, on top of
+([ARCHITECTURE.md §16](../ARCHITECTURE.md)): this ships on the Next.js + FastAPI stack, on top of
 Phase 10 slices 10.4/10.6 (streaming grill/tailor). In Streamlit an in-memory résumé edit chat is
 technically feasible but the UX is poor (every message requires a rerun), so this is deferred to
 the post-migration frontend rather than built on Streamlit.
@@ -1988,7 +1988,7 @@ from 8C. Groom when the email provider is decided.
 ### ◐ 9M — (Stretch) Visual résumé section editor *(build on Phase 10)*
 
 Not groomed to build spec. Requires React DnD or equivalent. No Streamlit equivalent is
-practical. The frontend decision is recorded ([ARCHITECTURE.md §16](ARCHITECTURE.md)); groom this
+practical. The frontend decision is recorded ([ARCHITECTURE.md §16](../ARCHITECTURE.md)); groom this
 once the Phase 10 Next.js frontend (10.5/10.6) is in place.
 
 ---
@@ -1996,7 +1996,7 @@ once the Phase 10 Next.js frontend (10.5/10.6) is in place.
 ## Phase 9 — live-testing bug fixes (found 2026-07-07)
 
 > These are regressions/defects found while demoing the deployed dev app. They point at the
-> Shared preamble + Definition of Done in [AGENT_EXECUTION_PROMPT.md](AGENT_EXECUTION_PROMPT.md).
+> Shared preamble + Definition of Done in [AGENT_EXECUTION_PROMPT.md](../AGENT_EXECUTION_PROMPT.md).
 > Builders run on Sonnet; Opus reviews + merges. `make check` green per merge.
 
 | ID | Summary | Size | Compat | Priority | Grooming |

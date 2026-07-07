@@ -6,7 +6,7 @@
 > the durable builder invariants in [skills/build-slice](../skills/build-slice/SKILL.md) and the one
 > relevant [ARCHITECTURE.md](ARCHITECTURE.md) section. Builders run on Sonnet with worktree isolation;
 > Opus reviews + merges (no self-declared done). master stays green per merge. A builder gets a
-> self-contained ticket + the skill \u2014 not the big docs (see [CONTEXT_STRATEGY.md](CONTEXT_STRATEGY.md)).
+> self-contained ticket + the skill — not the big docs (see [CONTEXT_STRATEGY.md](CONTEXT_STRATEGY.md)).
 >
 > Grooming legend: ✅ Ready (launchable) · ◐ Draft (outline, needs detail) · ⬜ To groom.
 
