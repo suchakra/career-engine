@@ -628,3 +628,83 @@ dashboard remains roadmap).
   **Podman sandbox** around that process remain roadmap. Async background worker + spin-down, full HITL
   dashboard (TTL/override), and multi-user session isolation are also roadmap. The deployed
   grill→jobs→tailor path is the untouched safety-net floor.
+
+---
+
+## 16. Web platform migration (Phase 10) — Streamlit → Next.js + FastAPI
+
+> Status: **accepted decision, not yet built.** Last reviewed 2026-07-07. This section is the
+> canonical rationale + decision record ("the short tech recommendation writeup") for replacing the
+> Streamlit web surface. Build slices and acceptance criteria live in [GROOMING.md](GROOMING.md)
+> Phase 10; sequencing in [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) Phase 10; status is
+> canonical in [PROGRESS.md](PROGRESS.md). No Phase-10 build ticket may be marked ✅ Ready until it
+> traces to a decision recorded here.
+
+### 16.1 The problem (why Streamlit is now the constraint)
+Streamlit was the right *device-agnostic-for-agents* choice for the demo, but live use this cycle
+showed it caps the product:
+- **Auth fragility.** Native OIDC (`st.login`) hard-codes the `/oauth2callback` path and hides the
+  callback exchange. A wrong redirect path silently returns the app shell (HTTP 200) and hangs — the
+  exact custom-domain outage this cycle (BUG-1 sibling; see the deploy-config hotfix). We get no
+  control over the session/cookie flow or the redirect-URI set.
+- **Rerun model.** Every interaction reruns the whole script top-to-bottom. That forces the
+  `web/async_runner.py` persistent-background-loop hack (root of BUG-1's "event loop is closed"
+  class) and makes streaming, partial updates, and multi-step forms awkward — each submit is a full
+  rerun of the page.
+- **Layout / UX ceiling.** No real routing, limited component composition, no drag-and-drop, and
+  weak inline-edit UX. This directly blocks the roadmap's interactive résumé editing (9H) and visual
+  section editor (9M).
+- **Implicit trust boundary.** UI state lives in `st.session_state`; the `st.user → user_id`
+  identity edge is implicit, and durable state needs bespoke Firestore bridging.
+
+### 16.2 Decision
+**AD-16.1 — Adopt a Next.js (React, App Router) frontend over a FastAPI JSON API; retire the
+Streamlit surface.** The Python **domain does not change** — only presentation and transport. This
+was chosen over (a) staying on Streamlit and (b) FastAPI + server-rendered HTMX/Jinja. HTMX is
+lighter and viable, but the roadmap's interactive résumé editor (9H) and drag-and-drop section
+editor (9M) are React-shaped; a rich client earns its keep given that committed scope.
+
+### 16.3 Design decisions
+- **AD-16.2 — FastAPI is a thin HTTP layer over the already-built domain.** The discovery graph,
+  portfolio/workspace stores, tailor, and résumé renderers are reused unchanged. FastAPI is natively
+  async, so per-request handlers `await` the existing async stores directly — **removing the
+  `asyncio.run`/background-loop bridge and the whole BUG-1 class of defect.** No business logic moves
+  into the transport layer.
+- **AD-16.3 — `schema.py` stays the single shared contract across the wire.** FastAPI request/response
+  models are the existing Pydantic types (or thin DTOs derived from them), so `CONTRACT_VERSION`
+  continues to gate compatibility end-to-end. The frontend consumes typed JSON (types generated from
+  the OpenAPI schema); no hand-maintained parallel type set.
+- **AD-16.4 — Auth moves to the API boundary with an explicit, controlled flow.** Two acceptable
+  shapes, to be finalised in the 10.1 build: (a) OIDC at FastAPI (Authlib / Google Identity) issuing
+  an **httpOnly + Secure + SameSite** session cookie, or (b) **Firebase Auth** on the Next.js side
+  passing a verified **ID-token bearer** to FastAPI. Either gives full control of callback + redirect
+  URIs (fixing the class of bug that hung the custom domain) and a single explicit
+  **verified-token → `user_id`** trust boundary that mirrors today's `auth/` interfaces. BYOK-key
+  handling stays in `auth/key_vault.py` behind that boundary.
+- **AD-16.5 — The grill turn streams over SSE (WebSocket only if bidirectional need appears).** The
+  interactive grill is the one flow that benefits from token/step streaming; FastAPI serves it as
+  Server-Sent Events over the existing `DiscoverySession`, preserving current grill semantics
+  (frontier steering, checkpoints) with no graph changes.
+- **AD-16.6 — Deploy topology stays Cloud Run-first.** FastAPI as a Cloud Run service; Next.js as
+  static/SSR on Cloud Run (or Vercel). Redirect URIs, `allowedOrigins`, and the single-user demo
+  posture (`max_instances=1`) are reconciled at cutover (10.7); multi-user session isolation remains
+  the pre-scale item already tracked in §15, not introduced here.
+- **AD-16.7 — Contract impact: none intrinsic.** The migration surfaces and steers existing fields;
+  any new field (e.g. for 9H/9M editing) is an independent additive-MINOR bump gated behind a
+  `CONTRACT_VERSION` change when that feature is built, not by the migration itself.
+
+### 16.4 API contract sketch (to be finalised in build 10.1–10.4)
+Thin, resource-oriented, all typed from `schema.py`:
+- `GET /api/me` — session identity (verified token → `user_id`).
+- `GET /api/dashboard`, `GET /api/portfolio`, `GET /api/jobs` — read views wrapping existing stores.
+- `POST /api/profile`, `POST /api/experience`, `POST /api/applications`,
+  `PUT /api/preferences` — writes over the (BUG-1-fixed) stores; transactional note per §8.
+- `POST /api/grill` + `GET /api/grill/stream` (SSE) — interactive turn over `DiscoverySession`.
+- `POST /api/tailor`, `GET /api/resume/{fmt}` — tailor + export (PDF/DOCX/MD) via existing renderers.
+
+### 16.5 Migration principle & sequencing
+Presentation + transport change; the domain does not. Slices are ordered API-first so the backend is
+provable before the React shell exists: **10.1** auth boundary → **10.2** read APIs → **10.3** write
+APIs → **10.4** streaming grill API → **10.5** Next.js shell/routing/auth → **10.6** Next.js grill +
+tailor UI → **10.7** cutover (delete `web/` Streamlit, redirect-URI/infra + docs reconcile). Build
+specs and acceptance criteria: [GROOMING.md](GROOMING.md) Phase 10.
