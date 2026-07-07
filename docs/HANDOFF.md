@@ -1,15 +1,35 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-07 — Phase 9 batch 2 complete: 9I+9G+9C+9E+9D merged)
-**`master` clean @ `11614c0` · contract v2.8.0 · 676 tests (1 skipped) · all PRs merged.**
-**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + 9J + 9B + 9K + 9I + 9G + 9C + 9E + 9D COMPLETE.**
+## 👉 YOU ARE HERE (updated 2026-07-07 — BUG-1 + BUG-2 fixed: PR #55 + #56 merged)
+**`master` clean @ `ccb7518` · contract v2.8.0 · 685 tests (1 skipped) · all PRs merged.**
+**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + 9J + 9B + 9K + 9I + 9G + 9C + 9E + 9D + BUG-1 + BUG-2 COMPLETE.**
 
-**▶ NEXT — Launch 9A and 9F (last two Phase 9 tickets)**
+**▶ NEXT — PR3: Ticket 9A (delete STAR story + edit entry bullet)**
 
-9A: delete STAR stories + edit entry bullets in Portfolio — has a PAUSE condition (check if `StarStory` has `story_id`; if not, confirm contract bump to v2.9.0 before adding it).
-9F: read GROOMING.md §9F for spec before starting.
+9A: delete STAR stories + edit entry bullets in Portfolio. PAUSE condition **resolved** —
+`StarStory.story_id` already exists (schema.py:178), so **no contract bump**. Add
+`delete_star_story` + `update_entry_bullet` to `web/portfolio_store.py`, UI controls in
+`web/portfolio.py`, 5 named tests. Full spec in GROOMING.md §9A.
+Then PR4 (9F: prefs UX + `derive_initial_roles`) and PR5 (Phase 10 grooming + tech writeup).
 
-**What shipped this session (batch 2):**
+**What shipped this session (bug-fix batch):**
+
+- **BUG-1 (PR #55):** Workspace saves failed with "Event loop is closed" (profile save +
+  track-application). `FirestoreWorkspaceStore` reused one `AsyncClient` across two `asyncio.run()`
+  calls; the gRPC channel bound to the first (closed) loop. Fixed via per-call `_acquire()`
+  `@asynccontextmanager` creating a fresh client per async op (injected client never closed; factory
+  client closed in `finally`, awaiting `close()` if awaitable). Ctor enforces client/client_factory
+  mutual exclusivity. Also pinned `CE_AUTH_REDIRECT_URI` to `/oauth2callback` in deploy.yml + main.tf.
+- **BUG-2 (PR #56):** Grill "📌 Currently grilling" banner missing on the **first question after
+  resume**. On resume, `_migrate_education_on_resume` blanks `grill_frontier` when the pinned entry
+  is no longer grillable; `_try_resume` derived the label straight from `grill_frontier` → empty
+  banner until the next turn re-pinned. Fixed with `_effective_frontier_label(state)` = frontier
+  label, else the label of the entry the grill node will pick next (`workflows.nodes._get_frontier_entry`,
+  imported function-locally). Extracted `_entry_label` helper; 6 tests. No contract change.
+  Note: the original groomed diagnosis (jump/advance clears the frontier) was refuted by reproduction
+  and re-groomed in GROOMING.md.
+
+**What shipped earlier (Phase 9 batch 2):**
 
 - **9I (PR #48):** Tailor — optional Specific instructions textarea. Instructions placed in **user prompt** (not system) to prevent prompt injection. `_instructions` kwarg on `tailor_node` + `tailor_structured_resume`; threaded through `build_discovery_workflow`/`build_runner`. Help text says "not persisted to your profile".
 - **9G (PR #51):** Track application — auto-extract title + company from JD via `web/jd_utils.py`. Null-safe with `_safe_str()`, markdown-fence stripping, `ModelAPIError` propagates, `UpgradeRequired.user_message` surfaced, form stays visible after API error.
