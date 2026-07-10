@@ -38,7 +38,7 @@ Canonical status for every phase is in [PROGRESS.md](PROGRESS.md).
 
 ## Phase 10 — Replace Streamlit with Next.js + FastAPI (build tickets)
 
-> **Status: 10.0 done + 10.1, 10.2, 10.3 & 10.4 SHIPPED (PR #63, #64, #65, #66); 10.5–10.7 are ✅ Ready build specs.** The accepted
+> **Status: 10.0 done + 10.1–10.5 SHIPPED (PR #63, #64, #65, #66, #67); 10.6–10.7 are ✅ Ready build specs.** The accepted
 > decision, rationale, auth model, streaming choice, deploy
 > topology, and API contract sketch are **canonical in [ARCHITECTURE.md §16](ARCHITECTURE.md)** — do
 > not restate them here. Sequencing is in [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) Phase 10;
@@ -110,7 +110,7 @@ Serve the grill turn over Server-Sent Events (WebSocket only if a bidirectional 
 - **Tests:** a scripted multi-turn session asserting the SSE event sequence against a fake model;
   resume-mid-grill emits the correct frontier label.
 
-### ✅ 10.5 — Next.js app shell + routing + auth wiring  *(L · Frontend)*
+### ✅ 10.5 — Next.js app shell + routing + auth wiring  *(SHIPPED — PR #67)*
 The React shell consuming 10.1–10.3.
 - **Files:** new `frontend/` (Next.js App Router). Routes: Dashboard / Portfolio / Jobs / Tailor /
   Grill.

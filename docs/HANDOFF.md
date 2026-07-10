@@ -1,10 +1,10 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-10 — Phase 10 build: 10.1–10.4 MERGED; **10.5 Next.js shell BUILT on branch, PR open/in-review**)
-**On branch `feat/phase10-5-nextjs-shell` (NOT master). `master` @ `ef141c6` · contract v2.8.0 · 741 backend tests. No contract change in 10.5 (presentation/transport only).**
-**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + all of Phase 9 (9A/9B/9C/9D/9E/9F/9G/9I/9J/9K) + BUG-1 + BUG-2 COMPLETE. Phase 10 building API-first, one slice per PR — 10.1 + 10.2 + 10.3 + 10.4 merged; 10.5 built, PR open.**
+## 👉 YOU ARE HERE (updated 2026-07-10 — Phase 10 build: **10.1–10.5 MERGED**; 10.6 (grill streaming UI + Tailor) next)
+**`master` clean @ `a24550e` · contract v2.8.0 · no contract change in 10.5 (presentation/transport only). Do NOT deploy (per operator) — cutover/deploy is slice 10.7.**
+**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + all of Phase 9 (9A/9B/9C/9D/9E/9F/9G/9I/9J/9K) + BUG-1 + BUG-2 COMPLETE. Phase 10 building API-first, one slice per PR — 10.1 + 10.2 + 10.3 + 10.4 + 10.5 merged.**
 
-**Just built — Phase 10.5 (Next.js App Router shell, `frontend/`), gate green:**
+**Just merged — Phase 10.5 (Next.js App Router shell, `frontend/`, PR #67, Copilot review addressed):**
 - Scaffolded `frontend/` (Next.js 14 App Router): routes `dashboard/portfolio/grill/jobs/tailor/settings/login`;
   the foundational component inventory ([PHASE10_UI_MOCKUP.md §2](PHASE10_UI_MOCKUP.md)); the **AD-16.8 TanStack Query
   data layer** (read hooks + optimistic write→rollback→invalidate over the 10.2/10.3 APIs); **Firebase-bearer auth**
@@ -60,19 +60,27 @@
   [history/GROOMING_ARCHIVE.md](history/GROOMING_ARCHIVE.md); role-scoped reads wired into the
   instruction files.
 
-**▶ NEXT — merge 10.5, then Phase 10 slices 10.6 → 10.7 (one PR each, API-first)**
+**▶ NEXT — Phase 10 slice 10.6, then 10.7 (one PR each, API-first)**
 
 The Streamlit→Next.js+FastAPI decision is recorded in [ARCHITECTURE.md §16](ARCHITECTURE.md)
 (AD-16.1..9: FastAPI over the unchanged domain, `schema.py` as wire contract, auth at the API
 boundary, SSE grill, Cloud Run; AD-16.8 TanStack Query data layer; AD-16.9 Vitest/RTL/MSW/Playwright
-test stack). API slices 10.1–10.4 are MERGED; **10.5 (Next.js app shell) is BUILT on
-`feat/phase10-5-nextjs-shell` and green — PR open, awaiting Gemini + Copilot review before merge**
-(see the "Just built" block above). **Immediate next action:** carry 10.5 through review → address →
-squash-merge → reconcile PROGRESS to ✅. **Do NOT deploy** (per operator). Executable frontend build
-tickets 10.6–10.7 are ✅ Ready in [GROOMING.md §Phase 10](GROOMING.md); sequencing in
-[REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md). **10.6 = grill streaming UI (`StreamingTranscript`
-over the 10.4 SSE) + Tailor** — hand the builder the 10.6 ticket +
-[skills/build-slice](../skills/build-slice/SKILL.md), not the big docs.
+test stack). API slices 10.1–10.4 + the 10.5 app shell are MERGED. Two frontend slices remain,
+✅ Ready in [GROOMING.md §Phase 10](GROOMING.md); sequencing in
+[REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md):
+- **▶ 10.6 (next) — grill streaming UI + Tailor + résumé export.** Build the reusable
+  `StreamingTranscript` (transcript + SSE token stream + composer) against the 10.4
+  `GET /api/grill/stream` endpoint, with the currently-grilling banner from the server
+  (`_effective_frontier_label`, never re-derived client-side); wire Tailor (JD in → PDF/DOCX/MD
+  export via the existing renderers behind the API). Tests: streaming render vs a mocked SSE stream
+  + tailor→export happy path. Reuses the 10.5 component inventory + data layer.
+- **10.7 — cutover.** Make Next.js+FastAPI the deployed product: delete `web/` Streamlit +
+  `web/async_runner.py`, update Dockerfile / Cloud Run / `allowedOrigins` / redirect URIs, mark the
+  ARCHITECTURE Streamlit sections `superseded`. This is the slice that deploys. `CONTRACT_VERSION`
+  unchanged by the migration.
+
+Hand the builder the 10.6 ticket + [skills/build-slice](../skills/build-slice/SKILL.md), not the big
+docs. **Do NOT deploy before 10.7** (per operator).
 
 **What shipped this session (5-PR cycle: 2 bug fixes + Phase 9 completion + Phase 10 groom):**
 
