@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from api.auth import VerifiedIdentity
 from api.deps import get_current_identity
+from api.frontend import mount_frontend
 from api.plugins import load_plugins
 from api.routes_grill import router as grill_router
 from api.routes_read import router as read_router
@@ -65,3 +66,10 @@ def me(identity: VerifiedIdentity = Depends(get_current_identity)) -> MeResponse
         caller's email. The raw token is never returned.
     """
     return MeResponse(user_id=identity.user_id, email=identity.email)
+
+
+# Single-container topology (10.7 / AD-16.10): serve the built Next.js static export at
+# '/' — mounted LAST, after EVERY /api route (routers, plugins, health, me), because a
+# StaticFiles mount at '/' is a catch-all that would otherwise shadow later /api routes.
+# No-op when there is no build present (the API test suite / dev).
+mount_frontend(app)

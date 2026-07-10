@@ -38,7 +38,7 @@ Canonical status for every phase is in [PROGRESS.md](PROGRESS.md).
 
 ## Phase 10 — Replace Streamlit with Next.js + FastAPI (build tickets)
 
-> **Status: 10.0 done + 10.1–10.6b SHIPPED (PR #63–#70); only 10.7 (cutover) remains, ⏸ deferred to Phase 11.** The accepted
+> **Status: 10.0 done + 10.1–10.6b + 10.7a SHIPPED (PR #63–#70 + deploy-artifact PR); 10.7b (remove Streamlit source) remains.** The accepted
 > decision, rationale, auth model, streaming choice, deploy
 > topology, and API contract sketch are **canonical in [ARCHITECTURE.md §16](ARCHITECTURE.md)** — do
 > not restate them here. Sequencing is in [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) Phase 10;
@@ -69,18 +69,24 @@ Completed slices **10.0** (ADR) · **10.1** (FastAPI skeleton + auth, PR #63) ·
 build specs retired to [history/GROOMING_ARCHIVE.md §Phase 10](history/GROOMING_ARCHIVE.md); status
 canonical in [PROGRESS.md](PROGRESS.md). **Only 10.7 (cutover) remains, deferred to Phase 11.**
 
-### ⏸ 10.7 — Cutover  *(DEFERRED to Phase 11 · M · Backend + Infra + Docs)*
-**Gated:** deletes the Streamlit `web/` app + reconfigures the deployed service, but the current dev
-deployment is **frozen for the Kaggle presentation** (still runs Streamlit). Per the re-scoped roadmap
-([REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) Phase 11), the cutover pairs with **11.A (new
-prod-like environment)** — do it there, not against the frozen env. Spec retained below for when it runs.
-Make Next.js + FastAPI the deployed product and remove Streamlit.
-- **Acceptance:** delete `web/` Streamlit app + `web/async_runner.py`; update Dockerfile / Cloud Run
-  service(s) / `allowedOrigins` / redirect URIs; reconcile [ARCHITECTURE.md](ARCHITECTURE.md) (mark
-  Streamlit sections `superseded`, update the frontends diagram), [PROGRESS.md](PROGRESS.md),
-  [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md), [SECURITY.md](SECURITY.md), and
-  [HANDOFF.md](HANDOFF.md). `CONTRACT_VERSION` unchanged by the migration itself.
-- **Tests:** the API test suite is green with no import of `web/`; deploy config lints.
+### ✅ 10.7a — New-stack deploy artifact  *(SHIPPED — PR open)*
+The deployable artifact for Next.js + FastAPI — the unblocker for the pre-dev test env (11.A). Topology
+= **single container, Next.js static export served by FastAPI** (AD-16.10): `next build` (`output:
+'export'`, `trailingSlash`) → `frontend/out/`; `api/frontend.py:mount_frontend` serves it at `/` **after
+all `/api` routes** (a catch-all mount must be last, or it shadows `/api`). Multi-stage `Dockerfile`
+(node build → python `uvicorn api.main:app`); Streamlit CMD/entrypoint replaced; CI docker-build smoke
+imports the FastAPI app + checks the bundled export. `tests/test_api_frontend.py` (route→index, 404 page,
+`/api` precedence, no-op when absent). Same-origin → **no CORS**. **Not deployed** (that's 11.A).
+
+### ⏸ 10.7b — Remove Streamlit source  *(READY — S · follow-up)*
+Delete the two Streamlit UI modules (`web/streamlit_app.py`, `web/grill_ui.py`) + `main.py:web()` command
++ their tests (`test_jobs_handlers`, `test_checkpoint_leave_copy`, the streamlit bits of `test_web_portfolio`,
+`test_web_navigation`) + the `streamlit`/`Authlib` deps + `docker-entrypoint.sh`. **KEEP** the rest of
+`web/` — the API reuses the view builders + stores, and `web/async_runner` is shared (used by
+`jobs_runner`/`portfolio_store`/`session_loader`). Mark ARCHITECTURE Streamlit sections `superseded`.
+- **Correction to the original acceptance:** "delete `web/`" / "no import of `web/`" was wrong — the API
+  legitimately reuses `web/` builders. Only the Streamlit *UI* + entrypoint are removed. `CONTRACT_VERSION`
+  unchanged.
 
 ---
 

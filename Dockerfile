@@ -1,18 +1,27 @@
-# CareerEngine — Cloud Run container image.
+# CareerEngine — Cloud Run container image (single-container: FastAPI + Next.js export).
 #
-# Serves the Streamlit web workspace on $PORT (Cloud Run injects it; default 8080).
-# The image COPYs the whole source tree and installs the project EDITABLE, so
-# runtime data (templates/classic_resume.html) is present on disk — a non-editable
-# wheel would omit it (see pyproject.toml note).
+# Stage 1 builds the Next.js static export; stage 2 runs FastAPI (uvicorn) and serves
+# BOTH /api/* and the exported frontend at / — same origin, no CORS (10.7 / AD-16.10).
+# The image installs the project EDITABLE so runtime data (templates/classic_resume.html)
+# is present on disk — a non-editable wheel would omit it (see pyproject.toml note).
 #
 # Build locally:   docker build -t career-engine:local .
 # Run locally:     docker run --rm -p 8080:8080 --env-file .env career-engine:local
 # Cloud build:     gcloud builds submit --config=cloudbuild.yaml --substitutions=_IMAGE=<AR path>
 
+# ── Stage 1: build the Next.js static export → /frontend/out ───────────────────
+FROM node:20-slim AS web
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+# ── Stage 2: FastAPI runtime (serves /api + the static frontend) ───────────────
 FROM python:3.12-slim
 
-# WeasyPrint (PDF renderer) native deps — Pango pulls HarfBuzz + fontconfig
-# transitively. Same set the WeasyPrint 69 docs list for Debian/Ubuntu.
+# WeasyPrint (PDF export) native deps — Pango pulls HarfBuzz + fontconfig transitively.
+# Same set the WeasyPrint 69 docs list for Debian/Ubuntu.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libpango-1.0-0 \
@@ -26,23 +35,21 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Full source tree (respecting .dockerignore — .env, tests, docs, infra excluded).
+# Python source tree (respecting .dockerignore — .env, tests, docs, infra, frontend
+# node_modules/build excluded). Editable install keeps templates/ on disk + packages importable.
 COPY . .
-
-# Runtime deps + editable project install (keeps templates on disk, packages importable).
 RUN python -m pip install --upgrade pip \
     && python -m pip install -e .
 
+# The built static frontend from stage 1 → FastAPI serves it at '/' (api/frontend.py).
+COPY --from=web /frontend/out ./frontend/out
+
 # Run as a non-root user.
-RUN chmod +x /app/docker-entrypoint.sh \
-    && useradd --create-home --uid 1000 appuser \
+RUN useradd --create-home --uid 1000 appuser \
     && chown -R appuser:appuser /app
 USER appuser
 
 EXPOSE 8080
 
-# Entrypoint materializes .streamlit/secrets.toml from env (OIDC auth) then runs CMD.
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
-
-# Cloud Run routes traffic to $PORT; Streamlit must bind 0.0.0.0 and run headless.
-CMD ["sh", "-c", "streamlit run web/streamlit_app.py --server.port=${PORT} --server.address=0.0.0.0 --server.headless=true --browser.gatherUsageStats=false"]
+# Cloud Run injects $PORT; uvicorn serves the FastAPI app, which also serves the SPA.
+CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port ${PORT}"]

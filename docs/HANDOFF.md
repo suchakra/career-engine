@@ -1,8 +1,8 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-10 — **Phase 10 UI COMPLETE (10.1–10.6b merged)**; only 10.7 cutover remains, deferred to Phase 11)
-**`master` clean @ `cdb7911` · contract v2.8.0 · no contract change in the migration (presentation/transport only). Do NOT deploy (per operator) — cutover/deploy is Phase 11 (11.A new prod-like env).**
-**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + all of Phase 9 + BUG-1 + BUG-2 COMPLETE. Phase 10 (Streamlit→Next.js+FastAPI) — every UI screen now lives on Next.js+FastAPI; 10.1–10.6b merged. Only 10.7 (cutover: delete Streamlit `web/`, deploy) remains and is deferred to Phase 11.**
+## 👉 YOU ARE HERE (updated 2026-07-10 — **Phase 10 UI COMPLETE + 10.7a deploy artifact built**; 10.7b + qa env next)
+**`master` @ `3b7b3b7`; 10.7a on branch `feat/phase10-7a-deploy-artifact` (PR open). contract v2.8.0 · no contract change (presentation/transport only). Deploy is allowed to a NEW pre-dev `qa` env; promote to dev only once validated (dev not frozen, but Kaggle-visible — no broken features).**
+**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + all of Phase 9 + BUG-1 + BUG-2 COMPLETE. Phase 10 (Streamlit→Next.js+FastAPI): all UI screens live on Next.js+FastAPI (10.1–10.6b merged); 10.7a deploy artifact built (single-container static-export served by FastAPI, AD-16.10). Remaining: 10.7b (remove Streamlit source) + stand up qa.**
 
 **Just merged — Phase 10.6b (Tailor, PR #69 API + PR #70 UI, Copilot reviews addressed):** `POST /api/tailor`
 → `StructuredResume` (BYOK model call, `_tailor_isolated` saves/restores the global model-client factory)
@@ -81,28 +81,31 @@ merged. Two operator decisions this session set the path:
   denylist) + frontend feature flags (`frontend/src/lib/flags.ts`, `NEXT_PUBLIC_FEATURES`) + a flagged
   `PREPARE` nav group (hidden in the OSS build). Zero plugins/flags on. Design: [ARCHITECTURE §17](ARCHITECTURE.md)
   (AD-17.1..4). Build the actual split (private package + dual CI) only when a premium feature is real.
-- **`qa` environment = a NEW GCP project (like prod), HELD until after 10.7.** Rationale: the repo's pattern
-  is one project per env (prod ≠ dev project), and the app always targets the `(default)` Firestore DB (no
-  db-id config) so a same-project qa would share dev's data. And today's only deploy artifact is **Streamlit**
-  — so qa must wait for the new-stack artifact from 10.7. Provisioning is operator-gated (create project +
-  billing, Google OAuth client [no TF resource], secret values out-of-band).
+- **Env strategy (clarified 2026-07-10): dev is NOT frozen — it just must not run *broken* features** (small
+  chance Kaggle tests the product at their end-of-month completion review). The workflow: **a new pre-dev
+  test env → validate → promote the same image to dev when stable.**
+- **`qa` = that pre-dev test env, a NEW GCP project.** Rationale: the repo's pattern is one project per env
+  (prod ≠ dev project), and the app targets the `(default)` Firestore DB (no db-id config) so a same-project
+  qa would share dev's data. Provisioning is operator-gated (create project + billing, Google OAuth client
+  [no TF resource], secret values out-of-band).
 
-So **10.7 (cutover) is the active next slice** — it produces the new-stack deploy artifact that unblocks qa:
-- **Open design question to resolve first (grooming):** how to deploy Next.js + FastAPI on Cloud Run —
-  static-export the Next.js app and serve it from FastAPI (one container/service) vs two Cloud Run services
-  (frontend + backend) vs Next.js Node server + FastAPI. This choice drives the Dockerfile(s) + CORS +
-  `NEXT_PUBLIC_API_BASE_URL`. **Not yet decided — groom before building.**
-- Then: new Dockerfile(s)/Cloud Run config; delete `web/` Streamlit + `web/async_runner.py`; `allowedOrigins`
-  / redirect URIs; mark ARCHITECTURE Streamlit sections `superseded`; reconcile docs. `CONTRACT_VERSION`
-  unchanged. **The frozen dev/Kaggle service keeps its already-deployed image — deleting `web/` source does
-  not affect the running revision; just don't redeploy dev.**
-- After 10.7: stand up **`qa` as a new GCP project** (Terraform `envs/qa` new-project root + `deploy.yml`
-  `environment=qa` + operator bootstrap runbook), then the rest of Phase 11 (custom domain, isolation/security
-  decision [11.C], MCP job-source plugins, copywriter-agent spike, résumé-presentation UI, beta test).
+**10.7 topology DECIDED + the deploy artifact is BUILT (10.7a, PR open):** single container — Next.js
+**static export served by FastAPI** (`api/frontend.py`, AD-16.10), same-origin, no CORS. Multi-stage
+Dockerfile (node build → `uvicorn api.main:app`). This is the image that deploys to the pre-dev env.
 
-10.7 is a large slice with an unresolved deploy-topology decision — **groom it first** (WARM docs → ticket),
-then build. Work **inline** unless parallelizing ([CONTEXT_STRATEGY.md](CONTEXT_STRATEGY.md)). **Do NOT
-redeploy the frozen dev/Kaggle env.**
+**▶ Immediate next after 10.7a merges:**
+1. **10.7b — remove Streamlit source** (small): delete `web/streamlit_app.py` + `web/grill_ui.py` +
+   `main.py:web()` + their tests + `streamlit`/`Authlib` deps + `docker-entrypoint.sh`; **KEEP** the rest of
+   `web/` (API reuses the builders/stores; `web/async_runner` is shared). Mark ARCHITECTURE Streamlit
+   sections `superseded`. Groomed in [GROOMING.md §10.7b](GROOMING.md).
+2. **11.A — stand up `qa` (new GCP project)** + deploy the 10.7a image there → validate → promote to dev.
+   Operator-gated bootstrap (project/billing/OAuth/secrets); I build the Terraform `envs/qa` root +
+   `deploy.yml environment=qa` + a runbook.
+3. Then the rest of Phase 11 (custom domain, isolation/security decision 11.C, MCP job-source plugins,
+   copywriter-agent spike, résumé-presentation UI, beta test).
+
+Work **inline** unless parallelizing ([CONTEXT_STRATEGY.md](CONTEXT_STRATEGY.md)). **Deploy to the new qa
+env first; only promote to dev once validated** (don't ship broken features to the Kaggle-visible dev).
 
 **What shipped this session (5-PR cycle: 2 bug fixes + Phase 9 completion + Phase 10 groom):**
 
