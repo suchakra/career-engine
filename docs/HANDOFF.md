@@ -1,8 +1,8 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-10 — **Phase 10 UI COMPLETE + 10.7a deploy artifact built**; 10.7b + qa env next)
-**`master` @ `3b7b3b7`; 10.7a on branch `feat/phase10-7a-deploy-artifact` (PR open). contract v2.8.0 · no contract change (presentation/transport only). Deploy is allowed to a NEW pre-dev `qa` env; promote to dev only once validated (dev not frozen, but Kaggle-visible — no broken features).**
-**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + all of Phase 9 + BUG-1 + BUG-2 COMPLETE. Phase 10 (Streamlit→Next.js+FastAPI): all UI screens live on Next.js+FastAPI (10.1–10.6b merged); 10.7a deploy artifact built (single-container static-export served by FastAPI, AD-16.10). Remaining: 10.7b (remove Streamlit source) + stand up qa.**
+## 👉 YOU ARE HERE (updated 2026-07-10 — **PHASE 10 COMPLETE (10.0–10.7b)**; next = stand up `qa` env + groom Phase 11)
+**`master` @ `035e13c` (10.7a merged); 10.7b on branch `feat/phase10-7b-remove-streamlit` (PR open). contract v2.8.0 · no contract change. Deploy the 10.7 image to a NEW pre-dev `qa` env; promote to dev only once validated (dev not frozen, but Kaggle-visible — no broken features).**
+**Phases 1–7 + 8A–8G + all of Phase 9 + BUG-1 + BUG-2 + ALL of Phase 10 COMPLETE. Streamlit is GONE — the product runs on Next.js (App Router) + FastAPI, deployed as ONE container (static export served by FastAPI, AD-16.10). Open-core seam (ARCHITECTURE §17) in place. Nothing deployed yet.**
 
 **Just merged — Phase 10.6b (Tailor, PR #69 API + PR #70 UI, Copilot reviews addressed):** `POST /api/tailor`
 → `StructuredResume` (BYOK model call, `_tailor_isolated` saves/restores the global model-client factory)
@@ -67,10 +67,9 @@ Deferred follow-ups: `?kind=master` export, "track as application" from Tailor, 
   [history/GROOMING_ARCHIVE.md](history/GROOMING_ARCHIVE.md); role-scoped reads wired into the
   instruction files.
 
-**▶ NEXT — 10.7 cutover (new-stack deploy artifact), THEN a new-GCP-project `qa` env**
+**▶ NEXT — stand up the `qa` env (deploy + SEE the UI), then groom Phase 11**
 
-**Phase 10's UI migration is complete** — every mockup screen is live on Next.js + FastAPI; 10.1–10.6b
-merged. Two operator decisions this session set the path:
+**Phase 10 is COMPLETE** — Streamlit gone; Next.js + FastAPI in one container. Standing context:
 - **A new private repo `git@github.com:suchakra/career-vault.git` is the go-forward home** for a future
   *private premium layer* — but wiring it up (CI/WIF/2-repo devcontainer) is deferred. The `vault` remote
   was **removed** for now (avoid stray pushes); re-add + wire later. `docs/personal.md` is gitignored
@@ -89,23 +88,27 @@ merged. Two operator decisions this session set the path:
   qa would share dev's data. Provisioning is operator-gated (create project + billing, Google OAuth client
   [no TF resource], secret values out-of-band).
 
-**10.7 topology DECIDED + the deploy artifact is BUILT (10.7a, PR open):** single container — Next.js
-**static export served by FastAPI** (`api/frontend.py`, AD-16.10), same-origin, no CORS. Multi-stage
-Dockerfile (node build → `uvicorn api.main:app`). This is the image that deploys to the pre-dev env.
+**The deploy artifact exists (10.7a merged):** one container — Next.js **static export served by FastAPI**
+(`api/frontend.py`, AD-16.10), same-origin, no CORS, multi-stage Dockerfile (node build → `uvicorn
+api.main:app`). `NEXT_PUBLIC_*` are baked in at build time via Docker **build args** (API base empty =
+same-origin; **Firebase config must be passed per-env** or Google sign-in won't init).
 
-**▶ Immediate next after 10.7a merges:**
-1. **10.7b — remove Streamlit source** (small): delete `web/streamlit_app.py` + `web/grill_ui.py` +
-   `main.py:web()` + their tests + `streamlit`/`Authlib` deps + `docker-entrypoint.sh`; **KEEP** the rest of
-   `web/` (API reuses the builders/stores; `web/async_runner` is shared). Mark ARCHITECTURE Streamlit
-   sections `superseded`. Groomed in [GROOMING.md §10.7b](GROOMING.md).
-2. **11.A — stand up `qa` (new GCP project)** + deploy the 10.7a image there → validate → promote to dev.
-   Operator-gated bootstrap (project/billing/OAuth/secrets); I build the Terraform `envs/qa` root +
-   `deploy.yml environment=qa` + a runbook.
-3. Then the rest of Phase 11 (custom domain, isolation/security decision 11.C, MCP job-source plugins,
-   copywriter-agent spike, résumé-presentation UI, beta test).
+**▶ Immediate next (in order):**
+1. **11.A — stand up `qa` (a NEW GCP project)** and deploy the 10.7 image → this is how the operator SEES
+   the new UI live. I build: Terraform `infrastructure/envs/qa` (new-project root — new stack, so Cloud Run
+   env = **Firebase** vars not Streamlit OIDC; `concurrency` can be >1 now; health at `/api/health`) +
+   `deploy.yml environment=qa` + Docker `--build-arg` wiring for the Firebase values + a **bootstrap
+   runbook**. Operator-gated steps I can't do: create the GCP **project + billing**, a **Firebase project +
+   web app** (the new stack uses Firebase Auth, not the old Streamlit OIDC), a Google **OAuth client**, and
+   set **secret values**. Then deploy → validate → promote the same image to dev.
+2. **Local-dev workflow (operator wants this — [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) Phase 11.H):**
+   a documented, one-command way to run the full stack on a laptop (FastAPI `uvicorn --reload` + Next.js
+   `npm run dev` with a `.env.local`, or `docker run` the image) so changes are testable before deploy.
+3. **Groom Phase 11** into build tickets (it isn't yet), then the rest: custom domain, isolation/security
+   decision (11.C), MCP job-source plugins, copywriter-agent spike, résumé-presentation UI, beta test.
 
-Work **inline** unless parallelizing ([CONTEXT_STRATEGY.md](CONTEXT_STRATEGY.md)). **Deploy to the new qa
-env first; only promote to dev once validated** (don't ship broken features to the Kaggle-visible dev).
+Work **inline** unless parallelizing ([CONTEXT_STRATEGY.md](CONTEXT_STRATEGY.md)). **Deploy to `qa` first;
+promote to dev only once validated** (don't ship broken features to the Kaggle-visible dev).
 
 **What shipped this session (5-PR cycle: 2 bug fixes + Phase 9 completion + Phase 10 groom):**
 
