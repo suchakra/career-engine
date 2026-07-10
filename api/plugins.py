@@ -11,6 +11,7 @@ the ``CE_DISABLED_PLUGINS`` denylist, so OSS/demo and commercial deploys share o
 
 from __future__ import annotations
 
+import logging
 import os
 from importlib.metadata import entry_points
 from typing import TYPE_CHECKING
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
 
 _PLUGIN_GROUP = "careerengine.plugins"
+_log = logging.getLogger("career_engine.api")
 
 
 def _disabled_names() -> set[str]:
@@ -45,7 +47,14 @@ def load_plugins(app: FastAPI) -> list[str]:
         try:
             register = entry.load()
             register(app)
-        except Exception:  # noqa: BLE001 — isolate a broken plugin from the core
+        except Exception as exc:  # noqa: BLE001 — isolate a broken plugin from the core
+            # Preserve the "a broken plugin can't crash the core" guarantee, but log it
+            # so "plugin present but broken" is distinguishable from "no plugins".
+            _log.warning(
+                "Plugin %r failed to load/register (%s); skipping.",
+                entry.name,
+                type(exc).__name__,
+            )
             continue
         loaded.append(entry.name)
     return loaded
