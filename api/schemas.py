@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from web.dashboard import DashboardView
 from web.jobs import JobCard, JobsView
@@ -273,4 +273,56 @@ class GrillErrorEvent(_StrictModel):
 
     message: str
     rate_limited: bool
+
+
+# ── Tailor / résumé export (Phase 10.6b) ──────────────────────────────────────
+# Strict DTOs mirroring the stdlib dataclasses in ``web.resume_builder`` (Contact,
+# RoleBlock, StructuredResume). The routes convert explicitly so no dataclass ever
+# lands on the wire (and FastAPI's dataclass edge cases are avoided). No CONTRACT
+# bump — these are transport DTOs, not ``schema.py`` domain types.
+
+
+class ContactDTO(_StrictModel):
+    """Résumé header identity (mirrors ``web.resume_builder.Contact``)."""
+
+    name: str = ""
+    email: str = ""
+    phone: str = ""
+    location: str = ""
+    links: list[str] = Field(default_factory=list)
+
+
+class RoleBlockDTO(_StrictModel):
+    """One experience/education entry (mirrors ``web.resume_builder.RoleBlock``)."""
+
+    title: str
+    org: str
+    dates: str
+    bullets: list[str] = Field(default_factory=list)
+
+
+class StructuredResumeDTO(_StrictModel):
+    """A real résumé (mirrors ``web.resume_builder.StructuredResume``).
+
+    Response of ``POST /api/tailor`` and request body of ``POST /api/resume/{fmt}``.
+    """
+
+    contact: ContactDTO
+    summary: str
+    skills: list[str] = Field(default_factory=list)
+    experience: list[RoleBlockDTO] = Field(default_factory=list)
+    education: list[RoleBlockDTO] = Field(default_factory=list)
+
+
+class TailorRequest(_StrictModel):
+    """Request body for ``POST /api/tailor``.
+
+    ``jd_text`` is the already-resolved job description; ``instructions`` are placed
+    in the *user* prompt (injection-safe, per 9I) and never persisted; ``contact``
+    optionally overrides the résumé header (else an empty header).
+    """
+
+    jd_text: str
+    instructions: str = ""
+    contact: ContactDTO | None = None
 
