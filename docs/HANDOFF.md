@@ -67,25 +67,36 @@ Deferred follow-ups: `?kind=master` export, "track as application" from Tailor, 
   [history/GROOMING_ARCHIVE.md](history/GROOMING_ARCHIVE.md); role-scoped reads wired into the
   instruction files.
 
-**▶ NEXT — Phase 11 (stabilization); it also carries the deferred 10.7 cutover**
+**▶ NEXT — 10.7 cutover (new-stack deploy artifact), THEN a new-GCP-project `qa` env**
 
-**Phase 10's UI migration is complete** — every mockup screen (Dashboard, Portfolio, Jobs, Tailor, Grill,
-Settings, Login) is live on Next.js + FastAPI; 10.1–10.6b merged. The **one remaining Phase-10 slice,
-10.7 (cutover)**, is deferred into Phase 11 because it deletes Streamlit `web/` + deploys, and the current
-env is frozen for the Kaggle presentation.
+**Phase 10's UI migration is complete** — every mockup screen is live on Next.js + FastAPI; 10.1–10.6b
+merged. Two operator decisions this session set the path:
+- **A new private repo `git@github.com:suchakra/career-vault.git` is the home going forward.** Remote
+  `vault` is added; the operator runs `git push vault master && git push vault --tags` (bulk push to a new
+  remote is blocked from the agent's auto-mode — must be run by hand). `docs/personal.md` is gitignored
+  (private operator notes — never commit it).
+- **`qa` environment = a NEW GCP project (like prod), HELD until after 10.7.** Rationale: the repo's pattern
+  is one project per env (prod ≠ dev project), and the app always targets the `(default)` Firestore DB (no
+  db-id config) so a same-project qa would share dev's data. And today's only deploy artifact is **Streamlit**
+  — so qa must wait for the new-stack artifact from 10.7. Provisioning is operator-gated (create project +
+  billing, Google OAuth client [no TF resource], secret values out-of-band).
 
-Next work is **Phase 11 — stabilization & pre-launch hardening** (re-scoped; canonical in
-[REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) Phase 11, ✅ groomed order TBD). The natural first slice
-is **11.A — a separate production-like environment** (Terraform env root + CI target, leaving the Kaggle env
-untouched); **10.7 cutover runs there** (delete `web/` Streamlit + `web/async_runner.py`, update Dockerfile
-/ Cloud Run / `allowedOrigins` / redirect URIs, mark ARCHITECTURE Streamlit sections `superseded`). Then
-11.B custom domain · 11.C isolation/security decision · 11.D MCP job-source plugins · 11.E copywriter-agent
-spike · 11.F résumé-presentation UI · 11.G beta test. Phase 11 has **not** been groomed into build tickets
-yet — groom it (WARM docs → tickets) before building.
+So **10.7 (cutover) is the active next slice** — it produces the new-stack deploy artifact that unblocks qa:
+- **Open design question to resolve first (grooming):** how to deploy Next.js + FastAPI on Cloud Run —
+  static-export the Next.js app and serve it from FastAPI (one container/service) vs two Cloud Run services
+  (frontend + backend) vs Next.js Node server + FastAPI. This choice drives the Dockerfile(s) + CORS +
+  `NEXT_PUBLIC_API_BASE_URL`. **Not yet decided — groom before building.**
+- Then: new Dockerfile(s)/Cloud Run config; delete `web/` Streamlit + `web/async_runner.py`; `allowedOrigins`
+  / redirect URIs; mark ARCHITECTURE Streamlit sections `superseded`; reconcile docs. `CONTRACT_VERSION`
+  unchanged. **The frozen dev/Kaggle service keeps its already-deployed image — deleting `web/` source does
+  not affect the running revision; just don't redeploy dev.**
+- After 10.7: stand up **`qa` as a new GCP project** (Terraform `envs/qa` new-project root + `deploy.yml`
+  `environment=qa` + operator bootstrap runbook), then the rest of Phase 11 (custom domain, isolation/security
+  decision [11.C], MCP job-source plugins, copywriter-agent spike, résumé-presentation UI, beta test).
 
-Work **inline** (orchestrator holds the context) unless parallelizing — per
-[CONTEXT_STRATEGY.md](CONTEXT_STRATEGY.md). **Do NOT deploy** (per operator) until the Phase-11 prod-like
-env is stood up and Kaggle is done.
+10.7 is a large slice with an unresolved deploy-topology decision — **groom it first** (WARM docs → ticket),
+then build. Work **inline** unless parallelizing ([CONTEXT_STRATEGY.md](CONTEXT_STRATEGY.md)). **Do NOT
+redeploy the frozen dev/Kaggle env.**
 
 **What shipped this session (5-PR cycle: 2 bug fixes + Phase 9 completion + Phase 10 groom):**
 

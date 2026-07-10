@@ -208,9 +208,16 @@ deployment for real users, with the known product-quality gaps addressed. The cu
 **frozen for the Kaggle presentation**, so Phase 11 stands up a *separate* environment and treats it as
 production. Items marked *(decision/spike)* resolve an open question first and only build if warranted.
 
-- **11.A — Separate production-like environment.** Provision a NEW environment (its own Cloud Run
-  service, Firestore, secrets, config) deployed to *as if it were production*, leaving the existing
-  Kaggle-presentation deployment untouched. New Terraform env root + CI/deploy target.
+- **11.A — Separate production-like `qa` environment (a NEW GCP project).** Provision a new environment
+  as **its own GCP project** (matching the repo's one-project-per-env pattern — `prod` ≠ `dev` project),
+  leaving the frozen Kaggle/dev deployment untouched. Decided a new project (not same-project) because the
+  app targets the `(default)` Firestore DB with no db-id config, so a same-project env would share dev's
+  data. New Terraform `envs/qa` root + `deploy.yml` `environment=qa`. **Gated on 10.7** (a new env needs the
+  new-stack deploy artifact — until 10.7 the only artifact is Streamlit). Provisioning is operator-gated:
+  create project + billing, a Google OAuth client (no Terraform resource), and secret values out-of-band.
+  **So the sequence is: 10.7 cutover → then 11.A `qa`.** 10.7 itself has an open design question (Next.js +
+  FastAPI Cloud Run topology: single container via Next.js static export served by FastAPI vs two services)
+  — groom before building.
 - **11.B — Custom domain.** Get `career-engine.bitcrafty.cloud` (hyphenated) working again via
   Cloudflare + OAuth redirect + `CE_AUTH_REDIRECT_URI` (a long-deferred item), pointed at the new
   prod-like env.
