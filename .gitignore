@@ -39,3 +39,4 @@ demo_output/
 .streamlit/secrets.toml
 .terraform.lock.hcl
 .claude/
+/docs/personal.md
