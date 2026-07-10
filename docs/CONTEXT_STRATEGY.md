@@ -1,6 +1,6 @@
 # CareerEngine — Context-management strategy
 
-> **Status:** `active` · **Last reviewed:** 2026-07-07
+> **Status:** `active` · **Last reviewed:** 2026-07-10
 > **Job:** the single source of truth for **how context is loaded, scoped, and retired** across
 > agentic development. If a future agent (Claude Code, Copilot, Antigravity, or a sub-agent) is
 > deciding "what should I read / what should I hand a builder / where does finished work go," this
@@ -59,6 +59,27 @@ These are **different readers with different needs**. Do not give them the same 
   wholesale. If the ticket's assumptions don't match the code, it **PAUSEs and asks the
   orchestrator** — it does not go spelunking the big docs, and it does not assume.
 
+## When to spawn a sub-agent — it's a scaling tool, not the default build path
+
+A spawned sub-agent is **not free** and **not the default**. It carries two costs this strategy used
+to underweight:
+
+- **Cold re-derivation.** A fresh agent starts with none of the orchestrator's working context and
+  must re-read the ticket + skill + one ARCHITECTURE § before it can act.
+- **Integration tax.** Its output must be gated and reconciled by an orchestrator who *never watched
+  it think* — so mismatches are reverse-engineered after the fact, not caught in the moment.
+
+**Default to doing the work inline** (in the orchestrator's own context). Spawn a sub-agent only when
+**all three** hold:
+
+1. The work is genuinely **parallel / file-disjoint** (multiple slices that don't touch the same files).
+2. It is **big enough** that a clean ~120-line context beats carrying it inline.
+3. It is **cleanly specifiable up front** (a self-contained ticket, no exploratory back-and-forth).
+
+If you already hold the context (e.g. finishing or fixing a slice you just gated), spawning is
+**strictly worse** — more tokens, lower quality. Do it inline. Use sub-agents to *scale out*
+disjoint work, not to offload work you're already positioned to do well.
+
 ## When is context assembled? Grooming, not hand-off
 
 This is the mental model to keep:
@@ -73,6 +94,11 @@ This is the mental model to keep:
 So **the ticket is a compiled artifact.** Grooming is the "compile" step that front-loads context so
 the builder runs on ~120 lines instead of thousands. A builder that hits a mismatch bounces back to
 the orchestrator for a re-groom rather than loading more context itself.
+
+**Compile anchors, not just prose.** A cold builder that cannot grep straight to the right place
+burns tokens flailing. So the ticket names the **exact `file:symbol` anchors** it needs (e.g. "reuse
+`web/grill_labels.py:_effective_frontier_label`", "bind `schema.py:UserProfile`") — retrieval becomes
+a lookup, not a search. Pointers are the compiler's output too, not just the narrative.
 
 ```mermaid
 flowchart LR
@@ -90,6 +116,31 @@ needs with whatever workspace search tools its runtime provides (grep / glob / s
 `grep_search` / `semantic_search` / `file_search` in some runtimes, `grep` / `glob` in others). Those
 tools **are** the retrieval layer. To keep them effective, keep docs greppable: stable headers, clear
 section anchors, and freshness banners on anything durable.
+
+## Build-time discipline (gate-first · resumable · risk-tiered review)
+
+These three rules exist because the expensive failure is **not** loading a doc you didn't need — it is
+**inheriting an ungated or broken pile of work** and paying model tokens to reverse-engineer it. Spend
+model tokens on *judgment*; spend cheap deterministic compute (lint / typecheck / tests / e2e /
+bundle) on *verification*.
+
+- **Gate-first (walking skeleton).** The gate must **exist and be green before any feature code**.
+  Stand up the scaffold + one trivial passing test + the gate wired into CI as the first commit (or a
+  tiny first slice), then build features against a permanently-green check. A slice that has to build
+  *its own* gate from scratch has no safety net mid-flight — that is how an interruption leaves a
+  broken tree (learned the hard way on Phase 10.5).
+- **Resumability — commit at green checkpoints.** Durable state lives in `docs/` for *decisions*; the
+  **branch is the durable unit for in-flight code**. Builders commit at **gate-green checkpoints**,
+  not as one big final commit. Interruption is normal (an agent stops, a usage limit hits) — whoever
+  resumes must inherit a green partial tree, never a broken one. "Done" means **gate-green**, not
+  "files written."
+- **Risk-proportional review.** Two independent heavyweight reviews on *every* slice is reckless
+  spend. Tier by blast radius:
+  - **Contract- or security-touching** (`schema.py`/`config.py`/auth/public interfaces, a
+    `CONTRACT_VERSION` bump) → two independent reviews.
+  - **Presentation / transport-only, with strong local gates** (typecheck + tests + e2e + bundle
+    green) → one automated reviewer + the orchestrator's own read is enough.
+  Match the review depth to what can actually break.
 
 ## The retire ritual (keeps WARM small forever)
 
@@ -128,6 +179,13 @@ over a hosted vector DB, and always carry the freshness marker into the retrieve
 ## Checklist for future agents (don't stray)
 
 - [ ] Am I about to hand a builder a big doc? → No. Hand a ticket + `skills/build-slice` + one § pointer.
+- [ ] Am I about to spawn a sub-agent? → Only if the work is parallel/disjoint, big, and cleanly
+      specifiable. If I already hold the context, do it **inline**.
+- [ ] Does the ticket name exact `file:symbol` anchors? → Compile pointers, not just prose.
+- [ ] Is there a green gate to build against *before* the feature code? → Gate-first; walking skeleton.
+- [ ] Am I committing at gate-green checkpoints so an interruption leaves a green tree? → Yes.
+- [ ] Does the review depth match the blast radius? → Two reviews for contract/security; one + my read
+      for presentation-only with strong local gates.
 - [ ] Is this an invariant? → It goes in a skill, not in GROOMING.
 - [ ] Is this finished work still sitting in GROOMING? → Retire it to `docs/history/` this session.
 - [ ] Is this current status living in a design/roadmap doc? → Move it; status is canonical in PROGRESS.
