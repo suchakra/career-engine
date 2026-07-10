@@ -1,7 +1,7 @@
 # CareerEngine — Session Handoff / Resume Point
 
 ## 👉 YOU ARE HERE (updated 2026-07-10 — **PHASE 10 COMPLETE (10.0–10.7b)**; next = stand up `qa` env + groom Phase 11)
-**`master` @ `035e13c` (10.7a merged); 10.7b on branch `feat/phase10-7b-remove-streamlit` (PR open). contract v2.8.0 · no contract change. Deploy the 10.7 image to a NEW pre-dev `qa` env; promote to dev only once validated (dev not frozen, but Kaggle-visible — no broken features).**
+**`master` clean @ `6c1e9f4` (10.7a + 10.7b merged, PR #72/#73). contract v2.8.0 · no contract change. Deploy the 10.7 image to a NEW pre-dev `qa` env; promote to dev only once validated (dev not frozen, but Kaggle-visible — no broken features).**
 **Phases 1–7 + 8A–8G + all of Phase 9 + BUG-1 + BUG-2 + ALL of Phase 10 COMPLETE. Streamlit is GONE — the product runs on Next.js (App Router) + FastAPI, deployed as ONE container (static export served by FastAPI, AD-16.10). Open-core seam (ARCHITECTURE §17) in place. Nothing deployed yet.**
 
 **Just merged — Phase 10.6b (Tailor, PR #69 API + PR #70 UI, Copilot reviews addressed):** `POST /api/tailor`
