@@ -1,13 +1,24 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TailorContent } from "@/app/tailor/TailorContent";
 import { server } from "@/test/msw/server";
 import { renderWithProviders } from "@/test/utils";
 
 const BASE = "http://localhost:8080";
+
+// Capture the original (jsdom-absent) URL methods so we can restore them and not
+// leak the assigned mocks into later tests.
+const _origUrl = {
+  createObjectURL: URL.createObjectURL,
+  revokeObjectURL: URL.revokeObjectURL,
+};
+afterEach(() => {
+  Object.assign(URL, _origUrl);
+  vi.restoreAllMocks();
+});
 
 describe("Tailor", () => {
   it("tailors a JD into a previewed résumé, then exports", async () => {

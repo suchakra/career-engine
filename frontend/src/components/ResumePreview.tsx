@@ -8,8 +8,8 @@ function contactLine(r: StructuredResume): string {
 function Roles({ roles }: { roles: RoleBlock[] }): JSX.Element {
   return (
     <>
-      {roles.map((role, i) => (
-        <div key={i} className="mb-3">
+      {roles.map((role) => (
+        <div key={`${role.title}|${role.org}|${role.dates}`} className="mb-3">
           <p className="text-sm font-medium">
             {role.title}
             {role.org ? ` — ${role.org}` : ""}
@@ -17,7 +17,7 @@ function Roles({ roles }: { roles: RoleBlock[] }): JSX.Element {
           </p>
           <ul className="ml-4 list-disc text-sm text-muted">
             {(role.bullets ?? []).map((b, j) => (
-              <li key={j}>{b}</li>
+              <li key={`${b}-${j}`}>{b}</li>
             ))}
           </ul>
         </div>

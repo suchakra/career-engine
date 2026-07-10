@@ -7,6 +7,13 @@ import type { StructuredResume, TailorRequest } from "@/lib/api/models";
 
 export type ExportFormat = "pdf" | "docx" | "md";
 
+/** User-facing labels (avoid showing raw "MD"). */
+const FORMAT_LABEL: Record<ExportFormat, string> = {
+  pdf: "PDF",
+  docx: "Word",
+  md: "Markdown",
+};
+
 /** Trigger a browser download of a blob (separated so the fetch stays testable). */
 function triggerDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
@@ -16,7 +23,9 @@ function triggerDownload(blob: Blob, filename: string): void {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
+  // Revoke on a later tick so the download has started (revoking synchronously can
+  // invalidate the blob URL before the browser reads it).
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 export interface TailorController {
@@ -64,7 +73,7 @@ export function useTailor(): TailorController {
         const blob = await apiFetchBlob(`/api/resume/${fmt}`, { method: "POST", body: resume });
         triggerDownload(blob, `resume.${fmt}`);
       } catch {
-        setError(`Couldn't export ${fmt.toUpperCase()} — try again.`);
+        setError(`Couldn't export ${FORMAT_LABEL[fmt]} — try again.`);
       } finally {
         setExporting(null);
       }
