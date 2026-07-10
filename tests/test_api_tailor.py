@@ -145,6 +145,9 @@ def test_render_pdf(client: TestClient) -> None:
 def test_render_docx(client: TestClient) -> None:
     resp = client.post("/api/resume/docx", json=_resume_body(), headers=_auth_headers())
     assert resp.status_code == 200
+    assert resp.headers["content-type"] == (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
     assert resp.content[:2] == b"PK"  # DOCX is a zip container
 
 

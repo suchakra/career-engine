@@ -29,9 +29,11 @@ from fastapi import APIRouter, Depends, Response
 from fastapi.responses import PlainTextResponse
 from starlette.concurrency import run_in_threadpool
 
+import workflows.nodes as _nodes
 from api.deps import get_current_user_id, get_discovery_session
 from api.schemas import StructuredResumeDTO, TailorRequest
 from cli.app import DiscoverySession
+from schema import CareerEngineState
 from web.resume_builder import (
     Contact,
     RoleBlock,
@@ -58,6 +60,32 @@ def _dto_to_domain(dto: StructuredResumeDTO) -> StructuredResume:
     )
 
 
+def _tailor_isolated(
+    state: CareerEngineState,
+    jd_text: str,
+    contact: Contact,
+    *,
+    client: object,
+    instructions: str,
+) -> StructuredResume:
+    """Run the tailor with the module-global model-client factory saved + restored.
+
+    ``tailor_structured_resume`` sets ``workflows.nodes._client_factory`` to this
+    caller's BYOK client (a process-global). Save the previous factory and restore it
+    afterwards so a BYOK client can never leak into an unrelated request. (Fully
+    removing the global mutation from the domain layer is a separate follow-up; under
+    concurrent requests the global is still shared — the current deploy is
+    one-instance-per-user, and the isolation model is revisited in Phase 11.C.)
+    """
+    saved = _nodes._client_factory
+    try:
+        return tailor_structured_resume(
+            state, jd_text, contact, client=client, _instructions=instructions  # type: ignore[arg-type]
+        )
+    finally:
+        _nodes._client_factory = saved
+
+
 @router.post("/api/tailor")
 async def tailor(
     body: TailorRequest,
@@ -73,12 +101,12 @@ async def tailor(
     state = await session.current_state()
     contact = Contact(**body.contact.model_dump()) if body.contact else Contact()
     resume = await run_in_threadpool(
-        tailor_structured_resume,
+        _tailor_isolated,
         state,
         body.jd_text,
         contact,
         client=session.model_client,
-        _instructions=body.instructions,
+        instructions=body.instructions,
     )
     return StructuredResumeDTO.model_validate(asdict(resume))
 
@@ -93,16 +121,29 @@ _RENDER = {
 }
 
 
-@router.post("/api/resume/{fmt}")
+@router.post(
+    "/api/resume/{fmt}",
+    responses={
+        200: {
+            "content": {
+                "application/pdf": {},
+                _RENDER["docx"][0]: {},
+                "text/markdown": {},
+            },
+            "description": "The rendered résumé bytes for the requested format.",
+        }
+    },
+)
 async def render_resume(
     fmt: Literal["pdf", "docx", "md"],
     body: StructuredResumeDTO,
-    user_id: str = Depends(get_current_user_id),
+    _user_id: str = Depends(get_current_user_id),
 ) -> Response:
     """Render a structured résumé (from the body) to the requested format's bytes.
 
-    Requires a valid bearer token; no BYOK key needed (rendering is deterministic, no
-    model call). An unknown ``fmt`` is rejected as 422 by the ``Literal`` path param.
+    Requires a valid bearer token (``_user_id`` is injected only to enforce auth — the
+    render itself is per-request and needs no BYOK key). An unknown ``fmt`` is rejected
+    as 422 by the ``Literal`` path param.
     """
     resume = _dto_to_domain(body)
     media_type, filename = _RENDER[fmt]

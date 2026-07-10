@@ -266,8 +266,9 @@ export interface paths {
          * Render Resume
          * @description Render a structured résumé (from the body) to the requested format's bytes.
          *
-         *     Requires a valid bearer token; no BYOK key needed (rendering is deterministic, no
-         *     model call). An unknown ``fmt`` is rejected as 422 by the ``Literal`` path param.
+         *     Requires a valid bearer token (``_user_id`` is injected only to enforce auth — the
+         *     render itself is per-request and needs no BYOK key). An unknown ``fmt`` is rejected
+         *     as 422 by the ``Literal`` path param.
          */
         post: operations["render_resume_api_resume__fmt__post"];
         delete?: never;
@@ -1227,13 +1228,16 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The rendered résumé bytes for the requested format. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": unknown;
+                    "application/pdf": unknown;
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": unknown;
+                    "text/markdown": unknown;
                 };
             };
             /** @description Validation Error */
