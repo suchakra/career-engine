@@ -1,0 +1,22 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+
+# testing / coverage
+/coverage
+/test-results
+/playwright-report
+/blob-report
+/playwright/.cache
+
+# misc
+*.tsbuildinfo
+next-env.d.ts
+
+# local env files (public NEXT_PUBLIC_* values are documented in .env.example)
+.env
+.env.local
+.env*.local

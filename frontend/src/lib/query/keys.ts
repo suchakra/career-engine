@@ -1,0 +1,10 @@
+/**
+ * Query keys mirror the read API resources (AD-16.8). Kept in one place so read
+ * hooks and mutation invalidations reference the same identity.
+ */
+export const queryKeys = {
+  me: ["me"] as const,
+  dashboard: ["dashboard"] as const,
+  portfolio: ["portfolio"] as const,
+  jobs: ["jobs"] as const,
+} as const;

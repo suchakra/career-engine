@@ -42,6 +42,23 @@ jobs:
       - name: make check (ruff + mypy --strict + pytest)
         run: make check
 
+  frontend:
+    name: Frontend lint · types · tests · build (make frontend-check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # lint + typecheck + Vitest (MSW-mocked) + production build + bundle budget.
+      # Playwright E2E is a separate on-demand lane (needs a browser), not run here.
+      - name: make frontend-check
+        run: make frontend-check
+
   tf-check:
     name: Terraform fmt + validate (make tf-check)
     runs-on: ubuntu-latest

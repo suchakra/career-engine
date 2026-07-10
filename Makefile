@@ -47,7 +47,23 @@ test:  ## Run pytest (golden round-trip test + any Phase-specific tests)
 	$(PYTHON) -m pytest tests/ -v
 
 .PHONY: check
-check: lint typecheck test  ## Run all quality gates in sequence
+check: lint typecheck test  ## Run all quality gates in sequence (Python)
+
+# ── Frontend (Next.js app shell — its own toolchain/lane) ─────────────────────
+# Separate from `make check` (Python) because it needs Node/npm, not the Python
+# venv. CI runs this as a distinct lane. Playwright E2E is deliberately NOT here
+# (needs a browser + system libs — run `npm run e2e` from frontend/ on demand).
+
+FRONTEND_DIR = frontend
+
+.PHONY: frontend-check
+frontend-check:  ## Frontend gate: npm ci + lint + typecheck + Vitest + build + bundle budget
+	cd $(FRONTEND_DIR) && npm ci
+	cd $(FRONTEND_DIR) && npm run lint
+	cd $(FRONTEND_DIR) && npm run typecheck
+	cd $(FRONTEND_DIR) && npm test
+	cd $(FRONTEND_DIR) && npm run build
+	cd $(FRONTEND_DIR) && npm run check:bundle
 
 # ── Infrastructure (Terraform) ───────────────────────────────────────────────
 # fmt/validate run with no cloud credentials; plan/deploy/destroy need GCP creds

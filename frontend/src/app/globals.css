@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Design tokens — one variable set, two value maps (light default, .dark override).
+ * Sourced from PHASE10_UI_MOCKUP.md §2. Colors are always paired with a label +
+ * glyph in the UI (never color alone). No theme value lives in schema.py — theme
+ * is a pure client (localStorage) preference.
+ */
+:root {
+  --color-bg: #fafaf9;
+  --color-surface: #ffffff;
+  --color-card: #ffffff;
+  --color-border: #e5e2dd;
+  --color-text: #1f1f1f;
+  --color-muted: #57534e;
+
+  --color-primary: #5e3fa6;
+  --color-primary-fg: #ffffff;
+
+  --color-strong: #047857;
+  --color-review: #b45309;
+  --color-skipped: #4b5563;
+  --color-error: #dc2626;
+}
+
+.dark {
+  --color-bg: #161418;
+  --color-surface: #1f1c24;
+  --color-card: #201d26;
+  --color-border: #2f2b36;
+  --color-text: #e6e8ec;
+  --color-muted: #a5a1ad;
+
+  --color-primary: #9b7fd4;
+  --color-primary-fg: #161418;
+
+  --color-strong: #34d399;
+  --color-review: #fbbf24;
+  --color-skipped: #9ca3af;
+  --color-error: #f87171;
+}
+
+@layer base {
+  html {
+    font-family:
+      Inter,
+      system-ui,
+      -apple-system,
+      "Segoe UI",
+      Roboto,
+      sans-serif;
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    min-height: 100vh;
+  }
+
+  /* Tabular numerals for metrics (opt-in via .tabnums). */
+  .tabnums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 2px focus-visible ring on every interactive element, both themes. */
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+}
