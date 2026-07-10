@@ -1,6 +1,9 @@
 # CareerEngine — Capstone Demo Runbook & Evidence
 
-> Status: **active**. Last reviewed 2026-07-02. Audience: a fresh reviewer/judge
+> Status: **historical** — point-in-time Kaggle capstone runbook; some commands are now
+> outdated (e.g. `python -m main web` was the Streamlit dashboard, removed in Phase 10; the
+> web app is now Next.js + FastAPI, run via the container — see README).
+> Last reviewed 2026-07-02. Audience: a fresh reviewer/judge
 > (Google × Kaggle 5-day intensive). Goal: reproduce the end-to-end story in
 > **bounded time** with **deterministic evidence** — concrete commands and file
 > outputs, not prose claims. See decision D9 in

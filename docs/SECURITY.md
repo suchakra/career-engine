@@ -128,7 +128,9 @@ original checklist that pass covered:
 
 - **Web OIDC login** (`web/streamlit_app.py`, Streamlit `st.login`) — session/cookie
   handling, the OAuth consent scope, redirect-URI pinning, and the `st.user` →
-  `user_id` trust boundary.
+  `user_id` trust boundary. **(Superseded by Phase 10: Streamlit is removed; web auth is
+  now a Firebase ID-token bearer verified at the FastAPI boundary — AD-16.4 / `api/auth.py`.
+  This item is historical; a fresh auth review is due before the qa/prod launch.)**
 - **Storing users' (paid) BYOK Gemini keys** in Secret Manager (`web/grill_ui.py` →
   `SecretManagerKeyVault`). Encryption at rest (Secret Manager AES-256) + in transit
   (TLS) are covered by GCP defaults, but the operational controls need hardening:
