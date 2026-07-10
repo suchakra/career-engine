@@ -36,57 +36,18 @@ Canonical status for every phase is in [PROGRESS.md](PROGRESS.md).
 
 ---
 
-## Phase 10 — Replace Streamlit with Next.js + FastAPI (build tickets)
+## Phase 10 — Replace Streamlit with Next.js + FastAPI  *(✅ COMPLETE — retired to archive)*
 
-> **Status: 10.0 done + 10.1–10.6b + 10.7a SHIPPED (PR #63–#70 + deploy-artifact PR); 10.7b (remove Streamlit source) remains.** The accepted
-> decision, rationale, auth model, streaming choice, deploy
-> topology, and API contract sketch are **canonical in [ARCHITECTURE.md §16](ARCHITECTURE.md)** — do
-> not restate them here. Sequencing is in [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) Phase 10;
-> status is canonical in [PROGRESS.md](PROGRESS.md). Build **API-first, one slice per PR**, in order —
-> each slice must be green (`make check` + any new frontend checks) before the next starts.
+**All slices shipped: 10.0–10.7b (PR #63–#72 + Streamlit-removal PR).** The Streamlit surface is gone; the
+product runs on a **Next.js (App Router) frontend over a FastAPI JSON API**, deployed as **one container**
+(Next.js static export served by FastAPI, AD-16.10). Design is canonical in
+[ARCHITECTURE.md §16](ARCHITECTURE.md); status in [PROGRESS.md](PROGRESS.md); full build specs + the
+standing 10.x build rules are retired to
+[history/GROOMING_ARCHIVE.md §Phase 10](history/GROOMING_ARCHIVE.md).
 
-### Decision anchor (one line)
-Retire the Streamlit surface for a **Next.js (App Router) frontend over a FastAPI JSON API**; the
-Python domain is unchanged; `schema.py` stays the wire contract; auth + streaming move to the API
-boundary. Full rationale + design decisions (AD-16.1..7): [ARCHITECTURE.md §16](ARCHITECTURE.md).
-
-### Standing build rules for every 10.x ticket
-
-- **Do not change domain behaviour.** FastAPI handlers `await` the existing async stores / graph /
-  tailor / renderers directly. No business logic moves into the transport layer.
-- **`schema.py` is the wire contract.** Response/request models are the existing Pydantic types (or
-  thin DTOs over them); frontend types are generated from the OpenAPI schema, never hand-kept.
-  Anything requiring a new field is a separate additive-MINOR `CONTRACT_VERSION` bump, not folded in.
-- **Sub-agent instruction:** if a ticket's assumptions don't match the actual code (store signatures,
-  auth interfaces, session shape), **PAUSE and ask — do not assume.** Confirm the auth shape (10.1)
-  before wiring any protected route.
-- Each ticket ships with tests; do not report `DONE`, report `READY FOR REVIEW`.
-
-### ✅ 10.0–10.6b — SHIPPED (retired to the archive)
-Completed slices **10.0** (ADR) · **10.1** (FastAPI skeleton + auth, PR #63) · **10.2** (read APIs,
-#64) · **10.3** (write APIs, #65) · **10.4** (grill SSE API, #66) · **10.5** (Next.js app shell, #67) ·
-**10.6a** (grill streaming UI, #68) · **10.6b** (tailor + résumé-export API #69 + Tailor UI #70). Full
-build specs retired to [history/GROOMING_ARCHIVE.md §Phase 10](history/GROOMING_ARCHIVE.md); status
-canonical in [PROGRESS.md](PROGRESS.md). **Only 10.7 (cutover) remains, deferred to Phase 11.**
-
-### ✅ 10.7a — New-stack deploy artifact  *(SHIPPED — PR open)*
-The deployable artifact for Next.js + FastAPI — the unblocker for the pre-dev test env (11.A). Topology
-= **single container, Next.js static export served by FastAPI** (AD-16.10): `next build` (`output:
-'export'`, `trailingSlash`) → `frontend/out/`; `api/frontend.py:mount_frontend` serves it at `/` **after
-all `/api` routes** (a catch-all mount must be last, or it shadows `/api`). Multi-stage `Dockerfile`
-(node build → python `uvicorn api.main:app`); Streamlit CMD/entrypoint replaced; CI docker-build smoke
-imports the FastAPI app + checks the bundled export. `tests/test_api_frontend.py` (route→index, 404 page,
-`/api` precedence, no-op when absent). Same-origin → **no CORS**. **Not deployed** (that's 11.A).
-
-### ⏸ 10.7b — Remove Streamlit source  *(READY — S · follow-up)*
-Delete the two Streamlit UI modules (`web/streamlit_app.py`, `web/grill_ui.py`) + `main.py:web()` command
-+ their tests (`test_jobs_handlers`, `test_checkpoint_leave_copy`, the streamlit bits of `test_web_portfolio`,
-`test_web_navigation`) + the `streamlit`/`Authlib` deps + `docker-entrypoint.sh`. **KEEP** the rest of
-`web/` — the API reuses the view builders + stores, and `web/async_runner` is shared (used by
-`jobs_runner`/`portfolio_store`/`session_loader`). Mark ARCHITECTURE Streamlit sections `superseded`.
-- **Correction to the original acceptance:** "delete `web/`" / "no import of `web/`" was wrong — the API
-  legitimately reuses `web/` builders. Only the Streamlit *UI* + entrypoint are removed. `CONTRACT_VERSION`
-  unchanged.
+**Next phase (11 — stabilization) is NOT yet groomed into build tickets.** Groom it (WARM docs → tickets)
+before building; scope is in [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) Phase 11. The immediate
+first slice is **11.A — stand up a new-GCP-project `qa` env** and deploy the 10.7 image to it.
 
 ---
 

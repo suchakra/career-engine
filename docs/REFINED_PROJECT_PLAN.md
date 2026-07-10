@@ -241,6 +241,12 @@ production. Items marked *(decision/spike)* resolve an open question first and o
   the underlying `StructuredResume` schema is unchanged (additive rendering options).
 - **11.G — Beta test pass.** Beta testers (operator-recruited) manually exercise every flow end-to-end
   on the prod-like env; triage + fix findings before go-live.
+- **11.H — Local-dev workflow.** A documented, low-friction way to run the **full stack on a laptop** so
+  changes are testable before any deploy (an operator requirement). Shape: FastAPI `uvicorn api.main:app
+  --reload` + Next.js `npm run dev` against a `frontend/.env.local` (real Firebase web config +
+  `NEXT_PUBLIC_API_BASE_URL=http://localhost:8080`), and/or a single `docker run` of the built image;
+  plus a short "getting started locally" doc/Make target. Auth needs a real Firebase project's public
+  config; BYOK/Firestore can point at a dev/emulator. Small, mostly docs + a compose/Make convenience.
 
 **Exit criteria:** a production-like deployment on the custom domain; the isolation/security model
 decided + documented; richer multi-source job discovery; measurably better résumé copy;

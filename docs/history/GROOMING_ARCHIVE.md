@@ -2157,10 +2157,9 @@ entry via `_get_frontier_entry` and re-pins the frontier, so the banner reappear
 
 ## Phase 10 — Migrate to Next.js + FastAPI (archived; SHIPPED slices)
 
-> **Status:** `historical` · archived 2026-07-10 · retired build specs for the completed Phase 10
-> slices (**10.0–10.6b**, PR #63–#70). Canonical status in [PROGRESS.md](../PROGRESS.md); design in
-> [ARCHITECTURE.md §16](../ARCHITECTURE.md). The only remaining Phase 10 slice — **10.7 (cutover,
-> deferred to Phase 11)** — stays in [GROOMING.md](../GROOMING.md).
+> **Status:** `historical` · archived 2026-07-10 · retired build specs for **all of Phase 10
+> (10.0–10.7b, PR #63–#72)** — the Streamlit→Next.js+FastAPI migration is COMPLETE. Canonical status in
+> [PROGRESS.md](../PROGRESS.md); design in [ARCHITECTURE.md §16](../ARCHITECTURE.md).
 
 ### ✅ 10.0 — Architecture decision record  *(DONE — grooming)*
 Decision + rationale recorded in [ARCHITECTURE.md §16](../ARCHITECTURE.md); sequencing in
@@ -2266,6 +2265,34 @@ Full-stack: the API slices (10.1–10.4) never built a tailor endpoint, so 10.6b
      yet; deferred with the Portfolio "Build master résumé" button.
 - **Also deferred:** optional "track as application" from Tailor (`POST /api/applications` exists) and
   JD-by-URL scraping — the core JD → preview → export flow is complete.
+
+### ✅ 10.7 — Cutover  *(SHIPPED — 10.7a deploy artifact PR #72 + 10.7b Streamlit removal)*
+Made Next.js + FastAPI the deployed product and removed Streamlit.
+- **10.7a — deploy artifact (PR #72):** topology decided (AD-16.10) = **single container, Next.js static
+  export served by FastAPI**, same-origin (no CORS). `next build` (`output: 'export'`, `trailingSlash`) →
+  `frontend/out/`; `api/frontend.py:mount_frontend` serves it at `/` **mounted LAST** (a `/` catch-all
+  shadows later `/api` routes otherwise — the auth tests caught it); an `/api/{path}` catch-all returns a
+  JSON 404 (not the SPA HTML). Multi-stage `Dockerfile` (node build → `uvicorn api.main:app`); public
+  `NEXT_PUBLIC_*` baked in at build time via build args (API base **empty** = same-origin; Firebase config
+  passed per-env by the deploy pipeline). CI docker-build smoke imports the FastAPI app + checks the
+  bundled export. `tests/test_api_frontend.py`.
+- **10.7b — Streamlit removal:** deleted `web/streamlit_app.py`, `web/grill_ui.py`, `web/navigation.py`,
+  `docker-entrypoint.sh`, `main.py:web()`, the `streamlit`/`authlib` deps, and the Streamlit-only tests
+  (`test_jobs_handlers`, `test_checkpoint_leave_copy`, `test_web_navigation`, one test in
+  `test_web_portfolio`). **KEPT the rest of `web/`** — the FastAPI API reuses the view builders + stores,
+  and `web/async_runner` is shared (`jobs_runner`/`portfolio_store`/`session_loader`).
+- **Correction to the original acceptance:** "delete `web/`" / "no import of `web/`" was **wrong** — the API
+  legitimately reuses `web/` builders; only the Streamlit *UI* + entrypoint were removed. `CONTRACT_VERSION`
+  unchanged. **Not deployed** here — deployment is Phase 11.A (a new `qa` GCP project).
+
+### Standing build rules (Phase 10, historical — reusable pattern for future API-first phases)
+- **Do not change domain behaviour.** FastAPI handlers `await` the existing async stores / graph / tailor /
+  renderers directly; no business logic in the transport layer.
+- **`schema.py` is the wire contract.** Request/response models are the existing Pydantic types (or thin
+  DTOs); frontend types are generated from the OpenAPI schema, never hand-kept. A new field is a separate
+  additive-MINOR `CONTRACT_VERSION` bump.
+- **PAUSE on mismatch** (store signatures / auth / session shape) rather than assume. Ship with tests;
+  report `READY FOR REVIEW`, not `DONE`.
 
 ---
 

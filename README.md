@@ -71,15 +71,22 @@ turns, and renders `resume.pdf`.
 > paid/raised-quota key for uninterrupted live runs. (The deterministic
 > end-to-end test renders a real PDF without any key.)
 
-### Web dashboard
+### Web app
+
+The web app is a **Next.js (App Router) frontend over a FastAPI JSON API** (Phase 10 —
+Streamlit was retired). It builds to one container (FastAPI serves the API and the static
+frontend on a single port):
 
 ```bash
-python -m main web                 # → streamlit run web/streamlit_app.py
+docker build -t career-engine:local .
+docker run --rm -p 8080:8080 --env-file .env career-engine:local   # http://localhost:8080
 ```
 
-The dashboard shows the discovery progress meter, pending follow-up actions, and
-never-gated grill/tailor entry points. It renders a sign-in prompt until an
-Identity Platform ID token is supplied.
+Google sign-in needs a Firebase web-app config passed as build args (`--build-arg
+NEXT_PUBLIC_FIREBASE_*`). A streamlined local-dev workflow (`uvicorn --reload` +
+`npm run dev`) is tracked as Phase 11.H. The app shows the discovery progress meter,
+pending follow-ups, and never-gated grill/tailor entry points; it renders a sign-in
+prompt until a Firebase ID token is supplied.
 
 ## Configuration
 
