@@ -1,10 +1,17 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-10 — Phase 10 build: **10.1–10.5 MERGED**; 10.6 (grill streaming UI + Tailor) next)
-**`master` clean @ `a24550e` · contract v2.8.0 · no contract change in 10.5 (presentation/transport only). Do NOT deploy (per operator) — cutover/deploy is slice 10.7.**
-**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + all of Phase 9 (9A/9B/9C/9D/9E/9F/9G/9I/9J/9K) + BUG-1 + BUG-2 COMPLETE. Phase 10 building API-first, one slice per PR — 10.1 + 10.2 + 10.3 + 10.4 + 10.5 merged.**
+## 👉 YOU ARE HERE (updated 2026-07-10 — Phase 10: **10.1–10.5 + 10.6a MERGED**; 10.6b (Tailor) next; 10.7 deferred to Phase 11)
+**`master` clean @ `2fd1a4b` · contract v2.8.0 · no contract change in the migration (presentation/transport only). Do NOT deploy (per operator) — cutover/deploy is Phase 11 (11.A new prod-like env).**
+**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + all of Phase 9 (9A/9B/9C/9D/9E/9F/9G/9I/9J/9K) + BUG-1 + BUG-2 COMPLETE. Phase 10 building API-first, one slice per PR — 10.1–10.5 + 10.6a merged.**
 
-**Just merged — Phase 10.5 (Next.js App Router shell, `frontend/`, PR #67, Copilot review addressed):**
+**Just merged — Phase 10.6a (interactive grill streaming UI, PR #68, Copilot review addressed):** `apiStream`
+(authed SSE via fetch — `EventSource` can't send a bearer), `useGrill` turn controller (POST record →
+consume `GET /api/grill/stream`, append per completed turn; **banner = server `frontier_label` verbatim**,
+per BUG-2; AbortController on unmount), reusable `StreamingTranscript` (§9), grill page (first-run seed →
+checkpoint confirm → completion → mid-stream error banner). MSW-mocked SSE tests (start→turn+banner,
+error frame). Skip/Restart deferred (not in the 10.4 API surface).
+
+**Earlier this session — Phase 10.5 (Next.js App Router shell, `frontend/`, PR #67, Copilot review addressed):**
 - Scaffolded `frontend/` (Next.js 14 App Router): routes `dashboard/portfolio/grill/jobs/tailor/settings/login`;
   the foundational component inventory ([PHASE10_UI_MOCKUP.md §2](PHASE10_UI_MOCKUP.md)); the **AD-16.8 TanStack Query
   data layer** (read hooks + optimistic write→rollback→invalidate over the 10.2/10.3 APIs); **Firebase-bearer auth**
@@ -60,27 +67,28 @@
   [history/GROOMING_ARCHIVE.md](history/GROOMING_ARCHIVE.md); role-scoped reads wired into the
   instruction files.
 
-**▶ NEXT — Phase 10 slice 10.6, then 10.7 (one PR each, API-first)**
+**▶ NEXT — Phase 10 slice 10.6b (Tailor); 10.7 deferred to Phase 11**
 
-The Streamlit→Next.js+FastAPI decision is recorded in [ARCHITECTURE.md §16](ARCHITECTURE.md)
-(AD-16.1..9: FastAPI over the unchanged domain, `schema.py` as wire contract, auth at the API
-boundary, SSE grill, Cloud Run; AD-16.8 TanStack Query data layer; AD-16.9 Vitest/RTL/MSW/Playwright
-test stack). API slices 10.1–10.4 + the 10.5 app shell are MERGED. Two frontend slices remain,
-✅ Ready in [GROOMING.md §Phase 10](GROOMING.md); sequencing in
-[REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md):
-- **▶ 10.6 (next) — grill streaming UI + Tailor + résumé export.** Build the reusable
-  `StreamingTranscript` (transcript + SSE token stream + composer) against the 10.4
-  `GET /api/grill/stream` endpoint, with the currently-grilling banner from the server
-  (`_effective_frontier_label`, never re-derived client-side); wire Tailor (JD in → PDF/DOCX/MD
-  export via the existing renderers behind the API). Tests: streaming render vs a mocked SSE stream
-  + tailor→export happy path. Reuses the 10.5 component inventory + data layer.
-- **10.7 — cutover.** Make Next.js+FastAPI the deployed product: delete `web/` Streamlit +
-  `web/async_runner.py`, update Dockerfile / Cloud Run / `allowedOrigins` / redirect URIs, mark the
-  ARCHITECTURE Streamlit sections `superseded`. This is the slice that deploys. `CONTRACT_VERSION`
-  unchanged by the migration.
+API slices 10.1–10.4 + the 10.5 app shell + 10.6a grill streaming are MERGED. What remains of Phase 10,
+✅ groomed in [GROOMING.md §Phase 10](GROOMING.md):
+- **▶ 10.6b (next) — Tailor + résumé export.** ⚠️ **Full-stack, larger than a frontend slice:** the API
+  slices never built a tailor endpoint, so this adds **two new backend endpoints first**, then the UI:
+  - `POST /api/tailor` — load durable state + resolve a BYOK client (as `api.deps.get_discovery_session`
+    does), call `web/resume_builder.py:tailor_structured_resume(state, jd_text, contact, *, client,
+    _instructions)`, persist into the existing `CareerEngineState.tailored_resume_json`, return the
+    `StructuredResume` for preview (instructions → *user* prompt, injection-safe per 9I).
+  - `GET /api/resume/{fmt}` (`pdf`/`docx`/`md`, + `?kind=master`) — render via
+    `web/resume_render.py:structured_to_{pdf_bytes,docx_bytes,markdown}`.
+  - Regenerate `frontend/openapi.json`+`types.gen.ts` (`npm run gen:openapi`); backend pytest
+    (network-free, mocked model) + frontend Tailor page/preview/export tests. Reuses the 10.5 component
+    inventory + data layer + the 10.6a `ResumePreview`-style patterns.
+- **⏸ 10.7 — cutover — DEFERRED to Phase 11 (11.A).** Deletes Streamlit `web/` + reconfigures the
+  deployed service, but the current env is **frozen for the Kaggle presentation**. Runs against the NEW
+  prod-like environment in Phase 11, not the frozen one. `CONTRACT_VERSION` unchanged by the migration.
 
-Hand the builder the 10.6 ticket + [skills/build-slice](../skills/build-slice/SKILL.md), not the big
-docs. **Do NOT deploy before 10.7** (per operator).
+Do the work **inline** (orchestrator holds the context) unless parallelizing — per
+[CONTEXT_STRATEGY.md](CONTEXT_STRATEGY.md); if handing to a builder, give the 10.6b ticket +
+[skills/build-slice](../skills/build-slice/SKILL.md), not the big docs. **Do NOT deploy** (per operator).
 
 **What shipped this session (5-PR cycle: 2 bug fixes + Phase 9 completion + Phase 10 groom):**
 

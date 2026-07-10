@@ -2155,3 +2155,94 @@ entry via `_get_frontier_entry` and re-pins the frontier, so the banner reappear
 
 ---
 
+## Phase 10 — Migrate to Next.js + FastAPI (archived; SHIPPED slices)
+
+> **Status:** `historical` · archived 2026-07-10 · retired build specs for the completed Phase 10
+> slices (**10.0–10.5 + 10.6a**, PR #63–#68). Canonical status in [PROGRESS.md](../PROGRESS.md);
+> design in [ARCHITECTURE.md §16](../ARCHITECTURE.md). The current-phase remainder — **10.6b (Tailor)**
+> and **10.7 (cutover, deferred to Phase 11)** — stays in [GROOMING.md](../GROOMING.md). The standing
+> 10.x build rules also remain in GROOMING (they still bind 10.6b).
+
+### ✅ 10.0 — Architecture decision record  *(DONE — grooming)*
+Decision + rationale recorded in [ARCHITECTURE.md §16](../ARCHITECTURE.md); sequencing in
+[REFINED_PROJECT_PLAN.md](../REFINED_PROJECT_PLAN.md) Phase 10. Unblocks 10.1–10.7.
+
+### ✅ 10.1 — FastAPI skeleton + auth boundary  *(SHIPPED — PR #63)*
+> Merged: `api/` package (`main.py`/`deps.py`/`auth.py`), `GET /api/health` + `GET /api/me`, Firebase-bearer boundary with opaque 401, 4 tests. Status canonical in [PROGRESS.md](../PROGRESS.md).
+
+Stand up the FastAPI app and the single identity edge. **PAUSE point resolved:** the auth shape is
+**AD-16.4 option (b) — Firebase ID-token bearer verified at FastAPI**, reusing the existing
+`auth/firebase_auth.py::FirebaseAuthProvider` (verified token → `sub` → `user_id`, injectable
+verifier for network-free tests). Rationale recorded in [ARCHITECTURE.md §16 AD-16.4](../ARCHITECTURE.md).
+Do **not** build a cookie/OIDC-callback session store.
+- **Files:** new `api/` package (`api/main.py`, `api/deps.py`, `api/auth.py`); reuse `auth/`.
+- **Auth mechanics:** FastAPI reads `Authorization: Bearer <id_token>`; an injectable
+  `get_current_user_id` dependency verifies the token via `FirebaseAuthProvider` and returns the
+  stable `user_id`. Missing/invalid/expired token → HTTP 401 (typed JSON, no stack leak, no token
+  logged). The provider/verifier must be injectable so tests never touch the network.
+- **Endpoints:** `GET /api/health` (unauthenticated liveness), `GET /api/me` (protected; returns the
+  verified `user_id` + safe display info from token claims, e.g. email — never the raw token).
+- **Acceptance:** an unauthenticated call to a protected route returns 401; a valid token resolves
+  `user_id` via the same trust boundary the CLI/web use today; **no `asyncio.run` bridge** anywhere.
+- **Tests:** `test_api_auth_rejects_missing_token`, `test_api_me_resolves_user_id` (injected fake
+  verifier / store double, no network), plus `test_api_health_ok` and an invalid-token → 401 case.
+
+### ✅ 10.2 — Read APIs  *(SHIPPED — PR #64)*
+> Merged: protected `GET /api/dashboard` + `/api/portfolio` + `/api/jobs` wrapping the pure view builders + session/ledger reads; async endpoints + `run_in_threadpool` for sync stores; strict `api/schemas.py` response models; degrade-to-empty (never 500); 13 tests. Status canonical in [PROGRESS.md](../PROGRESS.md).
+
+Typed GET endpoints wrapping existing read paths — **no behaviour change**.
+- **Endpoints:** `GET /api/dashboard`, `GET /api/portfolio`, `GET /api/jobs`.
+- **Reuse:** `web/session_loader.py`, portfolio view builders, `discovery` ledger reads.
+- **Acceptance:** each returns the existing view model serialized from `schema.py`; load failure
+  degrades to an empty typed payload (mirrors `try_load_latest_discovery_state`), never 500 on a
+  missing session.
+- **Tests:** one per endpoint asserting the typed shape from a seeded fake store; empty-state case.
+
+### ✅ 10.3 — Write APIs  *(SHIPPED — PR #65)*
+> Merged: four protected async write endpoints — `POST /api/profile`, `POST /api/experience`, `POST /api/applications`, `PUT /api/preferences` — binding `schema.py` domain models directly (AD-16.3) and reusing the existing store write-seams (sync stores via `run_in_threadpool`; `web.portfolio_store.aadd_manual_entry` awaited natively — one additive async wrapper); malformed/required-field-omitted body = 422; two strict api-local DTOs in `api/schemas.py`; 13 tests. Status canonical in [PROGRESS.md](../PROGRESS.md).
+
+### ✅ 10.4 — Grill API with SSE streaming  *(SHIPPED — PR #66)*
+Serve the grill turn over Server-Sent Events (WebSocket only if a bidirectional need surfaces).
+- **Endpoints:** `POST /api/grill` (submit answer / advance), `GET /api/grill/stream` (SSE of the
+  turn's steps/tokens) over the existing `DiscoverySession`.
+- **Acceptance:** frontier steering, checkpoints, and resume behave identically to the Streamlit
+  grill (reuse `workflows.nodes` / `DiscoverySession`; **no graph changes**); the "currently
+  grilling" label is derivable server-side (reuse the `_effective_frontier_label` logic from BUG-2).
+- **Tests:** a scripted multi-turn session asserting the SSE event sequence against a fake model;
+  resume-mid-grill emits the correct frontier label.
+
+### ✅ 10.5 — Next.js app shell + routing + auth wiring  *(SHIPPED — PR #67)*
+The React shell consuming 10.1–10.3.
+- **Files:** new `frontend/` (Next.js App Router). Routes: Dashboard / Portfolio / Jobs / Tailor /
+  Grill.
+- **Build the foundational components first** — the shared inventory in
+  [PHASE10_UI_MOCKUP.md §2](../PHASE10_UI_MOCKUP.md) (`AppShell`/`SidebarNav`, `StatusBadge`, `ActionCard`,
+  `PrimaryButton`/`SplitButton`, `CollapsibleSection`/`Field`, `EmptyState`, `MetricStat`,
+  `Toast`/`InlineError`); screens compose these, no screen re-implements a card/badge/form row.
+- **Client data layer = AD-16.8** ([ARCHITECTURE.md §16](../ARCHITECTURE.md)): TanStack Query; query keys
+  mirror the read APIs; writes are optimistic (`onMutate` patch → `onError` rollback → `onSettled`
+  invalidate) — that is how "without a full-page reload" is implemented. Include the SSR
+  `HydrationBoundary` seam and the shared bearer-token fetch wrapper + central 401→refresh.
+- **Acceptance:** login flow round-trips through the 10.1 auth boundary and sets the session; the
+  three read views render live data from 10.2; profile/preferences forms submit via 10.3 **without a
+  full-page reload** (optimistic update + rollback on error); frontend request/response types are
+  generated from the FastAPI OpenAPI schema.
+- **Tests:** component/integration tests for auth-guarded routing + one form-submit happy path
+  (mocked API via **MSW**; **Vitest + React Testing Library**) **including an optimistic-write rollback
+  on a failed mutation**; a bundle-size check gates the shadcn + data-layer choice
+  ([PHASE10_UI_MOCKUP.md §8](../PHASE10_UI_MOCKUP.md) spike). Frontend toolchain + test stack per
+  [ARCHITECTURE.md §16 AD-16.9](../ARCHITECTURE.md).
+- **Shipped notes:** `make frontend-check` lane + `frontend` CI job; Copilot review addressed
+  (9 comments — a11y, retry, Firebase-init robustness).
+
+### ✅ 10.6a — Next.js grill (streaming)  *(SHIPPED — PR #68)*
+The interactive grill surface consuming the 10.4 SSE endpoint. Shipped: `apiStream` (authed SSE via
+fetch, since `EventSource` can't send a bearer), `useGrill` turn controller (POST record → stream,
+append per completed turn, server `frontier_label` banner verbatim per BUG-2, AbortController on
+unmount), reusable `StreamingTranscript` (transcript + caret + composer, turn controller injected per
+§9), grill page (first-run seeding → checkpoint confirm → completion → error banner). MSW-mocked SSE
+tests. Copilot review addressed (4 comments). Skip/Restart deferred (not exposed by the 10.4 API
+surface: only `start`/`answer`/`confirm`).
+
+---
+
