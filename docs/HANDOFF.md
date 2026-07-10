@@ -1,8 +1,23 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-08 — Phase 10 build: slices 10.1 + 10.2 + 10.3 + 10.4 MERGED; slice 10.5 next)
-**`master` clean @ `ef141c6` · contract v2.8.0 · 741 tests (1 skipped) · all merged PRs green.**
-**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + all of Phase 9 (9A/9B/9C/9D/9E/9F/9G/9I/9J/9K) + BUG-1 + BUG-2 COMPLETE. Phase 10 building API-first, one slice per PR — 10.1 + 10.2 + 10.3 + 10.4 done.**
+## 👉 YOU ARE HERE (updated 2026-07-10 — Phase 10 build: 10.1–10.4 MERGED; **10.5 Next.js shell BUILT on branch, PR open/in-review**)
+**On branch `feat/phase10-5-nextjs-shell` (NOT master). `master` @ `ef141c6` · contract v2.8.0 · 741 backend tests. No contract change in 10.5 (presentation/transport only).**
+**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + all of Phase 9 (9A/9B/9C/9D/9E/9F/9G/9I/9J/9K) + BUG-1 + BUG-2 COMPLETE. Phase 10 building API-first, one slice per PR — 10.1 + 10.2 + 10.3 + 10.4 merged; 10.5 built, PR open.**
+
+**Just built — Phase 10.5 (Next.js App Router shell, `frontend/`), gate green:**
+- Scaffolded `frontend/` (Next.js 14 App Router): routes `dashboard/portfolio/grill/jobs/tailor/settings/login`;
+  the foundational component inventory ([PHASE10_UI_MOCKUP.md §2](PHASE10_UI_MOCKUP.md)); the **AD-16.8 TanStack Query
+  data layer** (read hooks + optimistic write→rollback→invalidate over the 10.2/10.3 APIs); **Firebase-bearer auth**
+  wiring through the 10.1 boundary (AD-16.4) + `RequireAuth`/`RedirectIfAuthed` guards; light/dark/system theme.
+- **Test stack (AD-16.9):** Vitest + RTL + jsdom + **MSW** (7 unit/integration tests, all pass) + **Playwright** login
+  e2e (2 specs pass; own lane, self-booting production server + fake Firebase config). `scripts/check-bundle-size.mjs`
+  First-Load-JS budget (all routes 85–122 kB gzip, budget 250 kB). `frontend/README.md`.
+- **Gate wiring:** `make frontend-check` (npm ci + lint + typecheck + Vitest + build + bundle budget) + a separate
+  **`frontend` CI lane** in `.github/workflows/ci.yml` (Node 20). Kept separate from the Python `make check`.
+- **Picked up mid-flight** (prior sub-agent interrupted): fixed 2 Vitest failures (ProfileForm collapsible closed by
+  default → `defaultOpen`; test QueryClient `gcTime:0` GC'd optimistic cache → `gcTime:Infinity`) and a `next build`
+  blocker (named `DashboardContent` export illegal in `page.tsx` → extracted to its own module).
+- **Remaining for 10.5:** Gemini 2.5 Pro review + Copilot review → address → squash-merge. **Do NOT deploy** (per operator).
 
 **Just merged:**
 - **PR #66** — Phase 10.4 (streaming grill API, presentation only, no contract change): the
@@ -45,21 +60,19 @@
   [history/GROOMING_ARCHIVE.md](history/GROOMING_ARCHIVE.md); role-scoped reads wired into the
   instruction files.
 
-**▶ NEXT — Phase 10 build, slices 10.5 → 10.7 (one PR each, API-first)**
+**▶ NEXT — merge 10.5, then Phase 10 slices 10.6 → 10.7 (one PR each, API-first)**
 
 The Streamlit→Next.js+FastAPI decision is recorded in [ARCHITECTURE.md §16](ARCHITECTURE.md)
 (AD-16.1..9: FastAPI over the unchanged domain, `schema.py` as wire contract, auth at the API
 boundary, SSE grill, Cloud Run; AD-16.8 TanStack Query data layer; AD-16.9 Vitest/RTL/MSW/Playwright
-test stack). The five API slices (10.1 auth boundary + 10.2 reads + 10.3 writes + 10.4 grill SSE)
-are MERGED. Executable **frontend** build tickets 10.5–10.7 are ✅ Ready in
-[GROOMING.md §Phase 10](GROOMING.md); sequencing in [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md).
-Build one slice per PR, in order. **Next up = 10.5 Next.js app shell** — scaffold `frontend/`
-(Next.js App Router; Dashboard/Portfolio/Jobs/Tailor/Grill routes), the foundational component
-inventory ([PHASE10_UI_MOCKUP.md §2](PHASE10_UI_MOCKUP.md)), the AD-16.8 TanStack Query data layer
-over the 10.2 reads + 10.3 writes, auth wiring through the 10.1 bearer boundary, and the AD-16.9
-test stack (Vitest/RTL/jsdom + MSW unit/integration + Playwright e2e; `npx playwright install
---with-deps` from `frontend/`) with a `frontend` lane added to `make check`. Hand the builder the
-10.5 ticket + [skills/build-slice](../skills/build-slice/SKILL.md) — not the big docs.
+test stack). API slices 10.1–10.4 are MERGED; **10.5 (Next.js app shell) is BUILT on
+`feat/phase10-5-nextjs-shell` and green — PR open, awaiting Gemini + Copilot review before merge**
+(see the "Just built" block above). **Immediate next action:** carry 10.5 through review → address →
+squash-merge → reconcile PROGRESS to ✅. **Do NOT deploy** (per operator). Executable frontend build
+tickets 10.6–10.7 are ✅ Ready in [GROOMING.md §Phase 10](GROOMING.md); sequencing in
+[REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md). **10.6 = grill streaming UI (`StreamingTranscript`
+over the 10.4 SSE) + Tailor** — hand the builder the 10.6 ticket +
+[skills/build-slice](../skills/build-slice/SKILL.md), not the big docs.
 
 **What shipped this session (5-PR cycle: 2 bug fixes + Phase 9 completion + Phase 10 groom):**
 

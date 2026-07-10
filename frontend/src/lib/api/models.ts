@@ -1,0 +1,20 @@
+/**
+ * Thin, typed aliases over the OpenAPI-generated schema (types.gen.ts).
+ *
+ * The frontend never hand-transcribes schema.py — these pull the exact request /
+ * response shapes from the generated `components["schemas"]`. If the backend
+ * contract changes, re-run `npm run gen:openapi` and these follow automatically.
+ */
+import type { components } from "./types.gen";
+
+type Schemas = components["schemas"];
+
+export type MeResponse = Schemas["MeResponse"];
+export type DashboardResponse = Schemas["DashboardResponse"];
+export type PortfolioResponse = Schemas["PortfolioResponse"];
+export type EntryCardResponse = Schemas["EntryCardResponse"];
+export type StoryCardResponse = Schemas["StoryCardResponse"];
+export type JobsResponse = Schemas["JobsResponse"];
+export type JobCardResponse = Schemas["JobCardResponse"];
+export type UserProfile = Schemas["UserProfile"];
+export type SessionPreferences = Schemas["SessionPreferences"];

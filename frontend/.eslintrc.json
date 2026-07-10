@@ -1,0 +1,4 @@
+{
+  "extends": "next/core-web-vitals",
+  "ignorePatterns": ["src/lib/api/types.gen.ts", ".next/", "coverage/", "playwright-report/", "test-results/"]
+}
