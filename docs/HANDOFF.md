@@ -75,7 +75,7 @@ merged. Two operator decisions this session set the path:
   *private premium layer* — but wiring it up (CI/WIF/2-repo devcontainer) is deferred. The `vault` remote
   was **removed** for now (avoid stray pushes); re-add + wire later. `docs/personal.md` is gitignored
   (private operator notes / the unwritten premium idea — **never commit it, never describe it in the repo**).
-- **Open-core seam SHIPPED (feat/open-core-plugin-seam, PR open):** the core now carries a one-way
+- **Open-core seam MERGED (PR #71):** the core now carries a one-way
   extension seam so a private layer can compose in production without the core depending on it —
   backend plugin registry (`api/plugins.py`, `careerengine.plugins` entry points, `CE_DISABLED_PLUGINS`
   denylist) + frontend feature flags (`frontend/src/lib/flags.ts`, `NEXT_PUBLIC_FEATURES`) + a flagged
