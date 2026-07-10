@@ -202,29 +202,73 @@ React shell exists:
 auth callback/redirect URIs are fully controlled at the API boundary; the grill streams; and no domain
 behaviour or `CONTRACT_VERSION` changed as a result of the migration itself.
 
-### Phase 11 — Post-application & outreach toolkit  *(planned; builds on the Phase 10 shell)*
-Features named during Phase 10 UI design. The Next.js shell is built forward-compatibly for them —
-reserved nav group (`PREPARE`), a `ConsentDialog` + per-send confirm pattern, a `Settings` home for
-consents, and the reusable `StreamingTranscript` component — see
-[PHASE10_UI_MOCKUP.md §9](PHASE10_UI_MOCKUP.md). Each ships as its own additive-MINOR
-`CONTRACT_VERSION` bump; none blocks Phase 10.
+### Phase 11 — Stabilization & pre-launch hardening  *(planned; follows the Phase 10 migration)*
+A **quality / operations phase, not a feature phase.** The goal is a production-grade, beta-tested
+deployment for real users, with the known product-quality gaps addressed. The current dev deployment is
+**frozen for the Kaggle presentation**, so Phase 11 stands up a *separate* environment and treats it as
+production. Items marked *(decision/spike)* resolve an open question first and only build if warranted.
 
-- **11.A — Outreach / emailer suite.** Agent-drafted recruiter follow-ups + thank-you notes. Requires
-  **consent pages** (one-time connected-account grant, send-only scope) **plus** mandatory
-  draft-review + **per-message send confirmation**; durable, `user_id`-scoped consent records + a send
-  log (recipient/subject/timestamp, not body). Reuses the Phase-10 `ConsentDialog` + `Settings →
-  Connected accounts & consents`. Privacy/HITL posture mirrors the grill checkpoint ethos.
-- **11.B — Interview prep.** Mock interviews with feedback, reusing the grill machinery
-  (`StreamingTranscript` + turn controller) + portfolio + web research — folds in the former
-  Future/Backlog interview-preparedness item ([ARCHITECTURE.md §13](ARCHITECTURE.md)). Its turn logic
-  differs from the grill (prompt → recorded answer), so it supplies its own controller over the shared
-  streaming surface.
-- **11.C — Salary negotiator.** Offer / comp inputs → scripted (streamed) negotiation guidance +
+- **11.A — Separate production-like environment.** Provision a NEW environment (its own Cloud Run
+  service, Firestore, secrets, config) deployed to *as if it were production*, leaving the existing
+  Kaggle-presentation deployment untouched. New Terraform env root + CI/deploy target.
+- **11.B — Custom domain.** Get `career-engine.bitcrafty.cloud` (hyphenated) working again via
+  Cloudflare + OAuth redirect + `CE_AUTH_REDIRECT_URI` (a long-deferred item), pointed at the new
+  prod-like env.
+- **11.C — Revisit the isolation / security model *(decision/spike)*.** With Streamlit gone, is
+  **one-instance-per-user** (`max_instances=1`, `concurrency=1`) still the right isolation? Evaluate
+  proper multi-tenant safety under FastAPI (per-request `user_id` scoping at the auth boundary) versus
+  the current single-user constraint; record the decision + rationale as an AD in
+  [ARCHITECTURE.md](ARCHITECTURE.md) and adjust Terraform / Cloud Run to match.
+- **11.D — MCP job-source plugin design.** A pluggable adapter architecture behind the MCP tool surface
+  so job sources (Workday / Indeed / LinkedIn / …) drop in beyond the single Remotive source — a clean
+  plugin contract + ≥1 additional live adapter. SSRF-guarded per the current scraper rules.
+- **11.E — Résumé "copywriter" agent *(spike → decision)*.** Addresses a real quality gap: today's
+  tailored bullets are **one-liners echoing the last grill answer, ignoring the rest of the
+  portfolio/résumé**. Evaluate splitting the tailor into a dedicated **copywriter** step that
+  synthesizes the *whole* portfolio into properly-written, ATS-safe prose. Spike first; commit the
+  split only if it measurably improves output.
+- **11.F — User-configurable résumé presentation.** UI to let users shape how the résumé looks: move
+  résumé **sections around a grid** and choose **fonts (free Google fonts only)**. Presentation-layer —
+  the underlying `StructuredResume` schema is unchanged (additive rendering options).
+- **11.G — Beta test pass.** Beta testers (operator-recruited) manually exercise every flow end-to-end
+  on the prod-like env; triage + fix findings before go-live.
+
+**Exit criteria:** a production-like deployment on the custom domain; the isolation/security model
+decided + documented; richer multi-source job discovery; measurably better résumé copy;
+user-customizable résumé presentation; and a clean beta-test pass.
+
+### Phase 12 — Feature-complete milestone & go-live  *(milestone)*
+Declare v1 **feature-complete**, officially launch, and start onboarding real users onto the prod-like
+environment. The launch checklist (final `/security-review`, monitoring/quotas, onboarding flow,
+docs/README) is groomed as Phase 11 nears done.
+
+### Phase 13 — Post-launch differentiators  *(market-driven; scheduled after go-live, pending fit analysis)*
+Built once real users are on the product and informed by observed fit — **not v1-blocking.** Each ships
+as its own additive-MINOR `CONTRACT_VERSION` bump where it touches the contract. The Next.js shell is
+already built forward-compatibly for the outreach/prepare features — reserved `PREPARE` nav group, the
+`ConsentDialog` + per-send confirm pattern, a `Settings` consents home, and the reusable
+`StreamingTranscript` component (see [PHASE10_UI_MOCKUP.md §9](PHASE10_UI_MOCKUP.md)).
+
+- **13.A — Career journaling.** A journaling feature (capture wins/progress over time) + **email
+  reminders to journal**. Feeds richer, continuously-updated portfolio material.
+- **13.B — Deeper grilling ("one more thing").** Fix a core under-extraction gap: the grill currently
+  settles for too little (e.g. **one line out of a 7-year tenure**, which defeats the purpose). Add a
+  depth/breadth follow-up loop that keeps drawing out achievements before advancing the frontier.
+- **13.C — Outreach / emailer suite.** Agent-drafted recruiter follow-ups + thank-you notes; **consent
+  pages** (one-time connected-account grant, send-only scope) **plus** mandatory draft-review + per-
+  message send confirmation; durable `user_id`-scoped consent records + a send log
+  (recipient/subject/timestamp, not body). Reuses the Phase-10 `ConsentDialog` + `Settings → Connected
+  accounts & consents`. (Was tentatively Phase 11; moved post-launch.)
+- **13.D — Interview prep.** Mock interviews with feedback, reusing the grill machinery
+  (`StreamingTranscript` + its own turn controller) + portfolio + web research
+  ([ARCHITECTURE.md §13](ARCHITECTURE.md)). Its turn logic differs from the grill (prompt → recorded
+  answer), so it supplies its own controller over the shared streaming surface.
+- **13.E — Salary negotiator.** Offer / comp inputs → scripted (streamed) negotiation guidance +
   scenario-compare cards.
-- **11.D — Profile location & work-model preference.** Structured **base location** + **remote scope**
-  (`On-site` · `Hybrid` · `Remote within {region}` · `Remote anywhere`) setting in the Profile area
-  (e.g. "GTA, Canada" · "Remote within Canada"), which the **Jobs rubric inherits** (shown read-only
-  in Jobs preferences). Not a job-search preference today; additive-MINOR contract bump when built.
+- **13.F — Profile location & work-model preference.** Structured **base location** + **remote scope**
+  (`On-site` · `Hybrid` · `Remote within {region}` · `Remote anywhere`) in Profile (e.g. "GTA, Canada"
+  · "Remote within Canada"), inherited by the **Jobs rubric** (shown read-only in Jobs preferences).
+  Small additive-MINOR bump; schedulable opportunistically (could ride along earlier if convenient).
 
 ### Phase N — opportunistic value-adds (wanted; NOT v1-blocking; build when feasible)
 - **Outcome learning (positive-reinforcement)** ([ARCHITECTURE.md §8.1](ARCHITECTURE.md)): async-learn,
@@ -234,10 +278,10 @@ consents, and the reusable `StreamingTranscript` component — see
   once Phase 2 ships; nothing depends on it.
 
 ### Future / Backlog — post-v1 (NOT in scope)
-- **Interview preparedness** ([ARCHITECTURE.md §13](ARCHITECTURE.md)): **promoted into Phase 11.B**
-  above — on "interview scheduled," research the company+role's typical interview shape (coding /
-  system design / behavioral) and run agent-driven **mock interviews** with feedback, reusing the
-  grilling machinery + portfolio + web search.
+- **Interview preparedness** ([ARCHITECTURE.md §13](ARCHITECTURE.md)): **scheduled as Phase 13.D**
+  above (post-launch differentiator) — on "interview scheduled," research the company+role's typical
+  interview shape (coding / system design / behavioral) and run agent-driven **mock interviews** with
+  feedback, reusing the grilling machinery + portfolio + web search.
 
 ---
 

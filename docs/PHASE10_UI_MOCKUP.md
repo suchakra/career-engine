@@ -97,7 +97,7 @@ assemble rather than reinvent.
 | `ActionCard` | dashboard pending-actions, job tiles, portfolio entries | 12px radius; **one primary CTA** per card. |
 | `PrimaryButton` / `SplitButton` | the single primary CTA per screen; **Build résumé → PDF/Word/MD** split | Enforces "one primary action per screen." |
 | `StreamingTranscript` | grill (10.6); reused by interview-prep + negotiator (§9) | Transcript + SSE stream + composer; **turn controller injected** (AD-16.5). |
-| `ConsentDialog` + `ConfirmSendDialog` | one-time connected-account grant + per-send confirm (§9) | Reused by the Phase-11 emailer; consent recorded to Settings. |
+| `ConsentDialog` + `ConfirmSendDialog` | one-time connected-account grant + per-send confirm (§9) | Reused by the later-phase emailer (post-launch, roadmap Phase 13.C); consent recorded to Settings. |
 | `CollapsibleSection` + `Field` | progressive-disclosure forms: profile, preferences, contact header, add-experience | Calm default view; power actions one click away. |
 | `EmptyState` | typed load-failure / empty read views | Disables **save** (never silent overwrite) — "recoverable by default." |
 | `MetricStat` | discovery progress + coverage meters | Tabular numerals (§2). |
