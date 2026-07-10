@@ -27,9 +27,10 @@ export default defineConfig({
   webServer: process.env.PLAYWRIGHT_BASE_URL
     ? undefined
     : {
-        // A production build (not `next dev`) so routes are precompiled — no
-        // first-hit lazy compilation racing the assertion timeouts.
-        command: "npm run build && npm run start -- -p 3000",
+        // Static export (10.7): `next build` emits `out/`; serve it as static files
+        // (`next start` is incompatible with `output: export`). `serve` is a pinned
+        // devDependency (reproducible — no floating `npx` fetch).
+        command: "npm run build && npx serve out -l 3000 --no-clipboard",
         url: "http://localhost:3000/login",
         timeout: 180_000,
         reuseExistingServer: !process.env.CI,

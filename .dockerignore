@@ -34,3 +34,11 @@ docs/
 infrastructure/
 skills/
 *.md
+
+# Frontend build artifacts — rebuilt fresh in the image's `web` stage. (The frontend
+# SOURCE is needed by that stage, so don't ignore frontend/ itself.)
+frontend/node_modules
+frontend/.next
+frontend/out
+frontend/test-results
+frontend/playwright-report

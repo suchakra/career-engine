@@ -760,8 +760,25 @@ Thin, resource-oriented, all typed from `schema.py`:
 Presentation + transport change; the domain does not. Slices are ordered API-first so the backend is
 provable before the React shell exists: **10.1** auth boundary → **10.2** read APIs → **10.3** write
 APIs → **10.4** streaming grill API → **10.5** Next.js shell/routing/auth → **10.6** Next.js grill +
-tailor UI → **10.7** cutover (delete `web/` Streamlit, redirect-URI/infra + docs reconcile). Build
+tailor UI → **10.7** cutover (deploy artifact + remove Streamlit, infra + docs reconcile). Build
 specs and acceptance criteria: [GROOMING.md](GROOMING.md) Phase 10.
+
+### 16.6 Deploy topology (build 10.7) — single container, static export served by FastAPI (AD-16.10)
+The Next.js frontend is **effectively an SPA** — every page is a client component with client-side auth
+guards + client data fetching; there are no server components doing data fetching, no route handlers, no
+SSR data needs. So `next build` runs with `output: 'export'` (+ `trailingSlash`) to emit static HTML/JS to
+`frontend/out/`, and **FastAPI serves that at `/`** (`api/frontend.py::mount_frontend`, mounted AFTER the
+`/api/*` routers + plugins). One Cloud Run service, **same origin → no CORS**, one deploy artifact.
+- **Chosen over two services** (separate Next.js + FastAPI) for simplicity at this stage: no CORS, one
+  image, one deploy. If a *private* frontend later needs its own service (open-core, §17), that is an
+  additive service — it doesn't force the core to split.
+- The image is **multi-stage** (`Dockerfile`): a `node` stage builds the export; a `python` stage runs
+  `uvicorn api.main:app` and serves both the API and the bundled `frontend/out`. Streamlit's
+  `docker-entrypoint.sh`/CMD are replaced.
+- **`CE_DELIVERY` / promotion:** the same image is deployed to a **pre-dev test env first** (a new GCP
+  project), validated, then promoted to dev. `web/` Streamlit *source* removal is a follow-up (10.7b) —
+  the API reuses most of `web/` (view builders + stores + the shared `web/async_runner`), so only the two
+  Streamlit UI modules (`streamlit_app.py`, `grill_ui.py`) + their deps/tests are removed, not the package.
 
 ---
 
