@@ -94,13 +94,19 @@ api.main:app`). `NEXT_PUBLIC_*` are baked in at build time via Docker **build ar
 same-origin; **Firebase config must be passed per-env** or Google sign-in won't init).
 
 **▶ Immediate next (in order):**
-1. **11.A — stand up `qa` (a NEW GCP project)** and deploy the 10.7 image → this is how the operator SEES
-   the new UI live. I build: Terraform `infrastructure/envs/qa` (new-project root — new stack, so Cloud Run
-   env = **Firebase** vars not Streamlit OIDC; `concurrency` can be >1 now; health at `/api/health`) +
-   `deploy.yml environment=qa` + Docker `--build-arg` wiring for the Firebase values + a **bootstrap
-   runbook**. Operator-gated steps I can't do: create the GCP **project + billing**, a **Firebase project +
-   web app** (the new stack uses Firebase Auth, not the old Streamlit OIDC), a Google **OAuth client**, and
-   set **secret values**. Then deploy → validate → promote the same image to dev.
+0. **SEE THE UI TODAY — [docs/QA_DEPLOY_RUNBOOK.md](QA_DEPLOY_RUNBOOK.md)** is a ready, self-contained
+   operator runbook: add Firebase to the existing GCP project (Console) → `docker build` with the
+   `NEXT_PUBLIC_FIREBASE_*` build args → `gcloud run deploy career-engine-qa` (reuses the dev runtime SA +
+   AR repo; **must set `FIREBASE_PROJECT_ID`** so the backend accepts Firebase tokens) → add the run.app
+   host to Firebase Authorized domains → open + sign in. Fast path (same project as dev, shared Firestore),
+   does NOT touch dev. **One known risk flagged in the runbook §6:** if sign-in 401s, the Google `tokeninfo`
+   verifier may not accept Firebase `securetoken` JWTs → swap `auth/firebase_auth.py` for `firebase-admin`'s
+   `verify_id_token` (small code follow-up).
+1. **11.A — the CLEAN version: a NEW GCP project + Terraform** (`infrastructure/envs/qa` new-project root:
+   Cloud Run env = **Firebase** vars not Streamlit OIDC, own Firestore/secrets, `concurrency` default, health
+   `/api/health`) + `deploy.yml environment=qa` + Docker `--build-arg` wiring. **NOT built yet** (deferred —
+   the runbook's fast path is enough to see it today; the full env is operator-gated on a new project +
+   billing + Firebase + OAuth + secrets). Then deploy → validate → promote the same image to dev.
 2. **Local-dev workflow (operator wants this — [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) Phase 11.H):**
    a documented, one-command way to run the full stack on a laptop (FastAPI `uvicorn --reload` + Next.js
    `npm run dev` with a `.env.local`, or `docker run` the image) so changes are testable before deploy.
