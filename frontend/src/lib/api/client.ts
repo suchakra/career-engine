@@ -137,6 +137,16 @@ export async function apiStream(
     throw new ApiError(res.status, `Stream failed: ${res.status}`, await parseError(res));
   }
 
+  const dispatch = (frame: string): void => {
+    let event = "message";
+    let data = "";
+    for (const line of frame.split("\n")) {
+      if (line.startsWith("event:")) event = line.slice(6).trim();
+      else if (line.startsWith("data:")) data += line.slice(5).trim();
+    }
+    if (data) onEvent(event, data);
+  };
+
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -147,15 +157,14 @@ export async function apiStream(
     // Frames are separated by a blank line ("\n\n"); dispatch each complete one.
     let sep: number;
     while ((sep = buffer.indexOf("\n\n")) !== -1) {
-      const frame = buffer.slice(0, sep);
+      dispatch(buffer.slice(0, sep));
       buffer = buffer.slice(sep + 2);
-      let event = "message";
-      let data = "";
-      for (const line of frame.split("\n")) {
-        if (line.startsWith("event:")) event = line.slice(6).trim();
-        else if (line.startsWith("data:")) data += line.slice(5).trim();
-      }
-      if (data) onEvent(event, data);
     }
+  }
+  // Flush the decoder's final bytes, then drain any remaining frames — including a
+  // last frame that arrived without a trailing blank line.
+  buffer += decoder.decode();
+  for (const frame of buffer.split("\n\n")) {
+    if (frame.trim()) dispatch(frame);
   }
 }

@@ -132,12 +132,13 @@ export const handlers = [
     }),
   ),
   http.get(`${BASE}/api/grill/stream`, () => {
-    // The terminal `done` re-emits the last turn (matches the server), so the
-    // client appends only on `turn`.
-    const body = grillFrame("turn", mockTurn) + grillFrame("done", mockTurn);
-    return new HttpResponse(sseStream([body]), {
-      headers: { "Content-Type": "text/event-stream" },
-    });
+    // Separate frames (not concatenated) exercise the client parser across frame
+    // boundaries. The terminal `done` re-emits the last turn (matches the server),
+    // so the client appends only on `turn`.
+    return new HttpResponse(
+      sseStream([grillFrame("turn", mockTurn), grillFrame("done", mockTurn)]),
+      { headers: { "Content-Type": "text/event-stream" } },
+    );
   }),
   http.put(`${BASE}/api/preferences`, async ({ request }) => {
     const body = (await request.json()) as Partial<SessionPreferences>;

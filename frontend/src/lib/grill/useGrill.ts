@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiFetch, apiStream } from "@/lib/api/client";
 import type {
@@ -53,33 +53,47 @@ export function useGrill(): GrillController {
   const [awaiting, setAwaiting] = useState<Awaiting>("idle");
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<GrillErrorEvent | null>(null);
+  // Abort the in-flight stream on unmount so a navigation-away can't keep the
+  // request running or surface a misleading "connection lost".
+  const abortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const runStream = useCallback(async () => {
+    const controller = new AbortController();
+    abortRef.current = controller;
     setStreaming(true);
     setError(null);
     try {
-      await apiStream("/api/grill/stream", (event, data) => {
-        if (event === "error") {
-          setError(JSON.parse(data) as GrillErrorEvent);
-          return;
-        }
-        const turn = JSON.parse(data) as GrillTurnEvent;
-        setBanner(turn.frontier_label);
-        setAwaiting(awaitingFromTurn(turn));
-        if (event === "turn") {
-          const text = turn.checkpoint_summary || turn.next_question;
-          if (text) setTranscript((prev) => [...prev, { role: "assistant", text }]);
-        }
-      });
+      await apiStream(
+        "/api/grill/stream",
+        (event, data) => {
+          if (event === "error") {
+            setError(JSON.parse(data) as GrillErrorEvent);
+            return;
+          }
+          const turn = JSON.parse(data) as GrillTurnEvent;
+          setBanner(turn.frontier_label);
+          setAwaiting(awaitingFromTurn(turn));
+          if (event === "turn") {
+            const text = turn.checkpoint_summary || turn.next_question;
+            if (text) setTranscript((prev) => [...prev, { role: "assistant", text }]);
+          }
+        },
+        { signal: controller.signal },
+      );
     } catch {
-      // Stream dropped (network / 5xx). Preserve the partial transcript; the durable
-      // session means a reload resumes with no lost work.
-      setError({
-        message: "Connection lost — reload to resume where you left off.",
-        rate_limited: false,
-      });
+      // Aborted (unmount) → not an error to surface. Otherwise the stream dropped
+      // (network / 5xx): preserve the partial transcript; the durable session means
+      // a reload resumes with no lost work.
+      if (!controller.signal.aborted) {
+        setError({
+          message: "Connection lost — reload to resume where you left off.",
+          rate_limited: false,
+        });
+      }
     } finally {
-      setStreaming(false);
+      if (abortRef.current === controller) abortRef.current = null;
+      if (!controller.signal.aborted) setStreaming(false);
     }
   }, []);
 
@@ -87,6 +101,9 @@ export function useGrill(): GrillController {
     async (body: GrillActionRequest) => {
       const snap = await apiFetch<GrillSnapshot>("/api/grill", { method: "POST", body });
       setBanner(snap.frontier_label);
+      // Settle the await state from the snapshot before the stream opens (e.g. hide
+      // the checkpoint card immediately after confirm) — don't wait for the first frame.
+      setAwaiting(snap.awaiting);
       await runStream();
     },
     [runStream],
