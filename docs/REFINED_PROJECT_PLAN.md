@@ -228,7 +228,9 @@ production. Items marked *(decision/spike)* resolve an open question first and o
   [ARCHITECTURE.md](ARCHITECTURE.md) and adjust Terraform / Cloud Run to match.
 - **11.D — MCP job-source plugin design.** A pluggable adapter architecture behind the MCP tool surface
   so job sources (Workday / Indeed / LinkedIn / …) drop in beyond the single Remotive source — a clean
-  plugin contract + ≥1 additional live adapter. SSRF-guarded per the current scraper rules.
+  plugin contract + ≥1 additional live adapter. SSRF-guarded per the current scraper rules. Aligns with
+  the **open-core plugin seam** ([ARCHITECTURE.md §17](ARCHITECTURE.md)) — the same one-way extension
+  discipline, at the job-source level.
 - **11.E — Résumé "copywriter" agent *(spike → decision)*.** Addresses a real quality gap: today's
   tailored bullets are **one-liners echoing the last grill answer, ignoring the rest of the
   portfolio/résumé**. Evaluate splitting the tailor into a dedicated **copywriter** step that

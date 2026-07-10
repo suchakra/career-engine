@@ -71,10 +71,16 @@ Deferred follow-ups: `?kind=master` export, "track as application" from Tailor, 
 
 **Phase 10's UI migration is complete** — every mockup screen is live on Next.js + FastAPI; 10.1–10.6b
 merged. Two operator decisions this session set the path:
-- **A new private repo `git@github.com:suchakra/career-vault.git` is the home going forward.** Remote
-  `vault` is added; the operator runs `git push vault master && git push vault --tags` (bulk push to a new
-  remote is blocked from the agent's auto-mode — must be run by hand). `docs/personal.md` is gitignored
-  (private operator notes — never commit it).
+- **A new private repo `git@github.com:suchakra/career-vault.git` is the go-forward home** for a future
+  *private premium layer* — but wiring it up (CI/WIF/2-repo devcontainer) is deferred. The `vault` remote
+  was **removed** for now (avoid stray pushes); re-add + wire later. `docs/personal.md` is gitignored
+  (private operator notes / the unwritten premium idea — **never commit it, never describe it in the repo**).
+- **Open-core seam SHIPPED (feat/open-core-plugin-seam, PR open):** the core now carries a one-way
+  extension seam so a private layer can compose in production without the core depending on it —
+  backend plugin registry (`api/plugins.py`, `careerengine.plugins` entry points, `CE_DISABLED_PLUGINS`
+  denylist) + frontend feature flags (`frontend/src/lib/flags.ts`, `NEXT_PUBLIC_FEATURES`) + a flagged
+  `PREPARE` nav group (hidden in the OSS build). Zero plugins/flags on. Design: [ARCHITECTURE §17](ARCHITECTURE.md)
+  (AD-17.1..4). Build the actual split (private package + dual CI) only when a premium feature is real.
 - **`qa` environment = a NEW GCP project (like prod), HELD until after 10.7.** Rationale: the repo's pattern
   is one project per env (prod ≠ dev project), and the app always targets the `(default)` Firestore DB (no
   db-id config) so a same-project qa would share dev's data. And today's only deploy artifact is **Streamlit**
