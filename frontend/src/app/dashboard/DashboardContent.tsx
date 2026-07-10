@@ -53,9 +53,15 @@ export function DashboardContent(): JSX.Element {
 
           <ActionCard title="Pick up where you left off">
             <div className="flex flex-wrap gap-3">
-              <PrimaryButton asChild disabled={!data.can_start_grill}>
-                <a href="/grill">▸ Continue grilling</a>
-              </PrimaryButton>
+              {/* A disabled <a> (via Slot) still navigates, so render a real
+                  disabled button when grilling isn't available yet. */}
+              {data.can_start_grill ? (
+                <PrimaryButton asChild>
+                  <a href="/grill">▸ Continue grilling</a>
+                </PrimaryButton>
+              ) : (
+                <PrimaryButton disabled>▸ Continue grilling</PrimaryButton>
+              )}
               <PrimaryButton asChild variant="secondary">
                 <a href="/tailor">Tailor a résumé</a>
               </PrimaryButton>

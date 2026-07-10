@@ -25,11 +25,21 @@ function KeyChip({ state }: { state: KeyState }): JSX.Element {
 function IdentityMenu(): JSX.Element {
   const { user, signOut } = useAuth();
   const [open, setOpen] = useState(false);
+  // The popover holds non-menu content (email, a theme radiogroup, a button), so
+  // it's a dialog — not a WAI-ARIA menu. Close on Escape or when focus leaves.
   return (
-    <div className="relative">
+    <div
+      className="relative"
+      onKeyDown={(e) => {
+        if (e.key === "Escape") setOpen(false);
+      }}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOpen(false);
+      }}
+    >
       <button
         type="button"
-        aria-haspopup="menu"
+        aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className="flex min-h-tap items-center gap-2 rounded-card border border-border bg-surface px-3 text-sm"
@@ -39,7 +49,8 @@ function IdentityMenu(): JSX.Element {
       </button>
       {open && (
         <div
-          role="menu"
+          role="dialog"
+          aria-label="Account menu"
           className="absolute right-0 top-full z-20 mt-1 w-64 rounded-card border border-border bg-card p-3 shadow-lg"
         >
           <p className="mb-2 truncate text-sm text-muted" title={user?.email ?? ""}>
@@ -50,7 +61,6 @@ function IdentityMenu(): JSX.Element {
           </div>
           <button
             type="button"
-            role="menuitem"
             onClick={() => void signOut()}
             className="min-h-tap w-full rounded-card border border-border px-3 text-left text-sm hover:bg-surface"
           >

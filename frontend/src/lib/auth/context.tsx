@@ -57,15 +57,25 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     let active = true;
 
     void (async () => {
-      const { getFirebaseAuth } = await import("@/lib/auth/firebase");
-      const { onAuthStateChanged } = await import("firebase/auth");
-      const auth = getFirebaseAuth();
-      unsub = onAuthStateChanged(auth, (fbUser) => {
+      try {
+        const { getFirebaseAuth } = await import("@/lib/auth/firebase");
+        const { onAuthStateChanged } = await import("firebase/auth");
+        const auth = getFirebaseAuth();
+        unsub = onAuthStateChanged(auth, (fbUser) => {
+          if (!active) return;
+          rawUserRef.current = fbUser;
+          setUser(fbUser ? { uid: fbUser.uid, email: fbUser.email } : null);
+          setLoading(false);
+        });
+      } catch {
+        // Firebase init / SDK load failed (e.g. missing NEXT_PUBLIC_FIREBASE_*).
+        // Resolve to a signed-out state so the app never hangs on the
+        // "Checking your session…" placeholder; the login route takes over.
         if (!active) return;
-        rawUserRef.current = fbUser;
-        setUser(fbUser ? { uid: fbUser.uid, email: fbUser.email } : null);
+        rawUserRef.current = null;
+        setUser(null);
         setLoading(false);
-      });
+      }
     })();
 
     return () => {

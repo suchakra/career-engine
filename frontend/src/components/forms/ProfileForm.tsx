@@ -23,8 +23,9 @@ export function ProfileForm({ disabled = false }: { disabled?: boolean }): JSX.E
 
   const onSubmit = (e: React.FormEvent): void => {
     e.preventDefault();
-    save.mutate({ name, location });
-    setDirty(false);
+    // Clear dirty only once the save succeeds — on error the form stays dirty so
+    // the user can retry without re-editing (the hook rolls the cache back).
+    save.mutate({ name, location }, { onSuccess: () => setDirty(false) });
   };
 
   return (

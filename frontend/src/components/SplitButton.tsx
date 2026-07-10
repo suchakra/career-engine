@@ -33,7 +33,16 @@ export function SplitButton({
   const [open, setOpen] = useState(false);
 
   return (
-    <div className={cn("relative inline-flex", className)}>
+    <div
+      className={cn("relative inline-flex", className)}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") setOpen(false);
+      }}
+      onBlur={(e) => {
+        // Close when focus leaves the whole split-button (keyboard + pointer).
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOpen(false);
+      }}
+    >
       <PrimaryButton className="rounded-r-none" onClick={onClick}>
         {label}
       </PrimaryButton>

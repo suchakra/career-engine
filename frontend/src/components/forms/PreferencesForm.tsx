@@ -27,11 +27,12 @@ export function PreferencesForm({ disabled = false }: { disabled?: boolean }): J
 
   const onSubmit = (e: React.FormEvent): void => {
     e.preventDefault();
-    save.mutate({
-      target_roles: toList(targetRoles),
-      dealbreakers: toList(dealbreakers),
-    });
-    setDirty(false);
+    // Clear dirty only on success so a failed save stays retryable (rollback via
+    // the hook keeps the cache consistent; the form keeps the user's input).
+    save.mutate(
+      { target_roles: toList(targetRoles), dealbreakers: toList(dealbreakers) },
+      { onSuccess: () => setDirty(false) },
+    );
   };
 
   return (
