@@ -140,6 +140,22 @@ export const handlers = [
       { headers: { "Content-Type": "text/event-stream" } },
     );
   }),
+  http.post(`${BASE}/api/tailor`, () =>
+    HttpResponse.json({
+      contact: { name: "Jane Doe", email: "jane@example.com", phone: "", location: "Berlin", links: [] },
+      summary: "Staff engineer, distributed systems.",
+      skills: ["Python", "Kubernetes"],
+      experience: [
+        { title: "Senior Engineer", org: "Acme", dates: "2022–now", bullets: ["Cut p95 latency 40%"] },
+      ],
+      education: [],
+    }),
+  ),
+  http.post(`${BASE}/api/resume/:fmt`, () =>
+    HttpResponse.text("JANE DOE\nSummary…", {
+      headers: { "Content-Type": "text/markdown" },
+    }),
+  ),
   http.put(`${BASE}/api/preferences`, async ({ request }) => {
     const body = (await request.json()) as Partial<SessionPreferences>;
     const saved: SessionPreferences = {

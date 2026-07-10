@@ -18,3 +18,9 @@ export type JobsResponse = Schemas["JobsResponse"];
 export type JobCardResponse = Schemas["JobCardResponse"];
 export type UserProfile = Schemas["UserProfile"];
 export type SessionPreferences = Schemas["SessionPreferences"];
+
+// Tailor + résumé export (10.6b)
+export type TailorRequest = Schemas["TailorRequest"];
+export type StructuredResume = Schemas["StructuredResumeDTO"];
+export type Contact = Schemas["ContactDTO"];
+export type RoleBlock = Schemas["RoleBlockDTO"];

@@ -104,6 +104,38 @@ export async function apiFetch<T>(
 }
 
 /**
+ * POST a JSON body and return the raw response Blob (for binary/text downloads
+ * like the résumé export endpoints). Same bearer auth + single 401→refresh as
+ * {@link apiFetch}; throws {@link ApiError} on a non-2xx response.
+ */
+export async function apiFetchBlob(
+  path: string,
+  init: { method?: string; body?: unknown } = {},
+): Promise<Blob> {
+  const url = `${apiBaseUrl()}${path}`;
+  const serialized = init.body !== undefined ? JSON.stringify(init.body) : undefined;
+  const doFetch = async (token: string | null): Promise<Response> =>
+    fetch(url, {
+      method: init.method ?? "POST",
+      headers: await buildHeaders(token, serialized !== undefined),
+      body: serialized,
+    });
+
+  let res = await doFetch(await tokenProvider(false));
+  if (res.status === 401) {
+    res = await doFetch(await tokenProvider(true));
+    if (res.status === 401) {
+      onAuthFailure();
+      throw new ApiError(401, "Unauthorized", await parseError(res));
+    }
+  }
+  if (!res.ok) {
+    throw new ApiError(res.status, `Request failed: ${res.status}`, await parseError(res));
+  }
+  return res.blob();
+}
+
+/**
  * Consume a Server-Sent Events stream (the grill, AD-16.5) with the same bearer
  * auth + single 401→refresh handling as {@link apiFetch}.
  *
