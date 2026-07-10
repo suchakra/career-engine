@@ -9,6 +9,7 @@ verification (AD-16.4). No business logic lives in this layer.
 from __future__ import annotations
 
 from fastapi import Depends, FastAPI
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from api.auth import VerifiedIdentity
@@ -68,8 +69,21 @@ def me(identity: VerifiedIdentity = Depends(get_current_identity)) -> MeResponse
     return MeResponse(user_id=identity.user_id, email=identity.email)
 
 
+@app.api_route(
+    "/api/{_rest:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"]
+)
+def api_not_found(_rest: str) -> JSONResponse:
+    """Return a JSON 404 for any unmatched ``/api`` path.
+
+    Registered after every real ``/api`` route but BEFORE the static frontend mount, so
+    an unknown API path gets a JSON 404 (not the SPA's HTML ``404.html``) — API clients
+    keep getting API-shaped errors.
+    """
+    return JSONResponse({"detail": "Not Found"}, status_code=404)
+
+
 # Single-container topology (10.7 / AD-16.10): serve the built Next.js static export at
-# '/' — mounted LAST, after EVERY /api route (routers, plugins, health, me), because a
-# StaticFiles mount at '/' is a catch-all that would otherwise shadow later /api routes.
-# No-op when there is no build present (the API test suite / dev).
+# '/' — mounted LAST, after EVERY /api route (routers, plugins, health, me, the /api
+# JSON-404 catch-all), because a StaticFiles mount at '/' is a catch-all that would
+# otherwise shadow later /api routes. No-op when there is no build present (test/dev).
 mount_frontend(app)

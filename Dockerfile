@@ -12,6 +12,22 @@
 # ── Stage 1: build the Next.js static export → /frontend/out ───────────────────
 FROM node:20-slim AS web
 WORKDIR /frontend
+
+# Public client config (NEXT_PUBLIC_*) is baked into the static export AT BUILD TIME
+# (output: export). Defaults here make the image build in CI without secrets; the
+# deploy pipeline passes real per-env values via --build-arg.
+#   - API base is EMPTY on purpose: same-origin single container → client fetches /api/…
+#   - Firebase values are PUBLIC project config (not secrets); the qa/prod build must
+#     pass its project's values or Google sign-in won't initialise.
+ARG NEXT_PUBLIC_API_BASE_URL=""
+ARG NEXT_PUBLIC_FIREBASE_API_KEY=""
+ARG NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=""
+ARG NEXT_PUBLIC_FIREBASE_PROJECT_ID=""
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL \
+    NEXT_PUBLIC_FIREBASE_API_KEY=$NEXT_PUBLIC_FIREBASE_API_KEY \
+    NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=$NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN \
+    NEXT_PUBLIC_FIREBASE_PROJECT_ID=$NEXT_PUBLIC_FIREBASE_PROJECT_ID
+
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./

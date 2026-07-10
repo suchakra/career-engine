@@ -28,9 +28,9 @@ export default defineConfig({
     ? undefined
     : {
         // Static export (10.7): `next build` emits `out/`; serve it as static files
-        // (`next start` is incompatible with `output: export`). A prebuilt static
-        // server also avoids first-hit lazy compilation racing the assertions.
-        command: "npm run build && npx --yes serve out -l 3000 --no-clipboard",
+        // (`next start` is incompatible with `output: export`). `serve` is a pinned
+        // devDependency (reproducible — no floating `npx` fetch).
+        command: "npm run build && npx serve out -l 3000 --no-clipboard",
         url: "http://localhost:3000/login",
         timeout: 180_000,
         reuseExistingServer: !process.env.CI,

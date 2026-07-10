@@ -59,3 +59,14 @@ def test_api_routes_take_precedence_over_static(tmp_path: pathlib.Path) -> None:
 def test_noop_when_export_absent(tmp_path: pathlib.Path) -> None:
     # No build present → not mounted (so it never shadows /api in tests/dev).
     assert mount_frontend(FastAPI(), directory=str(tmp_path / "missing")) is False
+
+
+def test_unknown_api_path_returns_json_404() -> None:
+    # Even with the static frontend mounted, an unknown /api path returns a JSON 404
+    # (the /api catch-all), never the SPA's HTML 404 page.
+    from api.main import app
+
+    resp = TestClient(app).get("/api/does-not-exist")
+    assert resp.status_code == 404
+    assert resp.headers["content-type"].startswith("application/json")
+    assert resp.json() == {"detail": "Not Found"}
