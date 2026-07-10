@@ -38,7 +38,7 @@ Canonical status for every phase is in [PROGRESS.md](PROGRESS.md).
 
 ## Phase 10 — Replace Streamlit with Next.js + FastAPI (build tickets)
 
-> **Status: 10.0 done + 10.1–10.5 + 10.6a SHIPPED (PR #63–#68); 10.6b is ✅ Ready; 10.7 is ⏸ deferred to Phase 11.** The accepted
+> **Status: 10.0 done + 10.1–10.6b SHIPPED (PR #63–#70); only 10.7 (cutover) remains, ⏸ deferred to Phase 11.** The accepted
 > decision, rationale, auth model, streaming choice, deploy
 > topology, and API contract sketch are **canonical in [ARCHITECTURE.md §16](ARCHITECTURE.md)** — do
 > not restate them here. Sequencing is in [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) Phase 10;
@@ -62,34 +62,12 @@ boundary. Full rationale + design decisions (AD-16.1..7): [ARCHITECTURE.md §16]
   before wiring any protected route.
 - Each ticket ships with tests; do not report `DONE`, report `READY FOR REVIEW`.
 
-### ✅ 10.0–10.6a — SHIPPED (retired to the archive)
+### ✅ 10.0–10.6b — SHIPPED (retired to the archive)
 Completed slices **10.0** (ADR) · **10.1** (FastAPI skeleton + auth, PR #63) · **10.2** (read APIs,
 #64) · **10.3** (write APIs, #65) · **10.4** (grill SSE API, #66) · **10.5** (Next.js app shell, #67) ·
-**10.6a** (grill streaming UI, #68). Full build specs retired to
-[history/GROOMING_ARCHIVE.md §Phase 10](history/GROOMING_ARCHIVE.md); status canonical in
-[PROGRESS.md](PROGRESS.md).
-
-### ✅ 10.6b — Tailor + résumé export  *(READY — L · Full-stack: 2 new API endpoints + Frontend)*
-> ⚠️ Larger than a frontend-only slice: the API slices (10.1–10.4) **never built a tailor endpoint**, so
-> 10.6b adds backend endpoints first, then the UI.
-- **Backend (new, presentation/transport over existing domain):**
-  - `POST /api/tailor` — body `{ jd_text, instructions?, contact? }`; load the durable state (as the
-    read paths do), resolve a BYOK client (as `api.deps.get_discovery_session` does → 409 if no key),
-    call `web.resume_builder.tailor_structured_resume(state, jd_text, contact, *, client, _instructions)`,
-    **persist** the result into the existing `CareerEngineState.tailored_resume_json`, and return the
-    `StructuredResume` JSON for preview. Instructions go in the *user* prompt (injection safety, per 9I).
-  - `GET /api/resume/{fmt}` — `fmt ∈ {pdf,docx,md}`; render the persisted tailored résumé via
-    `web.resume_render.structured_to_{pdf_bytes,docx_bytes,markdown}` with the right content-type; a
-    `?kind=master` variant renders `web.resume_builder.master_structured_resume(state)`.
-  - Regenerate `frontend/openapi.json` + `types.gen.ts` (`npm run gen:openapi`); +pytest (network-free,
-    mocked model client) mirroring `tests/test_api_write.py`.
-- **Frontend:** Tailor page (JD paste/URL, optional instructions ≤500 chars, contact header), a
-  `ResumePreview`, and an export row (PDF/DOCX/MD) hitting `GET /api/resume/{fmt}`; optional
-  "track as application" via the existing `POST /api/applications`.
-- **Tests:** tailor→preview happy path + export (MSW); backend endpoint tests.
-- **Anchors:** `web/resume_builder.py:tailor_structured_resume` · `:master_structured_resume` ·
-  `web/resume_render.py:structured_to_{pdf_bytes,docx_bytes,markdown}` · state field
-  `tailored_resume_json` · `api/deps.py:get_discovery_session` (BYOK pattern).
+**10.6a** (grill streaming UI, #68) · **10.6b** (tailor + résumé-export API #69 + Tailor UI #70). Full
+build specs retired to [history/GROOMING_ARCHIVE.md §Phase 10](history/GROOMING_ARCHIVE.md); status
+canonical in [PROGRESS.md](PROGRESS.md). **Only 10.7 (cutover) remains, deferred to Phase 11.**
 
 ### ⏸ 10.7 — Cutover  *(DEFERRED to Phase 11 · M · Backend + Infra + Docs)*
 **Gated:** deletes the Streamlit `web/` app + reconfigures the deployed service, but the current dev

@@ -2158,10 +2158,9 @@ entry via `_get_frontier_entry` and re-pins the frontier, so the banner reappear
 ## Phase 10 — Migrate to Next.js + FastAPI (archived; SHIPPED slices)
 
 > **Status:** `historical` · archived 2026-07-10 · retired build specs for the completed Phase 10
-> slices (**10.0–10.5 + 10.6a**, PR #63–#68). Canonical status in [PROGRESS.md](../PROGRESS.md);
-> design in [ARCHITECTURE.md §16](../ARCHITECTURE.md). The current-phase remainder — **10.6b (Tailor)**
-> and **10.7 (cutover, deferred to Phase 11)** — stays in [GROOMING.md](../GROOMING.md). The standing
-> 10.x build rules also remain in GROOMING (they still bind 10.6b).
+> slices (**10.0–10.6b**, PR #63–#70). Canonical status in [PROGRESS.md](../PROGRESS.md); design in
+> [ARCHITECTURE.md §16](../ARCHITECTURE.md). The only remaining Phase 10 slice — **10.7 (cutover,
+> deferred to Phase 11)** — stays in [GROOMING.md](../GROOMING.md).
 
 ### ✅ 10.0 — Architecture decision record  *(DONE — grooming)*
 Decision + rationale recorded in [ARCHITECTURE.md §16](../ARCHITECTURE.md); sequencing in
@@ -2243,6 +2242,30 @@ unmount), reusable `StreamingTranscript` (transcript + caret + composer, turn co
 §9), grill page (first-run seeding → checkpoint confirm → completion → error banner). MSW-mocked SSE
 tests. Copilot review addressed (4 comments). Skip/Restart deferred (not exposed by the 10.4 API
 surface: only `start`/`answer`/`confirm`).
+
+### ✅ 10.6b — Tailor + résumé export  *(SHIPPED — API PR #69 + UI PR #70)*
+Full-stack: the API slices (10.1–10.4) never built a tailor endpoint, so 10.6b added the backend first.
+
+- **Backend (PR #69):** `POST /api/tailor` `{jd_text, instructions?, contact?}` → `StructuredResume`
+  for preview — loads durable state + the BYOK client from `get_discovery_session` (409 if no key),
+  runs the one model call in a threadpool via `web.resume_builder.tailor_structured_resume`
+  (instructions → user prompt, injection-safe per 9I), wrapped in `_tailor_isolated` to save/restore
+  the process-global `workflows.nodes._client_factory` (BYOK-leak fix, Copilot). `POST /api/resume/{fmt}`
+  `{resume}` → PDF/DOCX/Markdown bytes via `web.resume_render.structured_to_*`; unknown `fmt` → 422.
+  Strict DTOs (`ContactDTO`/`RoleBlockDTO`/`StructuredResumeDTO`/`TailorRequest`). `tests/test_api_tailor.py`.
+- **Frontend (PR #70):** `useTailor` controller (tailor → preview; export → download via
+  `apiFetchBlob`), `ResumePreview`, Tailor page (JD + instructions → two-pane preview + PDF/Word/MD
+  export). MSW tests.
+- **Two design deviations from the groomed spec (both faithful to how the domain actually works):**
+  1. **Export is `POST /api/resume/{fmt}`, not a cached `GET`.** The domain renders a résumé object in
+     one shot and only persists a tailored résumé when it is *saved as an application* — there is no
+     server-side tailored-résumé store to `GET`. A cached `GET` would need new persistence infra
+     (scope creep). So `tailored_resume_json` is **not** persisted by `/api/tailor`; export is a
+     stateless POST-render RPC (the client passes the résumé back). Server-side byte caching deferred.
+  2. **`?kind=master` not built** — the master-résumé build is a Portfolio action whose UI isn't wired
+     yet; deferred with the Portfolio "Build master résumé" button.
+- **Also deferred:** optional "track as application" from Tailor (`POST /api/applications` exists) and
+  JD-by-URL scraping — the core JD → preview → export flow is complete.
 
 ---
 

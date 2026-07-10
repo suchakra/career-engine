@@ -1,17 +1,17 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-10 — Phase 10: **10.1–10.5 + 10.6a MERGED**; 10.6b (Tailor) next; 10.7 deferred to Phase 11)
-**`master` clean @ `2fd1a4b` · contract v2.8.0 · no contract change in the migration (presentation/transport only). Do NOT deploy (per operator) — cutover/deploy is Phase 11 (11.A new prod-like env).**
-**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + all of Phase 9 (9A/9B/9C/9D/9E/9F/9G/9I/9J/9K) + BUG-1 + BUG-2 COMPLETE. Phase 10 building API-first, one slice per PR — 10.1–10.5 + 10.6a merged.**
+## 👉 YOU ARE HERE (updated 2026-07-10 — **Phase 10 UI COMPLETE (10.1–10.6b merged)**; only 10.7 cutover remains, deferred to Phase 11)
+**`master` clean @ `cdb7911` · contract v2.8.0 · no contract change in the migration (presentation/transport only). Do NOT deploy (per operator) — cutover/deploy is Phase 11 (11.A new prod-like env).**
+**Phases 1–7 + 8A + 8B + 8C + 8D + 8G + all of Phase 9 + BUG-1 + BUG-2 COMPLETE. Phase 10 (Streamlit→Next.js+FastAPI) — every UI screen now lives on Next.js+FastAPI; 10.1–10.6b merged. Only 10.7 (cutover: delete Streamlit `web/`, deploy) remains and is deferred to Phase 11.**
 
-**Just merged — Phase 10.6a (interactive grill streaming UI, PR #68, Copilot review addressed):** `apiStream`
-(authed SSE via fetch — `EventSource` can't send a bearer), `useGrill` turn controller (POST record →
-consume `GET /api/grill/stream`, append per completed turn; **banner = server `frontier_label` verbatim**,
-per BUG-2; AbortController on unmount), reusable `StreamingTranscript` (§9), grill page (first-run seed →
-checkpoint confirm → completion → mid-stream error banner). MSW-mocked SSE tests (start→turn+banner,
-error frame). Skip/Restart deferred (not in the 10.4 API surface).
+**Just merged — Phase 10.6b (Tailor, PR #69 API + PR #70 UI, Copilot reviews addressed):** `POST /api/tailor`
+→ `StructuredResume` (BYOK model call, `_tailor_isolated` saves/restores the global model-client factory)
++ `POST /api/resume/{fmt}` → PDF/DOCX/MD bytes; frontend `useTailor` + `ResumePreview` + Tailor page (JD →
+preview → export). **Export is a stateless POST-render RPC, not a cached GET** — the domain has no
+server-side tailored-résumé store (`tailored_resume_json` persists only when saved as an application).
+Deferred follow-ups: `?kind=master` export, "track as application" from Tailor, JD-by-URL scraping.
 
-**Earlier this session — Phase 10.5 (Next.js App Router shell, `frontend/`, PR #67, Copilot review addressed):**
+**Earlier this session — 10.6a grill streaming (PR #68); 10.5 Next.js App Router shell (PR #67):**
 - Scaffolded `frontend/` (Next.js 14 App Router): routes `dashboard/portfolio/grill/jobs/tailor/settings/login`;
   the foundational component inventory ([PHASE10_UI_MOCKUP.md §2](PHASE10_UI_MOCKUP.md)); the **AD-16.8 TanStack Query
   data layer** (read hooks + optimistic write→rollback→invalidate over the 10.2/10.3 APIs); **Firebase-bearer auth**
@@ -67,28 +67,25 @@ error frame). Skip/Restart deferred (not in the 10.4 API surface).
   [history/GROOMING_ARCHIVE.md](history/GROOMING_ARCHIVE.md); role-scoped reads wired into the
   instruction files.
 
-**▶ NEXT — Phase 10 slice 10.6b (Tailor); 10.7 deferred to Phase 11**
+**▶ NEXT — Phase 11 (stabilization); it also carries the deferred 10.7 cutover**
 
-API slices 10.1–10.4 + the 10.5 app shell + 10.6a grill streaming are MERGED. What remains of Phase 10,
-✅ groomed in [GROOMING.md §Phase 10](GROOMING.md):
-- **▶ 10.6b (next) — Tailor + résumé export.** ⚠️ **Full-stack, larger than a frontend slice:** the API
-  slices never built a tailor endpoint, so this adds **two new backend endpoints first**, then the UI:
-  - `POST /api/tailor` — load durable state + resolve a BYOK client (as `api.deps.get_discovery_session`
-    does), call `web/resume_builder.py:tailor_structured_resume(state, jd_text, contact, *, client,
-    _instructions)`, persist into the existing `CareerEngineState.tailored_resume_json`, return the
-    `StructuredResume` for preview (instructions → *user* prompt, injection-safe per 9I).
-  - `GET /api/resume/{fmt}` (`pdf`/`docx`/`md`, + `?kind=master`) — render via
-    `web/resume_render.py:structured_to_{pdf_bytes,docx_bytes,markdown}`.
-  - Regenerate `frontend/openapi.json`+`types.gen.ts` (`npm run gen:openapi`); backend pytest
-    (network-free, mocked model) + frontend Tailor page/preview/export tests. Reuses the 10.5 component
-    inventory + data layer + the 10.6a `ResumePreview`-style patterns.
-- **⏸ 10.7 — cutover — DEFERRED to Phase 11 (11.A).** Deletes Streamlit `web/` + reconfigures the
-  deployed service, but the current env is **frozen for the Kaggle presentation**. Runs against the NEW
-  prod-like environment in Phase 11, not the frozen one. `CONTRACT_VERSION` unchanged by the migration.
+**Phase 10's UI migration is complete** — every mockup screen (Dashboard, Portfolio, Jobs, Tailor, Grill,
+Settings, Login) is live on Next.js + FastAPI; 10.1–10.6b merged. The **one remaining Phase-10 slice,
+10.7 (cutover)**, is deferred into Phase 11 because it deletes Streamlit `web/` + deploys, and the current
+env is frozen for the Kaggle presentation.
 
-Do the work **inline** (orchestrator holds the context) unless parallelizing — per
-[CONTEXT_STRATEGY.md](CONTEXT_STRATEGY.md); if handing to a builder, give the 10.6b ticket +
-[skills/build-slice](../skills/build-slice/SKILL.md), not the big docs. **Do NOT deploy** (per operator).
+Next work is **Phase 11 — stabilization & pre-launch hardening** (re-scoped; canonical in
+[REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) Phase 11, ✅ groomed order TBD). The natural first slice
+is **11.A — a separate production-like environment** (Terraform env root + CI target, leaving the Kaggle env
+untouched); **10.7 cutover runs there** (delete `web/` Streamlit + `web/async_runner.py`, update Dockerfile
+/ Cloud Run / `allowedOrigins` / redirect URIs, mark ARCHITECTURE Streamlit sections `superseded`). Then
+11.B custom domain · 11.C isolation/security decision · 11.D MCP job-source plugins · 11.E copywriter-agent
+spike · 11.F résumé-presentation UI · 11.G beta test. Phase 11 has **not** been groomed into build tickets
+yet — groom it (WARM docs → tickets) before building.
+
+Work **inline** (orchestrator holds the context) unless parallelizing — per
+[CONTEXT_STRATEGY.md](CONTEXT_STRATEGY.md). **Do NOT deploy** (per operator) until the Phase-11 prod-like
+env is stood up and Kaggle is done.
 
 **What shipped this session (5-PR cycle: 2 bug fixes + Phase 9 completion + Phase 10 groom):**
 
