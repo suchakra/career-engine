@@ -102,3 +102,69 @@ export async function apiFetch<T>(
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
+
+/**
+ * Consume a Server-Sent Events stream (the grill, AD-16.5) with the same bearer
+ * auth + single 401→refresh handling as {@link apiFetch}.
+ *
+ * We use `fetch` + a manual SSE parser rather than the browser `EventSource`
+ * because `EventSource` cannot send an `Authorization` header. `onEvent` fires
+ * once per parsed frame with the event name and its raw `data:` JSON string; the
+ * caller parses the payload into the right DTO.
+ */
+export async function apiStream(
+  path: string,
+  onEvent: (event: string, data: string) => void,
+  init: { signal?: AbortSignal } = {},
+): Promise<void> {
+  const url = `${apiBaseUrl()}${path}`;
+  const doFetch = async (token: string | null): Promise<Response> =>
+    fetch(url, {
+      method: "GET",
+      headers: await buildHeaders(token, false),
+      signal: init.signal,
+    });
+
+  let res = await doFetch(await tokenProvider(false));
+  if (res.status === 401) {
+    res = await doFetch(await tokenProvider(true));
+    if (res.status === 401) {
+      onAuthFailure();
+      throw new ApiError(401, "Unauthorized", await parseError(res));
+    }
+  }
+  if (!res.ok || !res.body) {
+    throw new ApiError(res.status, `Stream failed: ${res.status}`, await parseError(res));
+  }
+
+  const dispatch = (frame: string): void => {
+    let event = "message";
+    let data = "";
+    for (const line of frame.split("\n")) {
+      if (line.startsWith("event:")) event = line.slice(6).trim();
+      else if (line.startsWith("data:")) data += line.slice(5).trim();
+    }
+    if (data) onEvent(event, data);
+  };
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    // Frames are separated by a blank line ("\n\n"); dispatch each complete one.
+    let sep: number;
+    while ((sep = buffer.indexOf("\n\n")) !== -1) {
+      dispatch(buffer.slice(0, sep));
+      buffer = buffer.slice(sep + 2);
+    }
+  }
+  // Flush the decoder's final bytes, then drain any remaining frames — including a
+  // last frame that arrived without a trailing blank line.
+  buffer += decoder.decode();
+  for (const frame of buffer.split("\n\n")) {
+    if (frame.trim()) dispatch(frame);
+  }
+}

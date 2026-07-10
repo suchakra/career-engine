@@ -79,6 +79,33 @@ export const mockJobs: JobsResponse = {
   is_empty: false,
 };
 
+/** Serialize one SSE frame (`event:` + `data:` + blank line). */
+export function grillFrame(event: string, payload: object): string {
+  return `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
+}
+
+/** Build a `text/event-stream` ReadableStream from pre-serialized frames. */
+export function sseStream(frames: string[]): ReadableStream<Uint8Array> {
+  const enc = new TextEncoder();
+  return new ReadableStream({
+    start(controller) {
+      for (const f of frames) controller.enqueue(enc.encode(f));
+      controller.close();
+    },
+  });
+}
+
+const mockTurn = {
+  next_question: "Can you put a number on that improvement?",
+  checkpoint_summary: "",
+  is_complete: false,
+  upgrade_required: false,
+  upgrade_message: "",
+  stories_count: 1,
+  phase: "grilling",
+  frontier_label: "Senior Engineer — Acme",
+};
+
 /** Default happy-path handlers. Tests override individual routes as needed. */
 export const handlers = [
   http.get(`${BASE}/api/me`, () => HttpResponse.json(mockMe)),
@@ -96,6 +123,22 @@ export const handlers = [
       contract_version: "2.8.0",
     };
     return HttpResponse.json(saved);
+  }),
+  http.post(`${BASE}/api/grill`, () =>
+    HttpResponse.json({
+      phase: "grilling",
+      frontier_label: "Senior Engineer — Acme",
+      awaiting: "question",
+    }),
+  ),
+  http.get(`${BASE}/api/grill/stream`, () => {
+    // Separate frames (not concatenated) exercise the client parser across frame
+    // boundaries. The terminal `done` re-emits the last turn (matches the server),
+    // so the client appends only on `turn`.
+    return new HttpResponse(
+      sseStream([grillFrame("turn", mockTurn), grillFrame("done", mockTurn)]),
+      { headers: { "Content-Type": "text/event-stream" } },
+    );
   }),
   http.put(`${BASE}/api/preferences`, async ({ request }) => {
     const body = (await request.json()) as Partial<SessionPreferences>;
