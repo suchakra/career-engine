@@ -762,3 +762,53 @@ provable before the React shell exists: **10.1** auth boundary → **10.2** read
 APIs → **10.4** streaming grill API → **10.5** Next.js shell/routing/auth → **10.6** Next.js grill +
 tailor UI → **10.7** cutover (delete `web/` Streamlit, redirect-URI/infra + docs reconcile). Build
 specs and acceptance criteria: [GROOMING.md](GROOMING.md) Phase 10.
+
+---
+
+## 17. Extensibility — open-core seam for a private premium layer
+
+> **Status:** `active` · added 2026-07-10. Records how a **private, commercial feature layer** composes
+> with this **core** in production without the core ever depending on it. This section documents only the
+> *mechanism* (the extension points); the specific premium features live in a separate private repository
+> and are deliberately **not described here**.
+
+### 17.1 The problem
+The core (this repo) is the durable product surface. Future differentiating features are built privately
+and must **layer on top of the core in production** — the commercial deploy = core + private layer; the
+open/demo deploy = core alone. This must not fork the codebase or leak private concerns into the core.
+
+### 17.2 Decision — open-core with a one-way dependency (AD-17.1)
+**The private layer depends on the core; the core never imports the private layer.** The core is fully
+functional standalone. The private layer is packaged separately, pins a core version, and *extends* it
+through stable seams. This one-way rule is the whole architecture — everything below serves it.
+
+### 17.3 Backend seam — a plugin registry (AD-17.2)
+The FastAPI app discovers and mounts routers contributed by **installed plugin packages** via the
+`careerengine.plugins` entry-point group (`api/plugins.py::load_plugins(app)`, called after the core
+routers in `api/main.py`). Each entry point resolves to a `register(app) -> None` callable that adds its
+own routers/dependencies. Rules:
+- The **core ships zero plugins**; a private package registers one under the entry-point group.
+- A plugin that raises during registration is **skipped, not fatal** — a broken add-on can never take
+  down the core.
+- `CE_DISABLED_PLUGINS` (comma-separated env) is a denylist, so the **same image** can run with a plugin
+  installed but switched off (feature-flag parity between OSS and commercial deploys).
+- This **generalizes the Phase-11.D MCP job-source plugin design** — the same extension discipline, one
+  level up (whole routers, not just job-source adapters).
+
+### 17.4 Frontend seam — feature flags + a shared design system (AD-17.3)
+- **Feature flags** (`frontend/src/lib/flags.ts`, `NEXT_PUBLIC_FEATURES` comma-separated) gate nav
+  entries + routes. The OSS core enables none; a commercial build sets the env. `SidebarNav` renders a
+  flagged group only when its feature is on (the reserved `PREPARE` group is the first consumer — hidden
+  by default, per [PHASE10_UI_MOCKUP.md §3](PHASE10_UI_MOCKUP.md)).
+- **Composition** of the private routes themselves is a deploy-topology choice tied to **10.7**: either a
+  separate Next.js service reusing a published design-system + data-layer package, or a build-time overlay
+  of a private route group. The design system (the §2 component inventory) is the shared contract either
+  way. Pick the 10.7 topology (single container vs two services) with this in mind — **two services keeps
+  the private frontend the cleanest**.
+
+### 17.5 What to build now vs later (AD-17.4)
+**Design the seam now, build the split later.** The seams above are cheap and stable; standing up the full
+open-core machinery (private package/registry, dual CI, version pinning) before a private feature exists is
+YAGNI cost. So: the core carries the plugin registry + flag seam (zero plugins, zero flags on); the private
+repo and its packaging land when the first premium feature is real. Env mapping: the OSS/demo deploy runs
+core-only; the commercial deploy (a future `qa`/prod GCP project) runs core + the private layer.

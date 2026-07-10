@@ -1,16 +1,29 @@
 "use client";
 
-import { LayoutDashboard, FolderGit2, MessagesSquare, Briefcase, FileText, Settings } from "lucide-react";
+import {
+  LayoutDashboard,
+  FolderGit2,
+  MessagesSquare,
+  Briefcase,
+  FileText,
+  Settings,
+  Mail,
+  GraduationCap,
+  Scale,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ComponentType } from "react";
 
+import { isFeatureEnabled, type Feature } from "@/lib/flags";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
   href: string;
   label: string;
   Icon: ComponentType<{ className?: string }>;
+  /** When set, the item renders only if the feature is enabled (ARCHITECTURE §17). */
+  feature?: Feature;
 }
 
 interface NavGroup {
@@ -20,8 +33,10 @@ interface NavGroup {
 }
 
 /**
- * Phase 10 nav only (PHASE10_UI_MOCKUP.md §3): Dashboard · BUILD(Portfolio, Grill)
- * · APPLY(Jobs, Tailor) · Settings. The empty PREPARE group is hidden (not greyed).
+ * Nav (PHASE10_UI_MOCKUP.md §3): Dashboard · BUILD(Portfolio, Grill) ·
+ * APPLY(Jobs, Tailor) · Settings. The PREPARE group is the open-core seam
+ * (ARCHITECTURE §17 / AD-17.3): its items are feature-flagged and hidden until a
+ * build enables them, so a premium/private layer lights them up without a core edit.
  */
 const NAV: NavGroup[] = [
   { heading: null, items: [{ href: "/dashboard", label: "Dashboard", Icon: LayoutDashboard }] },
@@ -37,6 +52,14 @@ const NAV: NavGroup[] = [
     items: [
       { href: "/jobs", label: "Jobs", Icon: Briefcase },
       { href: "/tailor", label: "Tailor", Icon: FileText },
+      { href: "/outreach", label: "Outreach", Icon: Mail, feature: "outreach" },
+    ],
+  },
+  {
+    heading: "PREPARE",
+    items: [
+      { href: "/interview", label: "Interview", Icon: GraduationCap, feature: "interview" },
+      { href: "/salary", label: "Salary", Icon: Scale, feature: "salary" },
     ],
   },
   { heading: null, items: [{ href: "/settings", label: "Settings", Icon: Settings }] },
@@ -44,9 +67,16 @@ const NAV: NavGroup[] = [
 
 export function SidebarNav(): JSX.Element {
   const pathname = usePathname();
+  // Drop feature-flagged items that aren't enabled, then any group left empty
+  // (so the PREPARE heading never renders alone in the OSS build).
+  const groups = NAV.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => !item.feature || isFeatureEnabled(item.feature)),
+  })).filter((group) => group.items.length > 0);
+
   return (
     <nav aria-label="Primary" className="flex flex-col gap-4">
-      {NAV.map((group, i) => (
+      {groups.map((group, i) => (
         <div key={group.heading ?? `top-${i}`} className="flex flex-col gap-1">
           {group.heading && (
             <p className="px-3 pt-2 text-xs font-semibold uppercase tracking-wide text-muted">
