@@ -1,18 +1,15 @@
 "use client";
 
 import { AppShell } from "@/components/AppShell";
-import { EmptyState } from "@/components/EmptyState";
 import { RequireAuth } from "@/lib/auth/guard";
+import { TailorContent } from "@/app/tailor/TailorContent";
 
-/** Placeholder — the JD-in / résumé-out tailor flow is built in a later slice. */
+/** Tailor — JD in → ATS-safe résumé out (slice 10.6b). */
 export default function TailorPage(): JSX.Element {
   return (
     <RequireAuth>
       <AppShell title="Tailor">
-        <EmptyState
-          title="Tailor is coming soon"
-          description="Paste a job description to get an ATS-safe résumé — arriving in a later slice."
-        />
+        <TailorContent />
       </AppShell>
     </RequireAuth>
   );
