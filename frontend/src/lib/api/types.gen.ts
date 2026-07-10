@@ -228,6 +228,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/tailor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Tailor
+         * @description Tailor the caller's portfolio to a JD and return the structured résumé.
+         *
+         *     Requires a valid bearer token AND a BYOK key (``get_discovery_session`` → 409 if
+         *     no key). One model call runs on the user's own quota. The tailored résumé is
+         *     returned for preview; it is not persisted (persistence happens only when the client
+         *     saves it as an application via ``POST /api/applications``).
+         */
+        post: operations["tailor_api_tailor_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/resume/{fmt}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Render Resume
+         * @description Render a structured résumé (from the body) to the requested format's bytes.
+         *
+         *     Requires a valid bearer token; no BYOK key needed (rendering is deterministic, no
+         *     model call). An unknown ``fmt`` is rejected as 422 by the ``Literal`` path param.
+         */
+        post: operations["render_resume_api_resume__fmt__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -353,6 +401,34 @@ export interface components {
             jd_text: string;
             /** Tailored Resume Json */
             tailored_resume_json: string;
+        };
+        /**
+         * ContactDTO
+         * @description Résumé header identity (mirrors ``web.resume_builder.Contact``).
+         */
+        ContactDTO: {
+            /**
+             * Name
+             * @default
+             */
+            name: string;
+            /**
+             * Email
+             * @default
+             */
+            email: string;
+            /**
+             * Phone
+             * @default
+             */
+            phone: string;
+            /**
+             * Location
+             * @default
+             */
+            location: string;
+            /** Links */
+            links?: string[];
         };
         /**
          * DashboardResponse
@@ -638,6 +714,20 @@ export interface components {
             is_empty: boolean;
         };
         /**
+         * RoleBlockDTO
+         * @description One experience/education entry (mirrors ``web.resume_builder.RoleBlock``).
+         */
+        RoleBlockDTO: {
+            /** Title */
+            title: string;
+            /** Org */
+            org: string;
+            /** Dates */
+            dates: string;
+            /** Bullets */
+            bullets?: string[];
+        };
+        /**
          * SessionPreferences
          * @description The evaluation rubric for a discovery session (gathered at intake).
          *
@@ -684,6 +774,41 @@ export interface components {
             metric_validated: boolean;
             /** Story Id */
             story_id: string;
+        };
+        /**
+         * StructuredResumeDTO
+         * @description A real résumé (mirrors ``web.resume_builder.StructuredResume``).
+         *
+         *     Response of ``POST /api/tailor`` and request body of ``POST /api/resume/{fmt}``.
+         */
+        StructuredResumeDTO: {
+            contact: components["schemas"]["ContactDTO"];
+            /** Summary */
+            summary: string;
+            /** Skills */
+            skills?: string[];
+            /** Experience */
+            experience?: components["schemas"]["RoleBlockDTO"][];
+            /** Education */
+            education?: components["schemas"]["RoleBlockDTO"][];
+        };
+        /**
+         * TailorRequest
+         * @description Request body for ``POST /api/tailor``.
+         *
+         *     ``jd_text`` is the already-resolved job description; ``instructions`` are placed
+         *     in the *user* prompt (injection-safe, per 9I) and never persisted; ``contact``
+         *     optionally overrides the résumé header (else an empty header).
+         */
+        TailorRequest: {
+            /** Jd Text */
+            jd_text: string;
+            /**
+             * Instructions
+             * @default
+             */
+            instructions: string;
+            contact?: components["schemas"]["ContactDTO"] | null;
         };
         /**
          * UserProfile
@@ -1029,6 +1154,78 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    tailor_api_tailor_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TailorRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StructuredResumeDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    render_resume_api_resume__fmt__post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                fmt: "pdf" | "docx" | "md";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StructuredResumeDTO"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
