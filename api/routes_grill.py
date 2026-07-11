@@ -122,6 +122,7 @@ async def record_grill_action(
 @router.post("/api/grill/resume")
 async def seed_from_resume(
     file: UploadFile = File(...),
+    user_id: str = Depends(get_current_user_id),
     session: DiscoverySession = Depends(get_discovery_session),
 ) -> GrillSnapshot:
     """Vision-parse an uploaded résumé into a starting timeline and seed the grill.
@@ -142,6 +143,11 @@ async def seed_from_resume(
         )
     except ParseError as exc:
         raise HTTPException(status_code=422, detail=f"Couldn't parse résumé: {exc}") from exc
+    except ModelAPIError as exc:
+        # A model fault (quota / transient 5xx / auth) is not a server bug — surface it
+        # like the rest of the grill transport (rate-limit → 429, else 502).
+        status = 429 if exc.is_rate_limited else 502
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
     await session.create(
         "", reference_date=date.today().isoformat(), work_timeline=entries
     )

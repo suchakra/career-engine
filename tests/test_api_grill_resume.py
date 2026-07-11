@@ -80,6 +80,16 @@ def test_resume_upload_parses_and_seeds_the_grill(
     assert session.created[1] == ["e1", "e2"]
 
 
+def test_resume_upload_requires_auth(client: TestClient) -> None:
+    # Explicit get_current_user_id dep enforces 401 even when the session is overridden.
+    app.dependency_overrides[get_discovery_session] = lambda: _FakeSession()
+    resp = client.post(
+        "/api/grill/resume",
+        files={"file": ("r.pdf", b"x", "application/pdf")},
+    )
+    assert resp.status_code == 401
+
+
 def test_empty_file_rejected_422(client: TestClient) -> None:
     app.dependency_overrides[get_discovery_session] = lambda: _FakeSession()
     resp = client.post(
