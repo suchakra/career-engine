@@ -66,16 +66,19 @@ class _FakeLedgerStore:
 
 @pytest.fixture
 def client() -> Iterator[TestClient]:
+    # Fake ALL Firestore-backed deps by default so the endpoint's dependency
+    # resolution never constructs a real Firestore client (offline + CI-safe),
+    # even on the 409/401 paths where the handler body doesn't run.
+    app.dependency_overrides[get_key_vault] = lambda: _FakeVault(has=True)
+    app.dependency_overrides[get_ledger_store] = lambda: _FakeLedgerStore()
+    app.dependency_overrides[get_workspace_store] = lambda: object()
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
 
 
 def test_discover_runs_and_returns_fresh_view(client: TestClient, monkeypatch: Any) -> None:
-    app.dependency_overrides[get_key_vault] = lambda: _FakeVault(has=True)
-    app.dependency_overrides[get_ledger_store] = lambda: _FakeLedgerStore()
-    app.dependency_overrides[get_workspace_store] = lambda: object()
-    # Isolate from model / MCP / Firestore:
+    # Isolate from model / MCP:
     monkeypatch.setattr(
         "api.routes_jobs.load_discovery_preferences",
         lambda store, *, user_id: SessionPreferences(),
