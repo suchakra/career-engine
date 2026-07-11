@@ -46,6 +46,9 @@ class _FakeVault:
     def store_key(self, user_id: str, api_key: str) -> None:
         self._keys[user_id] = api_key
 
+    def key_exists(self, user_id: str) -> bool:
+        return user_id in self._keys
+
     def fetch_key(self, user_id: str) -> str:
         if user_id not in self._keys:
             raise KeyVaultError("no key for user")
@@ -69,7 +72,7 @@ def test_set_then_status_then_remove(client: TestClient) -> None:
     # No key yet.
     assert client.get("/api/key", headers=h).json() == {"has_key": False}
     # Set a key → 204.
-    assert client.post("/api/key", json={"api_key": "AIzaSyFAKEKEY123"}, headers=h).status_code == 204
+    assert client.post("/api/key", json={"api_key": "test-fake-key-abc123"}, headers=h).status_code == 204
     # Now present.
     assert client.get("/api/key", headers=h).json() == {"has_key": True}
     # Remove → 204, then absent.
@@ -84,5 +87,5 @@ def test_short_key_rejected_422(client: TestClient) -> None:
 
 def test_key_endpoints_require_auth(client: TestClient) -> None:
     assert client.get("/api/key").status_code == 401
-    assert client.post("/api/key", json={"api_key": "AIzaSyFAKEKEY123"}).status_code == 401
+    assert client.post("/api/key", json={"api_key": "test-fake-key-abc123"}).status_code == 401
     assert client.delete("/api/key").status_code == 401

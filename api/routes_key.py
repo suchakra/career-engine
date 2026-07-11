@@ -24,12 +24,16 @@ async def key_status(
     user_id: str = Depends(get_current_user_id),
     vault: SecretManagerKeyVault = Depends(get_key_vault),
 ) -> KeyStatusResponse:
-    """Return whether the caller has a saved BYOK key (never the key itself)."""
+    """Return whether the caller has a saved BYOK key (never the key itself).
+
+    Uses ``key_exists`` so the secret PAYLOAD is never pulled into memory. A genuine
+    vault fault surfaces as 502 (not a misleading ``has_key: false``).
+    """
     try:
-        key = await run_in_threadpool(vault.fetch_key, user_id)
-    except KeyVaultError:
-        return KeyStatusResponse(has_key=False)
-    return KeyStatusResponse(has_key=bool(key))
+        exists = await run_in_threadpool(vault.key_exists, user_id)
+    except KeyVaultError as exc:
+        raise HTTPException(status_code=502, detail="Could not check key status.") from exc
+    return KeyStatusResponse(has_key=exists)
 
 
 @router.post("/api/key", status_code=204)

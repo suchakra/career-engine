@@ -12,8 +12,10 @@ import { cn } from "@/lib/utils";
 
 /** BYOK key indicator (§3) — live from GET /api/key. Links to Settings when absent. */
 function KeyChip(): JSX.Element {
-  const { data, isLoading } = useKeyStatus();
+  const { data, isLoading, isError } = useKeyStatus();
   if (isLoading) return <StatusBadge status="skipped" label="Key: …" />;
+  // On error, don't imply the user has no key — show a neutral "unknown" state.
+  if (isError) return <StatusBadge status="review" label="Key: unknown" />;
   if (data?.has_key) return <StatusBadge status="strong" label="Key: saved" />;
   return (
     <Link href="/settings" className="rounded-full">

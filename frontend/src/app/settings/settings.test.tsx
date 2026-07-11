@@ -27,11 +27,11 @@ describe("Settings — BYOK key", () => {
 
     expect(await screen.findByText(/no key yet/i)).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText("Gemini API key"), "AIzaSyMYKEY123456");
+    await user.type(screen.getByLabelText("Gemini API key"), "test-fake-key-xyz789");
     await user.click(screen.getByRole("button", { name: /save & use this key/i }));
 
     // Sent to the API, and the status re-fetches to "using your saved key".
-    await waitFor(() => expect(saved).toBe("AIzaSyMYKEY123456"));
+    await waitFor(() => expect(saved).toBe("test-fake-key-xyz789"));
     expect(await screen.findByText(/using your saved key/i)).toBeInTheDocument();
   });
 });

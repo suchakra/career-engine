@@ -154,7 +154,7 @@ export interface KeyStatus {
 /** Whether the caller has a saved Gemini key (drives the key chip + gates). */
 export function useKeyStatus(): UseQueryResult<KeyStatus> {
   return useQuery({
-    queryKey: ["key"],
+    queryKey: queryKeys.key,
     queryFn: () => apiFetch<KeyStatus>("/api/key"),
   });
 }
@@ -167,7 +167,7 @@ export function useSaveKey(): UseMutationResult<void, unknown, string> {
     mutationFn: (apiKey: string) =>
       apiFetch<void>("/api/key", { method: "POST", body: { api_key: apiKey } }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["key"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.key });
       showToast("Key saved — grill and tailor are ready.", "success");
     },
     onError: () => showToast("Couldn't save your key — try again.", "error"),
@@ -181,7 +181,7 @@ export function useRemoveKey(): UseMutationResult<void, unknown, void> {
   return useMutation({
     mutationFn: () => apiFetch<void>("/api/key", { method: "DELETE" }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["key"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.key });
       showToast("Key removed.", "info");
     },
     onError: () => showToast("Couldn't remove your key — try again.", "error"),

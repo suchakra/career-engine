@@ -32,6 +32,10 @@ export function SettingsContent(): JSX.Element {
         <div className="mb-3">
           {status.isLoading ? (
             <span className="text-sm text-muted">Checking…</span>
+          ) : status.isError ? (
+            <span className="text-sm text-error">
+              Couldn&apos;t check your key status — refresh and try again.
+            </span>
           ) : hasKey ? (
             <StatusBadge status="strong" label="Using your saved key" />
           ) : (
