@@ -7,14 +7,14 @@ import { SidebarNav } from "@/components/SidebarNav";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/lib/auth/context";
+import { useKeyStatus } from "@/lib/query/hooks";
 import { cn } from "@/lib/utils";
 
-/** BYOK key indicator states (§3). No live key source in 10.5 → defaults to "add a key". */
-type KeyState = "saved" | "session" | "none";
-
-function KeyChip({ state }: { state: KeyState }): JSX.Element {
-  if (state === "saved") return <StatusBadge status="strong" label="Key: saved" />;
-  if (state === "session") return <StatusBadge status="review" label="Key: this session only" />;
+/** BYOK key indicator (§3) — live from GET /api/key. Links to Settings when absent. */
+function KeyChip(): JSX.Element {
+  const { data, isLoading } = useKeyStatus();
+  if (isLoading) return <StatusBadge status="skipped" label="Key: …" />;
+  if (data?.has_key) return <StatusBadge status="strong" label="Key: saved" />;
   return (
     <Link href="/settings" className="rounded-full">
       <StatusBadge status="skipped" label="Add a key" />
@@ -91,11 +91,10 @@ function Footer(): JSX.Element {
 export interface AppShellProps {
   title: string;
   children: ReactNode;
-  keyState?: KeyState;
 }
 
 /** Persistent shell: left sidebar + top bar (identity + key chips) + footer (§3). */
-export function AppShell({ title, children, keyState = "none" }: AppShellProps): JSX.Element {
+export function AppShell({ title, children }: AppShellProps): JSX.Element {
   return (
     <div className="flex min-h-screen flex-col">
       <div className="flex flex-1">
@@ -114,7 +113,7 @@ export function AppShell({ title, children, keyState = "none" }: AppShellProps):
           <header className="flex items-center justify-between gap-3 border-b border-border px-6 py-3">
             <h1 className="text-lg font-semibold">{title}</h1>
             <div className="flex items-center gap-3">
-              <KeyChip state={keyState} />
+              <KeyChip />
               <IdentityMenu />
             </div>
           </header>
