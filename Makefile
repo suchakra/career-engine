@@ -70,6 +70,7 @@ frontend-check:  ## Frontend gate: npm ci + lint + typecheck + Vitest + build + 
 # (gcloud auth application-default login) and a real project_id in terraform.tfvars.
 
 TF_DEV  := terraform -chdir=infrastructure/envs/dev
+TF_QA   := terraform -chdir=infrastructure/envs/qa
 TF_PROD := terraform -chdir=infrastructure/envs/prod
 
 .PHONY: build
@@ -88,6 +89,7 @@ tf-fmt:  ## Check Terraform formatting (no credentials needed)
 .PHONY: tf-validate
 tf-validate:  ## Init (backend-less) + validate both env roots (no credentials needed)
 	$(TF_DEV) init -backend=false -input=false >/dev/null && $(TF_DEV) validate
+	$(TF_QA) init -backend=false -input=false >/dev/null && $(TF_QA) validate
 	$(TF_PROD) init -backend=false -input=false >/dev/null && $(TF_PROD) validate
 
 .PHONY: tf-check

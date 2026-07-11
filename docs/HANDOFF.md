@@ -94,19 +94,18 @@ api.main:app`). `NEXT_PUBLIC_*` are baked in at build time via Docker **build ar
 same-origin; **Firebase config must be passed per-env** or Google sign-in won't init).
 
 **▶ Immediate next (in order):**
-0. **SEE THE UI TODAY — [docs/QA_DEPLOY_RUNBOOK.md](QA_DEPLOY_RUNBOOK.md)** is a ready, self-contained
-   operator runbook: add Firebase to the existing GCP project (Console) → `docker build` with the
-   `NEXT_PUBLIC_FIREBASE_*` build args → `gcloud run deploy career-engine-qa` (reuses the dev runtime SA +
-   AR repo; **must set `FIREBASE_PROJECT_ID`** so the backend accepts Firebase tokens) → add the run.app
-   host to Firebase Authorized domains → open + sign in. Fast path (same project as dev, shared Firestore),
-   does NOT touch dev. **One known risk flagged in the runbook §6:** if sign-in 401s, the Google `tokeninfo`
-   verifier may not accept Firebase `securetoken` JWTs → swap `auth/firebase_auth.py` for `firebase-admin`'s
-   `verify_id_token` (small code follow-up).
-1. **11.A — the CLEAN version: a NEW GCP project + Terraform** (`infrastructure/envs/qa` new-project root:
-   Cloud Run env = **Firebase** vars not Streamlit OIDC, own Firestore/secrets, `concurrency` default, health
-   `/api/health`) + `deploy.yml environment=qa` + Docker `--build-arg` wiring. **NOT built yet** (deferred —
-   the runbook's fast path is enough to see it today; the full env is operator-gated on a new project +
-   billing + Firebase + OAuth + secrets). Then deploy → validate → promote the same image to dev.
+0. **SEE THE UI — repeatable `qa` deploy is BUILT** (same project as dev, per operator: scale-to-zero, ~free
+   idle; NOT a new project). Terraform [`infrastructure/envs/qa`](../infrastructure/envs/qa) (2nd Cloud Run
+   service `career-engine-qa-app`, Firebase env, min_instances=0, concurrency=1; reuses the project's
+   `(default)` Firestore + dev's AR repo + WIF/deployer SA; no Streamlit secrets) + `deploy.yml environment=qa`
+   (**default target**, Firebase `--build-arg`s, **hard `confirm_dev_cutover` guard so dev can't deploy by
+   accident**). `make tf-check` green (dev/qa/prod).
+   **Operator bootstrap needed before I can run it ([docs/QA_DEPLOY_RUNBOOK.md](QA_DEPLOY_RUNBOOK.md)):**
+   (A) add Firebase to the project + web app + enable Google sign-in; (B) set 3 repo Variables
+   `NEXT_PUBLIC_FIREBASE_API_KEY/_AUTH_DOMAIN/_PROJECT_ID`. Then **I run** `gh workflow run deploy.yml --ref
+   master -f environment=qa` (repeatable) → URL in the run summary → (C) add the run.app host to Firebase
+   Authorized domains → sign in. **Known risk:** if sign-in 401s, swap the `tokeninfo` verifier in
+   `auth/firebase_auth.py` for `firebase-admin`'s `verify_id_token` (~15 lines).
 2. **Local-dev workflow (operator wants this — [REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md) Phase 11.H):**
    a documented, one-command way to run the full stack on a laptop (FastAPI `uvicorn --reload` + Next.js
    `npm run dev` with a `.env.local`, or `docker run` the image) so changes are testable before deploy.

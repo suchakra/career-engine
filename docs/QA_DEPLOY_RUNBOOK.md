@@ -1,166 +1,87 @@
-# See the new UI today — deploy to a `qa` Cloud Run service
+# Deploy `qa` (see the new UI) — repeatable, one command
 
-> **Status:** `active` · 2026-07-10 · **Goal:** get the new Next.js + FastAPI app running on a **separate
-> Cloud Run service** you can open in a browser, sign into, and click through — **without touching the
-> Kaggle-visible `dev` service**. This is the fast path (reuses your existing GCP project); the clean
-> new-project version is Phase 11.A.
+> **Status:** `active` · 2026-07-11 · **What:** deploy the new Next.js + FastAPI app to a **`qa` Cloud Run
+> service in the same project as dev** (scale-to-zero → ~free when idle), so it's viewable in a browser
+> **without touching the Kaggle-visible `dev` service**. Codified so it runs from CI with one command.
 
-**What you get:** a public URL `https://career-engine-qa-…-uc.a.run.app` serving the whole product (FastAPI
-API + the static Next.js frontend, one container, same-origin). Auth = Google sign-in via Firebase; the
-grill/tailor run on your own Gemini key (BYOK).
-
-**Time:** ~20–30 min, most of it the one-time Firebase setup.
-
-**You run this** — it needs Console clicks + secrets that an agent can't do. Copy-paste the commands.
+**Topology:** `qa` is a second Cloud Run service (`career-engine-qa-app`) in the existing project. It reuses
+the project's `(default)` Firestore (shares dev's data — fine for a solo preview), dev's Artifact Registry
+repo, and the existing WIF/deployer SA. New stack = Firebase auth (no Streamlit OIDC). Terraform:
+[`infrastructure/envs/qa`](../infrastructure/envs/qa).
 
 ---
 
-## 0. Prerequisites (once)
+## What I need from you — ONE-TIME bootstrap (~15 min, Console + repo settings)
 
-```bash
-# You're already gcloud-authed as chakraborty.sumanta@gmail.com. Set these:
-export PROJECT="gen-lang-client-0513394764"     # the existing dev GCP project
-export REGION="us-central1"
-gcloud config set project "$PROJECT"
-# Docker must be running locally (Docker Desktop / engine on your laptop).
-docker version >/dev/null && echo "docker OK"
-```
+These are the only things an agent can't do. After this, deploys are one command and repeatable.
 
-You'll deploy from a checkout of this repo (`master`, at or after the Phase-10 completion commit).
+### A. Add Firebase to the project + get the web config
+1. <https://console.firebase.google.com> → **Add project → "add to an existing Google Cloud project"** →
+   pick **`gen-lang-client-0513394764`**.
+2. **Build → Authentication → Get started → Sign-in method → Google → Enable** (set a support email) → Save.
+3. **Project settings (gear) → Your apps → Web (`</>`) → Register app** (nickname `career-engine`, no
+   Hosting). From the shown config copy `apiKey`, `authDomain`, `projectId`.
 
----
+### B. Set 3 GitHub repository Variables
+**Settings → Secrets and variables → Actions → Variables → New repository variable** (these are **public**
+Firebase config, not secrets — repo *Variables*, not Secrets):
 
-## 1. Firebase setup (Console — the part only you can do)
-
-The new stack authenticates with **Firebase Auth** (not the old Streamlit OIDC). Add Firebase to the
-existing project and get a web-app config.
-
-1. Go to <https://console.firebase.google.com> → **Add project** → **"Add Firebase to an existing Google
-   Cloud project"** → pick **`gen-lang-client-0513394764`**. Accept defaults.
-2. **Build → Authentication → Get started → Sign-in method → Google → Enable** (set a support email) →
-   **Save**.
-3. **Project settings (gear) → General → Your apps → Web (`</>`) → Register app** (nickname `career-engine-qa`,
-   no Hosting). Copy the shown config — you need three values:
-
-```bash
-# From the Firebase web config object:
-export NEXT_PUBLIC_FIREBASE_API_KEY="AIza…"                       # config.apiKey
-export NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN="$PROJECT.firebaseapp.com" # config.authDomain
-export NEXT_PUBLIC_FIREBASE_PROJECT_ID="$PROJECT"                  # config.projectId (== the GCP project)
-```
-
-> These are **public** client config, not secrets. `authDomain` is normally `<project>.firebaseapp.com`.
-
----
-
-## 2. Build the image (frontend config baked in at build time)
-
-`output: export` bakes `NEXT_PUBLIC_*` into the JS **at build time**, so they're passed as `--build-arg`.
-`NEXT_PUBLIC_API_BASE_URL` is **empty** on purpose — same origin, the client calls `/api/...`.
-
-```bash
-export IMAGE="$REGION-docker.pkg.dev/$PROJECT/career-engine-dev-images/qa:$(date +%Y%m%d-%H%M)"
-gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
-
-docker build \
-  --build-arg NEXT_PUBLIC_API_BASE_URL="" \
-  --build-arg NEXT_PUBLIC_FIREBASE_API_KEY="$NEXT_PUBLIC_FIREBASE_API_KEY" \
-  --build-arg NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN="$NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN" \
-  --build-arg NEXT_PUBLIC_FIREBASE_PROJECT_ID="$NEXT_PUBLIC_FIREBASE_PROJECT_ID" \
-  -t "$IMAGE" .
-
-docker push "$IMAGE"
-```
-
-> Reuses the existing `career-engine-dev-images` Artifact Registry repo (no new repo needed). If push 403s,
-> run `gcloud artifacts repositories list --location=$REGION` to confirm the repo name.
-
----
-
-## 3. Deploy the `qa` Cloud Run service
-
-Reuses the existing **runtime service account** `career-engine-dev-run` (it already has Firestore access +
-permission to read/write per-user BYOK `ce-key-*` secrets). Runtime env: **`FIREBASE_PROJECT_ID` is what
-makes the backend accept Firebase sign-in tokens** (it pins `securetoken.google.com/<project>` as the
-allowed issuer + `<project>` as the audience).
-
-```bash
-export RUNTIME_SA="career-engine-dev-run@$PROJECT.iam.gserviceaccount.com"
-gcloud iam service-accounts describe "$RUNTIME_SA" >/dev/null && echo "runtime SA OK"
-
-gcloud run deploy career-engine-qa \
-  --image "$IMAGE" \
-  --region "$REGION" \
-  --platform managed \
-  --allow-unauthenticated \
-  --service-account "$RUNTIME_SA" \
-  --port 8080 \
-  --cpu 1 --memory 512Mi \
-  --min-instances 0 --max-instances 2 \
-  --set-env-vars "GCP_PROJECT_ID=$PROJECT,GCP_REGION=$REGION,FIREBASE_PROJECT_ID=$PROJECT,ACCESS_MODE=BYOK"
-
-export QA_URL="$(gcloud run services describe career-engine-qa --region "$REGION" --format='value(status.url)')"
-echo "QA URL: $QA_URL"
-```
-
-> Note: no Streamlit `CE_AUTH_*` vars, no Firestore provisioning (it reuses the project's existing
-> `(default)` database — so this qa shares dev's data, which is fine for a preview), `concurrency` is the
-> default (the old `=1` Streamlit pin is gone).
-
----
-
-## 4. Let Firebase trust the Cloud Run domain
-
-Google sign-in popups only work from **authorized domains**.
-
-- Firebase Console → **Authentication → Settings → Authorized domains → Add domain** → paste the **host**
-  of `$QA_URL` (e.g. `career-engine-qa-abcxyz-uc.a.run.app`, no `https://`, no path).
-
----
-
-## 5. See it 🎉
-
-```bash
-curl -s "$QA_URL/api/health"          # → {"status":"ok"}
-echo "Open in your browser: $QA_URL"
-```
-
-Open `$QA_URL` → you should see the **bitcrafty-branded login** → **Sign in with Google** → land on the
-**Dashboard**. Set your **Gemini key** when prompted (BYOK), then try **Grill** and **Tailor**.
-
----
-
-## 6. Verify / troubleshoot
-
-| Symptom | Fix |
+| Variable | Value |
 |---|---|
-| `curl /api/health` fails | Deploy failed — `gcloud run services logs read career-engine-qa --region $REGION`. |
-| Login page loads, but **sign-in popup blocked/`auth/unauthorized-domain`** | Step 4 (add the `*.run.app` host to Firebase Authorized domains). |
-| Sign-in succeeds in the popup but the app **redirects back to login / API calls 401** | The backend rejected the Firebase token. Confirm `FIREBASE_PROJECT_ID` is set on the service (`gcloud run services describe career-engine-qa --region $REGION --format='value(spec.template.spec.containers[0].env)'`) and equals your Firebase project. If it's set and still 401s, it's the token-verifier detail (the backend uses Google's `tokeninfo` endpoint; if it doesn't accept the Firebase `securetoken` JWT, swap the verifier in `auth/firebase_auth.py` for `firebase-admin`'s `verify_id_token` — a small follow-up; flag me and I'll do it). |
-| Grill/Tailor error about a key | You need to set your **own Gemini API key** in the UI (BYOK); it's stored in Secret Manager. |
-| Blank page / 404 on refresh of a deep link | Static export routing — confirm the image built with `trailingSlash` (it does on `master`); rebuild if stale. |
+| `NEXT_PUBLIC_FIREBASE_API_KEY` | `config.apiKey` (e.g. `AIza…`) |
+| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | `config.authDomain` (e.g. `gen-lang-client-0513394764.firebaseapp.com`) |
+| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | `config.projectId` (= `gen-lang-client-0513394764`) |
+
+> The other deploy variables (`GCP_PROJECT_ID`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA`, `TF_STATE_BUCKET`,
+> `AR_LOCATION`) are **already set** for dev — qa reuses them (same project). Nothing else to add.
+
+That's it. **Tell me when A + B are done** and I run the deploy (step below) myself.
 
 ---
 
-## 7. Iterate + promote
+## The deploy — repeatable (I run this; you can too)
 
-- **Redeploy after changes:** re-run **Step 2 + Step 3** (new `$IMAGE` tag each time). qa is disposable.
-- **Promote to dev (only once you're happy):** deploy the **same image** to the dev service — either
-  `gh workflow run deploy.yml --ref master -f environment=dev` (rebuilds + `terraform apply` to dev; note
-  the dev env still carries Streamlit `CE_AUTH_*` config in Terraform — that's cleaned up when the dev env
-  is reconciled to the new stack), or `gcloud run services update career-engine-dev-app --region $REGION
-  --image "$IMAGE" --set-env-vars FIREBASE_PROJECT_ID=$PROJECT`. **Validate on qa first.**
-- **Tear down qa when done:** `gcloud run services delete career-engine-qa --region $REGION`.
+Runs only after this change is merged to `master` (workflow_dispatch reads the default branch):
+
+```bash
+gh workflow run deploy.yml --ref master -f environment=qa
+gh run watch "$(gh run list --workflow=deploy.yml -L1 --json databaseId -q '.[0].databaseId')"
+```
+
+CI does: build the image **with the Firebase build args** → push to Artifact Registry → `terraform apply`
+the `qa` service → prints the URL in the run summary. Re-run anytime after a change (each build is a new
+`qa-<sha>` tag). Get the URL any time:
+
+```bash
+gcloud run services describe career-engine-qa-app --region us-central1 \
+  --format='value(status.url)'
+```
+
+### C. After the FIRST deploy — authorize the domain (one-time)
+Google sign-in popups only work from authorized domains:
+- Firebase Console → **Authentication → Settings → Authorized domains → Add domain** → paste the **host**
+  of the qa URL (e.g. `career-engine-qa-app-…-uc.a.run.app`, no `https://`, no path).
+
+### D. See it 🎉
+Open the URL → **Sign in with Google** → set your **Gemini key** (BYOK) → try Grill / Tailor.
+`curl <qa-url>/api/health` → `{"status":"ok"}` confirms the backend.
 
 ---
 
-## Notes / provenance
+## Tenet: dev is protected
+- `qa` is the **default** deploy target. Deploying **dev** is blocked unless you pass
+  `-f confirm_dev_cutover=true` (a guard step fails the run otherwise) — so dev can never be cut over to the
+  new stack by accident while Kaggle reviewers might drop in.
+- `qa` is a **separate service** in the same project; deploying/redeploying/deleting it never touches the
+  running dev service. Tear down with `gcloud run services delete career-engine-qa-app --region us-central1`.
 
-- This is the **fast preview path** (same project as dev, reused SA/AR, shared Firestore). The **clean,
-  isolated version — a new GCP project with its own Firestore/secrets/OAuth — is Phase 11.A** (I'll build
-  the Terraform `infrastructure/envs/qa` + `deploy.yml environment=qa` for that; provisioning is
-  operator-gated on a new project + billing).
-- **Local laptop dev** (run the stack without deploying) is Phase 11.H
-  ([REFINED_PROJECT_PLAN.md](REFINED_PROJECT_PLAN.md)).
-- Backend auth wiring: `auth/firebase_auth.py` (issuer/audience pinning derives from `FIREBASE_PROJECT_ID`),
-  `api/auth.py`, `api/deps.py:get_auth_provider`. Build-time frontend config: `Dockerfile` `web` stage args.
+## Known risk (flagged)
+If sign-in succeeds in the popup but the app bounces back to login / API calls return 401: the backend's
+Google `tokeninfo` verifier may not accept Firebase `securetoken` JWTs. The issuer/audience are already
+wired correctly (from `FIREBASE_PROJECT_ID`); the fix is a ~15-line swap of the verifier in
+`auth/firebase_auth.py` to `firebase-admin`'s `verify_id_token`. Ping me and I'll do it.
+
+## Promote to dev (only when validated)
+Same image, deliberately: `gh workflow run deploy.yml --ref master -f environment=dev -f confirm_dev_cutover=true`.
+Note dev's Terraform (`envs/dev`) still carries the Streamlit `CE_AUTH_*` config; reconcile it to the new
+stack (Firebase env, drop `auth_secrets`) before promoting. Validate on qa first.
