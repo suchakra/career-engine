@@ -124,6 +124,7 @@ export const handlers = [
     };
     return HttpResponse.json(saved);
   }),
+  http.post(`${BASE}/api/jobs/discover`, () => HttpResponse.json({ ...mockJobs, ran: true })),
   http.get(`${BASE}/api/key`, () => HttpResponse.json({ has_key: false })),
   http.post(`${BASE}/api/key`, () => new HttpResponse(null, { status: 204 })),
   http.delete(`${BASE}/api/key`, () => new HttpResponse(null, { status: 204 })),
