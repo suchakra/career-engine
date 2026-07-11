@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { apiFetch, apiStream } from "@/lib/api/client";
+import { apiFetch, apiFetchForm, apiStream } from "@/lib/api/client";
 import type {
   GrillActionRequest,
   GrillErrorEvent,
@@ -28,6 +28,7 @@ export interface GrillController {
   streaming: boolean;
   error: GrillErrorEvent | null;
   start: (history: string) => Promise<void>;
+  startFromResume: (file: File) => Promise<void>;
   answer: (text: string) => Promise<void>;
   confirm: () => Promise<void>;
 }
@@ -117,6 +118,26 @@ export function useGrill(): GrillController {
     [post],
   );
 
+  const startFromResume = useCallback(
+    async (file: File) => {
+      setTranscript([{ role: "user", text: `📎 Uploaded résumé: ${file.name}` }]);
+      const form = new FormData();
+      form.append("file", file);
+      try {
+        const snap = await apiFetchForm<GrillSnapshot>("/api/grill/resume", form);
+        setBanner(snap.frontier_label);
+        setAwaiting(snap.awaiting);
+        await runStream();
+      } catch {
+        setError({
+          message: "Couldn't read that résumé — try another file or paste your history.",
+          rate_limited: false,
+        });
+      }
+    },
+    [runStream],
+  );
+
   const answer = useCallback(
     (text: string) => {
       setTranscript((prev) => [...prev, { role: "user", text }]);
@@ -130,5 +151,5 @@ export function useGrill(): GrillController {
     [post],
   );
 
-  return { transcript, banner, awaiting, streaming, error, start, answer, confirm };
+  return { transcript, banner, awaiting, streaming, error, start, startFromResume, answer, confirm };
 }

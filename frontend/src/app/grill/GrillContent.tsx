@@ -30,8 +30,24 @@ export function GrillContent(): JSX.Element {
 
       {notStarted ? (
         <ActionCard title="Start grilling">
+          <div className="mb-4">
+            <label htmlFor="resume" className="text-sm font-medium">
+              Drop your résumé <span className="text-muted">(PDF, PNG, JPG — parsed on your key)</span>
+            </label>
+            <input
+              id="resume"
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/*"
+              aria-label="Résumé file"
+              className="mt-1 block w-full text-sm text-muted file:mr-3 file:min-h-tap file:rounded-card file:border file:border-border file:bg-surface file:px-3 file:text-sm"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void grill.startFromResume(f);
+              }}
+            />
+          </div>
           <p className="mb-3 text-sm text-muted">
-            Paste your career history (or a résumé) to seed the session, then start.
+            …or paste your career history and start:
           </p>
           <textarea
             className="mb-3 min-h-[8rem] w-full resize-y rounded-card border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-muted"
