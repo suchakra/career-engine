@@ -8,8 +8,12 @@ Async / threadpool discipline (identical to ``routes_write``): endpoints are
 ``async``; the SYNC session-mutation bridges (``set_grill_frontier`` etc., which own
 their own event loop via ``run_async``) run inside
 :func:`starlette.concurrency.run_in_threadpool` so they never block the request loop.
-Each bridge returns the mutated id, or ``None`` when there is no session / entry to
-act on — which we map to 404.
+
+Each bridge returns the mutated session id, or ``None`` — which we map to 404. The
+``None`` condition differs per bridge (see ``web.portfolio_store``): ``grill`` and
+``delete_star_story`` return ``None`` only when the user has *no session*, while
+``highlight`` also returns ``None`` when the target entry is absent. Deleting a
+missing story is an idempotent no-op that still returns the session id → 204.
 """
 
 from __future__ import annotations
@@ -68,7 +72,7 @@ async def highlight_entry(
         highlighted=body.highlighted,
     )
     if result is None:
-        raise HTTPException(status_code=404, detail="Entry not found.")
+        raise HTTPException(status_code=404, detail="No such entry, or no active session.")
     return Response(status_code=204)
 
 
@@ -78,7 +82,11 @@ async def delete_story(
     session_service: FirestoreSessionService = Depends(get_session_service),
     user_id: str = Depends(get_current_user_id),
 ) -> Response:
-    """Delete a STAR story by id (404 when there is no session / no such story)."""
+    """Delete a STAR story by id.
+
+    Idempotent: a missing ``story_id`` is a no-op that still returns 204. The 404 fires
+    only when the user has no discovery session at all (bridge returns ``None``).
+    """
     app_name = get_settings().app_name
     result = await run_in_threadpool(
         delete_star_story,
@@ -88,5 +96,5 @@ async def delete_story(
         story_id=story_id,
     )
     if result is None:
-        raise HTTPException(status_code=404, detail="No story to delete.")
+        raise HTTPException(status_code=404, detail="No active session.")
     return Response(status_code=204)

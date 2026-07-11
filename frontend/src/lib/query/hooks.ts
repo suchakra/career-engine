@@ -267,7 +267,9 @@ export function useHighlightEntry(): UseMutationResult<
         method: "POST",
         body: { highlighted },
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.portfolio }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.portfolio });
+    },
     onError: () => showToast("Couldn't update that entry — try again.", "error"),
   });
 }

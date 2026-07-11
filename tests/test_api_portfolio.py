@@ -34,7 +34,7 @@ _GOOGLE_ISSUER = "https://accounts.google.com"
 _USER_ID = "user-123"
 
 
-# ── Auth fakes (copied from tests/test_api_write.py — no network) ──────────────
+# ── Auth fakes (copied from tests/test_api_read.py — no network) ───────────────
 
 
 def _make_fake_verifier(sub: str = _USER_ID, email: str = "a@b.com") -> Any:
@@ -118,7 +118,7 @@ def test_highlight_entry_204(
     def _fake(
         session_service: Any, *, app_name: str, user_id: str, entry_id: str, highlighted: bool
     ) -> str:
-        calls.update(entry_id=entry_id, highlighted=highlighted)
+        calls.update(user_id=user_id, entry_id=entry_id, highlighted=highlighted)
         return entry_id
 
     monkeypatch.setattr(routes_portfolio, "set_entry_highlight", _fake)
@@ -128,7 +128,7 @@ def test_highlight_entry_204(
         headers=_auth_headers(),
     )
     assert resp.status_code == 204
-    assert calls == {"entry_id": "e2", "highlighted": True}
+    assert calls == {"user_id": _USER_ID, "entry_id": "e2", "highlighted": True}
 
 
 def test_highlight_entry_404_when_missing(
@@ -177,10 +177,14 @@ def test_delete_story_204(client: TestClient, monkeypatch: pytest.MonkeyPatch) -
     assert calls == {"user_id": _USER_ID, "story_id": "s1"}
 
 
-def test_delete_story_404_when_missing(
+def test_delete_story_404_when_no_session(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A ``None`` bridge return (no session / no such story) maps to 404."""
+    """A ``None`` bridge return (no session) maps to 404.
+
+    (A missing story id is an idempotent no-op that returns the session id → 204;
+    the bridge only returns ``None`` when the user has no session at all.)
+    """
     monkeypatch.setattr(routes_portfolio, "delete_star_story", lambda *a, **k: None)
     resp = client.delete("/api/story/s1", headers=_auth_headers())
     assert resp.status_code == 404
