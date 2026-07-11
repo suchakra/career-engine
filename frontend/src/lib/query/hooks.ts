@@ -187,3 +187,30 @@ export function useRemoveKey(): UseMutationResult<void, unknown, void> {
     onError: () => showToast("Couldn't remove your key — try again.", "error"),
   });
 }
+
+// ── Jobs discovery run (parity P2) ────────────────────────────────────────────
+
+/** Run job discovery (BYOK) → fresh JobsView; updates the jobs cache in place. */
+export function useDiscoverJobs(): UseMutationResult<JobsResponse, unknown, void> {
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+  return useMutation({
+    mutationFn: () => apiFetch<JobsResponse>("/api/jobs/discover", { method: "POST" }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(queryKeys.jobs, data);
+      showToast(
+        `Found ${data.accepted.length} strong · ${data.for_review.length} for review.`,
+        "success",
+      );
+    },
+    onError: (err) => {
+      const status = (err as { status?: number }).status;
+      showToast(
+        status === 409
+          ? "Add your Gemini key in Settings first, then search."
+          : "Job search failed — try again.",
+        "error",
+      );
+    },
+  });
+}
