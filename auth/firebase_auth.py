@@ -97,7 +97,9 @@ def google_firebase_verifier(id_token: str) -> dict[str, Any]:
     from google.oauth2 import id_token as google_id_token
 
     try:
-        claims: dict[str, Any] = google_id_token.verify_firebase_token(
+        # google-auth's verify_firebase_token is untyped → suppress strict-mode
+        # no-untyped-call; the returned claims shape is validated below.
+        claims: dict[str, Any] = google_id_token.verify_firebase_token(  # type: ignore[no-untyped-call]
             id_token, google_requests.Request()
         )
     except ValueError as exc:
