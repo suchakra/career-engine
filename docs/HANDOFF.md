@@ -1,6 +1,8 @@
 # CareerEngine — Session Handoff / Resume Point
 
 ## 👉 YOU ARE HERE (updated 2026-07-10 — **PHASE 10 COMPLETE (10.0–10.7b)**; next = stand up `qa` env + groom Phase 11)
+> ⚠️ **RESUME (session ended 2026-07-11 mid-fix):** qa is deployed & the frontend works; Google sign-in now COMPLETES but the backend **401s the Firebase token**. FIX committed on branch **`fix/firebase-verifier`** (PR open): `google_firebase_verifier` via google-auth `verify_firebase_token`, wired into `api/deps.get_auth_provider`. **NOT gated/deployed yet.** Next: `make check` → `gh workflow run deploy.yml --ref fix/firebase-verifier -f environment=qa` → operator re-tests sign-in at https://career-engine-qa-app-ontyg6kaja-uc.a.run.app → if OK, merge the PR.
+
 **`master` clean (10.7 + qa-env merged; PR #72/#73/#74). contract v2.8.0 · no contract change. `qa` DEPLOYED & healthy → https://career-engine-qa-app-ontyg6kaja-uc.a.run.app (same-project 2nd Cloud Run service, scale-to-zero; dev untouched). Deploy again anytime: `gh workflow run deploy.yml --ref master -f environment=qa`. Promote to dev only once validated (needs `-f confirm_dev_cutover=true`; dev is Kaggle-visible).**
 **Phases 1–7 + 8A–8G + all of Phase 9 + BUG-1 + BUG-2 + ALL of Phase 10 COMPLETE. Streamlit is GONE — the product runs on Next.js (App Router) + FastAPI, deployed as ONE container (static export served by FastAPI, AD-16.10). Open-core seam (ARCHITECTURE §17) in place. Nothing deployed yet.**
 
