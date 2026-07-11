@@ -10,6 +10,8 @@ import {
 
 import { apiFetch } from "@/lib/api/client";
 import type {
+  Application,
+  ApplicationWriteRequest,
   DashboardResponse,
   JobsResponse,
   MeResponse,
@@ -212,5 +214,26 @@ export function useDiscoverJobs(): UseMutationResult<JobsResponse, unknown, void
         "error",
       );
     },
+  });
+}
+
+// ── Track application (parity P4) ─────────────────────────────────────────────
+
+/** Save a tailored résumé as a tracked application (POST /api/applications). */
+export function useTrackApplication(): UseMutationResult<
+  Application,
+  unknown,
+  ApplicationWriteRequest
+> {
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+  return useMutation({
+    mutationFn: (input: ApplicationWriteRequest) =>
+      apiFetch<Application>("/api/applications", { method: "POST", body: input }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+      showToast("Saved to your tracked applications.", "success");
+    },
+    onError: () => showToast("Couldn't save the application — try again.", "error"),
   });
 }

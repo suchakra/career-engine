@@ -2,11 +2,12 @@
 
 import { ActionCard } from "@/components/ActionCard";
 import { EmptyState } from "@/components/EmptyState";
+import { KeySetupCard } from "@/components/KeySetupCard";
 import { MetricStat } from "@/components/MetricStat";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ProfileForm } from "@/components/forms/ProfileForm";
 import { PreferencesForm } from "@/components/forms/PreferencesForm";
-import { useDashboard } from "@/lib/query/hooks";
+import { useDashboard, useKeyStatus } from "@/lib/query/hooks";
 
 /**
  * The dashboard read view (§4.1). Lives in its own module — a Next.js `page.tsx`
@@ -15,6 +16,9 @@ import { useDashboard } from "@/lib/query/hooks";
  */
 export function DashboardContent(): JSX.Element {
   const { data, isLoading, isError } = useDashboard();
+  const keyStatus = useKeyStatus();
+  // First-run: no key resolved → prompt for it up top (pre-flight key card, §4.1).
+  const needsKey = keyStatus.data?.has_key === false;
 
   if (isLoading) {
     return <p className="text-sm text-muted">Loading your dashboard…</p>;
@@ -26,6 +30,7 @@ export function DashboardContent(): JSX.Element {
 
   return (
     <div className="flex flex-col gap-6">
+      {needsKey && <KeySetupCard />}
       {failed ? (
         <EmptyState
           isError

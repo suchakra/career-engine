@@ -6,6 +6,8 @@ import { ActionCard } from "@/components/ActionCard";
 import { InlineError } from "@/components/InlineError";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ResumePreview } from "@/components/ResumePreview";
+import type { StructuredResume } from "@/lib/api/models";
+import { useTrackApplication } from "@/lib/query/hooks";
 import { useTailor, type ExportFormat } from "@/lib/tailor/useTailor";
 
 const FORMATS: { fmt: ExportFormat; label: string }[] = [
@@ -13,6 +15,61 @@ const FORMATS: { fmt: ExportFormat; label: string }[] = [
   { fmt: "docx", label: "Word" },
   { fmt: "md", label: "Markdown" },
 ];
+
+const INPUT_CLASS =
+  "min-h-tap w-40 max-w-full rounded-card border border-border bg-surface px-3 text-sm text-text placeholder:text-muted";
+
+function TrackApplicationCard({ resume, jd }: { resume: StructuredResume; jd: string }): JSX.Element {
+  const track = useTrackApplication();
+  const [company, setCompany] = useState("");
+  const [role, setRole] = useState("");
+  const canSave = Boolean(company.trim() && role.trim());
+  return (
+    <ActionCard title="Track as application">
+      <p className="mb-2 text-sm text-muted">
+        Save this tailored résumé against a company + role — it appears on your Dashboard.
+      </p>
+      <div className="flex flex-wrap items-end gap-2">
+        <input
+          className={INPUT_CLASS}
+          value={company}
+          placeholder="Company"
+          aria-label="Company"
+          onChange={(e) => setCompany(e.target.value)}
+        />
+        <input
+          className={INPUT_CLASS}
+          value={role}
+          placeholder="Role"
+          aria-label="Role"
+          onChange={(e) => setRole(e.target.value)}
+        />
+        <PrimaryButton
+          variant="secondary"
+          disabled={!canSave || track.isPending}
+          onClick={() =>
+            track.mutate(
+              {
+                company: company.trim(),
+                job_title: role.trim(),
+                jd_text: jd,
+                tailored_resume_json: JSON.stringify(resume),
+              },
+              {
+                onSuccess: () => {
+                  setCompany("");
+                  setRole("");
+                },
+              },
+            )
+          }
+        >
+          {track.isPending ? "Saving…" : "Save as tracked application"}
+        </PrimaryButton>
+      </div>
+    </ActionCard>
+  );
+}
 
 /**
  * Tailor (§4.5): paste a JD → one model call selects JD-relevant achievements and
@@ -76,6 +133,7 @@ export function TailorContent(): JSX.Element {
                 </PrimaryButton>
               ))}
             </div>
+            <TrackApplicationCard resume={tailor.resume} jd={jd} />
           </>
         ) : (
           <ActionCard title="Preview">

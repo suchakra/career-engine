@@ -54,6 +54,30 @@ describe("Tailor", () => {
     expect(createObjectURL).toHaveBeenCalled();
   });
 
+  it("tracks the tailored résumé as an application", async () => {
+    let tracked: Record<string, unknown> | null = null;
+    server.use(
+      http.post(`${BASE}/api/applications`, async ({ request }) => {
+        tracked = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ company: "Globex", job_title: "Staff Engineer" });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderWithProviders(<TailorContent />);
+    await user.type(screen.getByLabelText("Job description"), "We need a Staff Engineer.");
+    await user.click(screen.getByRole("button", { name: /tailor my résumé/i }));
+    await screen.findByText(/staff engineer, distributed systems/i);
+
+    await user.type(screen.getByLabelText("Company"), "Globex");
+    await user.type(screen.getByLabelText("Role"), "Staff Engineer");
+    await user.click(screen.getByRole("button", { name: /save as tracked application/i }));
+
+    await waitFor(() =>
+      expect(tracked).toMatchObject({ company: "Globex", job_title: "Staff Engineer" }),
+    );
+  });
+
   it("surfaces an error when tailoring fails", async () => {
     server.use(
       http.post(`${BASE}/api/tailor`, () => new HttpResponse(null, { status: 409 })),

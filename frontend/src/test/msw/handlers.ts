@@ -151,6 +151,17 @@ export const handlers = [
       { headers: { "Content-Type": "text/event-stream" } },
     );
   }),
+  http.post(`${BASE}/api/applications`, () =>
+    HttpResponse.json({
+      application_id: "11111111-1111-1111-1111-111111111111",
+      company: "Globex",
+      job_title: "Staff Engineer",
+      jd_text: "",
+      tailored_resume_json: "{}",
+      status: "applied",
+      applied_on: "2026-07-11",
+    }),
+  ),
   http.post(`${BASE}/api/tailor`, () =>
     HttpResponse.json({
       contact: { name: "Jane Doe", email: "jane@example.com", phone: "", location: "Berlin", links: [] },
