@@ -24,3 +24,7 @@ export type TailorRequest = Schemas["TailorRequest"];
 export type StructuredResume = Schemas["StructuredResumeDTO"];
 export type Contact = Schemas["ContactDTO"];
 export type RoleBlock = Schemas["RoleBlockDTO"];
+
+// Applications (parity P4)
+export type ApplicationWriteRequest = Schemas["ApplicationWriteRequest"];
+export type Application = Schemas["Application"];
