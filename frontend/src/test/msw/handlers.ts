@@ -135,6 +135,13 @@ export const handlers = [
       awaiting: "question",
     }),
   ),
+  http.post(`${BASE}/api/grill/resume`, () =>
+    HttpResponse.json({
+      phase: "grilling",
+      frontier_label: "Senior Engineer — Acme",
+      awaiting: "question",
+    }),
+  ),
   http.get(`${BASE}/api/grill/stream`, () => {
     // Separate frames (not concatenated) exercise the client parser across frame
     // boundaries. The terminal `done` re-emits the last turn (matches the server),

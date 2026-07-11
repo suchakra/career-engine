@@ -25,13 +25,15 @@ no ``asyncio.run`` under ``api/``.
 
 from __future__ import annotations
 
+import pathlib
 from collections.abc import AsyncIterator
 from datetime import date
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from api.deps import get_current_user_id, get_discovery_session
 from api.schemas import (
@@ -40,9 +42,10 @@ from api.schemas import (
     GrillSnapshot,
     GrillTurnEvent,
 )
-from cli.app import DiscoverySession, TurnResult
+from cli.app import DiscoverySession, TurnResult, guess_resume_mime
 from integration.model_client import ModelAPIError
 from schema import CareerEngineState, PhaseStatus
+from tools.resume_parser import ParseError, parse_resume
 from web.grill_labels import _effective_frontier_label
 
 router = APIRouter()
@@ -108,6 +111,46 @@ async def record_grill_action(
         await session.record_answer(body.answer)
     else:  # "confirm" — the only remaining Literal value
         await session.record_checkpoint_confirmation()
+    state = await session.current_state()
+    return GrillSnapshot(
+        phase=state.current_phase.value,
+        frontier_label=_effective_frontier_label(state),
+        awaiting=_awaiting(state),
+    )
+
+
+@router.post("/api/grill/resume")
+async def seed_from_resume(
+    file: UploadFile = File(...),
+    user_id: str = Depends(get_current_user_id),
+    session: DiscoverySession = Depends(get_discovery_session),
+) -> GrillSnapshot:
+    """Vision-parse an uploaded résumé into a starting timeline and seed the grill.
+
+    Requires a valid bearer token AND a BYOK key (``get_discovery_session`` → 409). The
+    file (PDF/PNG/JPG/WEBP) is parsed by the multimodal model on the user's OWN key
+    (``tools.resume_parser.parse_resume``) into ``Entry`` objects — the raw bytes are
+    never stored — and used to ``create`` the durable session (``work_timeline``). Returns
+    the post-record snapshot so the client can open the SSE stream, exactly like ``start``.
+    """
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=422, detail="Empty résumé file.")
+    mime = file.content_type or guess_resume_mime(pathlib.Path(file.filename or ""))
+    try:
+        entries = await run_in_threadpool(
+            parse_resume, data, mime, client=session.model_client
+        )
+    except ParseError as exc:
+        raise HTTPException(status_code=422, detail=f"Couldn't parse résumé: {exc}") from exc
+    except ModelAPIError as exc:
+        # A model fault (quota / transient 5xx / auth) is not a server bug — surface it
+        # like the rest of the grill transport (rate-limit → 429, else 502).
+        status = 429 if exc.is_rate_limited else 502
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
+    await session.create(
+        "", reference_date=date.today().isoformat(), work_timeline=entries
+    )
     state = await session.current_state()
     return GrillSnapshot(
         phase=state.current_phase.value,

@@ -28,6 +28,22 @@ describe("Grill streaming", () => {
     expect(screen.getByLabelText("Your answer")).toBeInTheDocument();
   });
 
+  it("seeds the grill from an uploaded résumé", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<GrillContent />);
+
+    const file = new File([new Uint8Array([1, 2, 3])], "resume.pdf", {
+      type: "application/pdf",
+    });
+    await user.upload(screen.getByLabelText("Résumé file"), file);
+
+    // The upload seeds the session → the streamed opening question appears.
+    expect(
+      await screen.findByText(/put a number on that improvement/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/uploaded résumé: resume.pdf/i)).toBeInTheDocument();
+  });
+
   it("surfaces a mid-stream error frame without crashing", async () => {
     server.use(
       http.get(`${BASE}/api/grill/stream`, () => {

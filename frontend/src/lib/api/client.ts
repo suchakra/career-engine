@@ -200,3 +200,28 @@ export async function apiStream(
     if (frame.trim()) dispatch(frame);
   }
 }
+
+/**
+ * POST a multipart FormData (e.g. a résumé file) and parse the JSON response. Same
+ * bearer auth + single 401→refresh as {@link apiFetch}. The browser sets the
+ * multipart boundary, so no Content-Type is set here.
+ */
+export async function apiFetchForm<T>(path: string, form: FormData): Promise<T> {
+  const url = `${apiBaseUrl()}${path}`;
+  const doFetch = async (token: string | null): Promise<Response> =>
+    fetch(url, { method: "POST", headers: await buildHeaders(token, false), body: form });
+
+  let res = await doFetch(await tokenProvider(false));
+  if (res.status === 401) {
+    res = await doFetch(await tokenProvider(true));
+    if (res.status === 401) {
+      onAuthFailure();
+      throw new ApiError(401, "Unauthorized", await parseError(res));
+    }
+  }
+  if (!res.ok) {
+    throw new ApiError(res.status, `Request failed: ${res.status}`, await parseError(res));
+  }
+  if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+}
