@@ -345,3 +345,12 @@ class KeyStatusResponse(_StrictModel):
     key is NEVER returned."""
 
     has_key: bool
+
+
+# ── Portfolio actions (parity P4b) ────────────────────────────────────────────
+
+
+class HighlightRequest(_StrictModel):
+    """Request body for ``POST /api/experience/{entry_id}/highlight``."""
+
+    highlighted: bool

@@ -237,3 +237,52 @@ export function useTrackApplication(): UseMutationResult<
     onError: () => showToast("Couldn't save the application — try again.", "error"),
   });
 }
+
+// ── Portfolio actions (parity P4b) ─────────────────────────────────────────────
+
+/**
+ * Pin the grill onto a chosen entry (§4.4 "Grill me about this"). On success the
+ * grill frontier is set server-side; we route the user to /grill to continue.
+ */
+export function useGrillEntry(): UseMutationResult<void, unknown, string> {
+  const { showToast } = useToast();
+  return useMutation({
+    mutationFn: (entryId: string) =>
+      apiFetch<void>(`/api/experience/${entryId}/grill`, { method: "POST" }),
+    onError: () => showToast("Couldn't start a grill on that entry.", "error"),
+  });
+}
+
+/** Pin/unpin an entry so it is always tailored (§4.4). Refreshes the portfolio. */
+export function useHighlightEntry(): UseMutationResult<
+  void,
+  unknown,
+  { entryId: string; highlighted: boolean }
+> {
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+  return useMutation({
+    mutationFn: ({ entryId, highlighted }) =>
+      apiFetch<void>(`/api/experience/${entryId}/highlight`, {
+        method: "POST",
+        body: { highlighted },
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.portfolio }),
+    onError: () => showToast("Couldn't update that entry — try again.", "error"),
+  });
+}
+
+/** Delete a STAR story (§4.4). Refreshes the portfolio on success. */
+export function useDeleteStory(): UseMutationResult<void, unknown, string> {
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+  return useMutation({
+    mutationFn: (storyId: string) =>
+      apiFetch<void>(`/api/story/${storyId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.portfolio });
+      showToast("Story deleted.", "success");
+    },
+    onError: () => showToast("Couldn't delete that story — try again.", "error"),
+  });
+}
