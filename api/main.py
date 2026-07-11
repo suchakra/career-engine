@@ -17,6 +17,7 @@ from api.deps import get_current_identity
 from api.frontend import mount_frontend
 from api.plugins import load_plugins
 from api.routes_grill import router as grill_router
+from api.routes_key import router as key_router
 from api.routes_read import router as read_router
 from api.routes_tailor import router as tailor_router
 from api.routes_write import router as write_router
@@ -26,6 +27,7 @@ app.include_router(read_router)
 app.include_router(write_router)
 app.include_router(grill_router)
 app.include_router(tailor_router)
+app.include_router(key_router)
 
 # Open-core seam (ARCHITECTURE §17): mount any installed private plugin routers AFTER
 # the core routers. No-op in the OSS/demo build (no plugins installed).

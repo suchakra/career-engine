@@ -124,6 +124,9 @@ export const handlers = [
     };
     return HttpResponse.json(saved);
   }),
+  http.get(`${BASE}/api/key`, () => HttpResponse.json({ has_key: false })),
+  http.post(`${BASE}/api/key`, () => new HttpResponse(null, { status: 204 })),
+  http.delete(`${BASE}/api/key`, () => new HttpResponse(null, { status: 204 })),
   http.post(`${BASE}/api/grill`, () =>
     HttpResponse.json({
       phase: "grilling",

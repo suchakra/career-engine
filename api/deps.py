@@ -109,6 +109,12 @@ def get_ledger_store() -> FirestoreLedgerStore:
     return FirestoreLedgerStore()
 
 
+def get_key_vault() -> SecretManagerKeyVault:
+    """Return the production BYOK key vault (Secret Manager). Tests override this
+    with an in-memory fake so no test touches Secret Manager."""
+    return SecretManagerKeyVault()
+
+
 async def get_discovery_session(
     user_id: str = Depends(get_current_user_id),
     session_service: BaseSessionService = Depends(get_session_service),

@@ -144,3 +144,46 @@ export function useSavePreferences(): UseMutationResult<
     },
   });
 }
+
+// ── BYOK key management (parity P1) ───────────────────────────────────────────
+
+export interface KeyStatus {
+  has_key: boolean;
+}
+
+/** Whether the caller has a saved Gemini key (drives the key chip + gates). */
+export function useKeyStatus(): UseQueryResult<KeyStatus> {
+  return useQuery({
+    queryKey: queryKeys.key,
+    queryFn: () => apiFetch<KeyStatus>("/api/key"),
+  });
+}
+
+/** Save the user's Gemini key (BYOK) → Secret Manager. Never echoed back. */
+export function useSaveKey(): UseMutationResult<void, unknown, string> {
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+  return useMutation({
+    mutationFn: (apiKey: string) =>
+      apiFetch<void>("/api/key", { method: "POST", body: { api_key: apiKey } }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.key });
+      showToast("Key saved — grill and tailor are ready.", "success");
+    },
+    onError: () => showToast("Couldn't save your key — try again.", "error"),
+  });
+}
+
+/** Remove the user's saved key. */
+export function useRemoveKey(): UseMutationResult<void, unknown, void> {
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+  return useMutation({
+    mutationFn: () => apiFetch<void>("/api/key", { method: "DELETE" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.key });
+      showToast("Key removed.", "info");
+    },
+    onError: () => showToast("Couldn't remove your key — try again.", "error"),
+  });
+}

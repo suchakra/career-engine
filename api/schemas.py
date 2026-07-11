@@ -326,3 +326,22 @@ class TailorRequest(_StrictModel):
     instructions: str = ""
     contact: ContactDTO | None = None
 
+
+
+# ── BYOK key management (parity P1) ───────────────────────────────────────────
+
+
+class KeyWriteRequest(_StrictModel):
+    """Request body for ``POST /api/key`` — the user's raw Gemini API key (BYOK).
+
+    Never logged or echoed back; stored in Secret Manager (``ce-key-{user_id}``).
+    """
+
+    api_key: str = Field(min_length=10)
+
+
+class KeyStatusResponse(_StrictModel):
+    """Response for ``GET /api/key`` — whether the caller has a saved key. The raw
+    key is NEVER returned."""
+
+    has_key: bool

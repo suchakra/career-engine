@@ -7,4 +7,5 @@ export const queryKeys = {
   dashboard: ["dashboard"] as const,
   portfolio: ["portfolio"] as const,
   jobs: ["jobs"] as const,
+  key: ["key"] as const,
 } as const;

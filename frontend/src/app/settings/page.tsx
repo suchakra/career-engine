@@ -1,18 +1,15 @@
 "use client";
 
 import { AppShell } from "@/components/AppShell";
-import { EmptyState } from "@/components/EmptyState";
 import { RequireAuth } from "@/lib/auth/guard";
+import { SettingsContent } from "@/app/settings/SettingsContent";
 
-/** Placeholder — BYOK key, connected accounts, consents, privacy land later. */
+/** Settings — BYOK key + appearance (parity P1). */
 export default function SettingsPage(): JSX.Element {
   return (
     <RequireAuth>
       <AppShell title="Settings">
-        <EmptyState
-          title="Settings are coming soon"
-          description="Key management, connected accounts, consents, and privacy controls arrive in a later slice."
-        />
+        <SettingsContent />
       </AppShell>
     </RequireAuth>
   );
