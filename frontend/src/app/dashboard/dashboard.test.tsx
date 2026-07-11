@@ -16,4 +16,10 @@ describe("Dashboard read view", () => {
       expect(screen.getByText(/haven't grilled in 6 days/i)).toBeInTheDocument(),
     );
   });
+
+  it("prompts to set up a key on first run (no key resolved)", async () => {
+    // Default MSW GET /api/key → { has_key: false } → the pre-flight key card shows.
+    renderWithProviders(<DashboardContent />);
+    expect(await screen.findByText(/set up your gemini key/i)).toBeInTheDocument();
+  });
 });

@@ -214,3 +214,31 @@ export function useDiscoverJobs(): UseMutationResult<JobsResponse, unknown, void
     },
   });
 }
+
+// ── Track application (parity P4) ─────────────────────────────────────────────
+
+export interface TrackApplicationInput {
+  company: string;
+  job_title: string;
+  jd_text: string;
+  tailored_resume_json: string;
+}
+
+/** Save a tailored résumé as a tracked application (POST /api/applications). */
+export function useTrackApplication(): UseMutationResult<
+  unknown,
+  unknown,
+  TrackApplicationInput
+> {
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+  return useMutation({
+    mutationFn: (input: TrackApplicationInput) =>
+      apiFetch("/api/applications", { method: "POST", body: input }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+      showToast("Saved to your tracked applications.", "success");
+    },
+    onError: () => showToast("Couldn't save the application — try again.", "error"),
+  });
+}
