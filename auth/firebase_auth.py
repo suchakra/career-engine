@@ -82,6 +82,35 @@ def google_tokeninfo_verifier(id_token: str) -> dict[str, Any]:
     return claims
 
 
+def google_firebase_verifier(id_token: str) -> dict[str, Any]:
+    """Verify a FIREBASE ID token (from the Firebase Web SDK) and return its claims.
+
+    Firebase ID tokens are signed by Google's ``securetoken`` service, NOT the OAuth2
+    tokeninfo issuer — so :func:`google_tokeninfo_verifier` (which validates Google
+    OAuth2 ID tokens) rejects them. This uses ``google.oauth2.id_token.verify_firebase_token``
+    (google-auth, already a dependency) to validate the signature against the Firebase
+    public certs and decode the claims. Issuer + audience are still pinned to the project
+    by :class:`FirebaseAuthProvider` (so a token from a *different* Firebase project is
+    rejected on ``aud``/``iss``).
+    """
+    from google.auth.transport import requests as google_requests
+    from google.oauth2 import id_token as google_id_token
+
+    try:
+        # google-auth's verify_firebase_token is untyped → suppress strict-mode
+        # no-untyped-call; the returned claims shape is validated below.
+        claims: dict[str, Any] = google_id_token.verify_firebase_token(  # type: ignore[no-untyped-call]
+            id_token, google_requests.Request()
+        )
+    except ValueError as exc:
+        raise AuthenticationError(f"Invalid Firebase ID token: {exc}") from exc
+    if not claims:
+        raise AuthenticationError("Invalid or expired Firebase ID token.")
+    if not claims.get("sub"):
+        raise AuthenticationError("Firebase ID token is missing the 'sub' claim.")
+    return claims
+
+
 # ── FirebaseAuthProvider ──────────────────────────────────────────────────────
 
 

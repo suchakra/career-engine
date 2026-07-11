@@ -23,7 +23,7 @@ from google.adk.sessions import BaseSessionService
 from starlette.concurrency import run_in_threadpool
 
 from api.auth import VerifiedIdentity, verify_bearer
-from auth.firebase_auth import FirebaseAuthProvider
+from auth.firebase_auth import FirebaseAuthProvider, google_firebase_verifier
 from auth.key_vault import SecretManagerKeyVault
 from auth.provider import KeyVaultError
 from cli.app import DiscoverySession
@@ -36,13 +36,16 @@ from web.session_loader import web_session_id
 
 
 def get_auth_provider() -> FirebaseAuthProvider:
-    """Return the production auth provider (real Google token verifier).
+    """Return the production auth provider verifying **Firebase** ID tokens.
 
-    This is the seam tests override with ``app.dependency_overrides`` to inject
-    a :class:`FirebaseAuthProvider` built with a fake verifier, so no test ever
-    touches the network.
+    The frontend obtains its token from the Firebase Web SDK, whose tokens are signed
+    by Google's ``securetoken`` service — so we verify with
+    :func:`~auth.firebase_auth.google_firebase_verifier` (NOT the OAuth2 tokeninfo
+    endpoint, which rejects Firebase tokens). Issuer + audience are pinned to
+    ``FIREBASE_PROJECT_ID`` by the provider. This is the seam tests override with
+    ``app.dependency_overrides`` to inject a fake verifier, so no test touches the network.
     """
-    return FirebaseAuthProvider()
+    return FirebaseAuthProvider(verifier=google_firebase_verifier)
 
 
 def get_current_identity(
