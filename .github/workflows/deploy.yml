@@ -16,7 +16,8 @@ name: Deploy (manual)
 #   AR_LOCATION          Artifact Registry region (e.g. us-central1)
 #   NEXT_PUBLIC_FIREBASE_API_KEY / _AUTH_DOMAIN / _PROJECT_ID  Firebase web config (PUBLIC,
 #                        baked into the frontend at build time; needed for Google sign-in)
-#   CE_AUTH_CLIENT_ID / CE_AUTH_REDIRECT_URI  (dev/Streamlit only — ignored by qa)
+#   CE_AUTH_CLIENT_ID    (dev/Streamlit only — passed as TF_VAR_auth_client_id; ignored by qa)
+# The dev OAuth redirect URI is hard-coded below (not a Variable); qa ignores it.
 # No secrets required — WIF is keyless; BYOK key VALUES live in Secret Manager.
 on:
   workflow_dispatch:

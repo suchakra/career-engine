@@ -5,8 +5,9 @@
 project_id = "gen-lang-client-0513394764"
 region     = "us-central1"
 
-# Set after the first image build/push (deploy.yml sets this automatically in CI):
-image = "us-central1-docker.pkg.dev/gen-lang-client-0513394764/career-engine-qa-images/app:latest"
+# Set after the first image build/push (deploy.yml sets this automatically in CI). qa REUSES
+# dev's Artifact Registry repo (career-engine-dev-images), tagged qa-<sha>:
+image = "us-central1-docker.pkg.dev/gen-lang-client-0513394764/career-engine-dev-images/app:qa-latest"
 
 # Firebase project id (token audience). Leave empty to use project_id (Firebase enabled on
 # the same GCP project). Set only if the Firebase project differs from the GCP project.

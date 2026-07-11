@@ -87,7 +87,7 @@ tf-fmt:  ## Check Terraform formatting (no credentials needed)
 	terraform fmt -check -recursive infrastructure
 
 .PHONY: tf-validate
-tf-validate:  ## Init (backend-less) + validate both env roots (no credentials needed)
+tf-validate:  ## Init (backend-less) + validate all env roots dev/qa/prod (no credentials needed)
 	$(TF_DEV) init -backend=false -input=false >/dev/null && $(TF_DEV) validate
 	$(TF_QA) init -backend=false -input=false >/dev/null && $(TF_QA) validate
 	$(TF_PROD) init -backend=false -input=false >/dev/null && $(TF_PROD) validate
