@@ -6,7 +6,8 @@
 > profile/preferences read+hydrate (#84), grill resume + master-résumé bullets + parse feedback +
 > dark-mode file input + add-a-bullet (#85), and the #85 follow-up review fixes (#86).
 >
-> 🔴 **NEXT, IN ORDER — the first is a DATA-LOSS bug, do it first:**
+> 🔴 **NEXT, IN ORDER.** NOTE: grooming (2026-07-12) found that **CQ-1 bullet identity** is a prerequisite
+> for items 1 and 2 below — see item 3. Sequence is: CQ-1 → merge/dedup → delete → copywriter.
 > 1. **Résumé merge/dedup.** A second résumé upload CLOBBERS the first: `POST /api/grill/resume`
 >    calls `session.create` → `cli.session.create_session`, which is **last-write-wins**, so the
 >    whole `CareerEngineState` (every entry, every STAR story, every hour of grilling) is destroyed.
@@ -16,11 +17,15 @@
 > 2. **Delete a bullet / delete an entry** — the store can replace and append a bullet but not
 >    remove one; edit-only is half a tool, and it matters more once a merge can bring in a role the
 >    user doesn't want.
-> 3. **Copywriter agent** (Sumanta's idea, worth taking seriously). Master-résumé bullets are a
->    deterministic concatenation of `story.result`, so they read flat. Tailoring currently does
->    extraction AND copywriting in one model call; master does neither. A dedicated copywriter pass
->    over the already-extracted STAR stories is a clean seam and is probably the single biggest
->    quality jump available in the output.
+> 3. **Copy quality — GROOMED 2026-07-12.** Root cause found: a bullet is `story.result` verbatim; there
+>    is **no copywriting stage at all**, and we discard S/T/A at render time keeping only R. It is a missing
+>    **stage** — a prompt + node, NOT an agent, and NOT fixable by editing the tailor prompt (that call emits
+>    no bullet text). Design: [ARCHITECTURE §18](ARCHITECTURE.md) (AD-18.1..18.5). Tickets:
+>    [GROOMING §Copy quality](GROOMING.md) — **CQ-1 bullet identity (contract v2.9.0) comes FIRST**, because
+>    merge/dedup, delete, and the copywriter loop all need a stable `bullet_id` + `supersedes`.
+>    Then CQ-2 (= the merge/dedup item above), CQ-3 delete, CQ-4 copywriter-in-the-grill (human-validated,
+>    so export needs no model call), CQ-5 grill coverage, CQ-6 post-tailor/pre-render editing with a
+>    persist choice. `demo_output/joy-resumeskill.md` is REFERENCE ONLY — do not adopt its one-shot chat shape.
 >
 > ⚠️ **MERGE RULE (Sumanta, 2026-07-12):** you may merge + deploy qa bugfix PRs without asking,
 > **on the condition that Copilot has reviewed the PR first**. If you push more commits after

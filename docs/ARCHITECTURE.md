@@ -829,3 +829,97 @@ open-core machinery (private package/registry, dual CI, version pinning) before 
 YAGNI cost. So: the core carries the plugin registry + flag seam (zero plugins, zero flags on); the private
 repo and its packaging land when the first premium feature is real. Env mapping: the OSS/demo deploy runs
 core-only; the commercial deploy (a future `qa`/prod GCP project) runs core + the private layer.
+
+---
+
+## 18. Résumé copy quality — bullet identity + copywriting inside the grill (contract v2.9.0)
+
+> **Status:** `active` (design accepted, not yet built) · added 2026-07-12 · owner decision: Sumanta.
+> Build tickets: [GROOMING.md](GROOMING.md) §Copy quality. Delivery status: [PROGRESS.md](PROGRESS.md).
+
+### 18.1 The problem — nobody writes the bullets
+A résumé bullet is `story.result`, verbatim (`web/resume_builder._bullet_for`). `story.result` is an
+artifact of the **grill**, whose job is metric extraction and validation — not résumé prose. The single
+model call in the résumé path (`STRUCTURED_TAILOR_SYSTEM_PROMPT`) says so explicitly: *"your job is
+selection, a summary, and skills."* It returns `selected_achievement_ids`; the assembler then stamps
+bullets out of the chosen stories deterministically.
+
+So the pipeline **has no copywriting stage at all**. Two consequences:
+- Bullets read flat, because they are extraction output shipped as final copy.
+- We capture full **S/T/A/R** during the grill and then discard S, T and A at render time, keeping only R
+  — three quarters of the material we already paid to collect, thrown away one line before the PDF.
+
+This cannot be fixed by editing the tailor prompt: that call emits no bullet text, so there is nowhere to
+put the instruction. **The missing thing is a stage, not an agent and not a better system prompt.**
+
+### 18.2 Decision — AD-18.1: the copywriter is a PROMPT + node, never an "agent"
+The job is one deterministic transform: (STAR story + role context) → a résumé bullet. No tools, no
+memory, no autonomous loop, no peer-to-peer messaging. Modelling it as an A2A/ADK agent (as with the Scout
+⇄ Primary discovery pair, §15) would be unjustified machinery. It is a workflow **node** with a system
+prompt.
+
+Reference: a chat-based résumé-tailoring *skill* a user's contact swears by (`demo_output/joy-resumeskill.md`)
+is likewise a pure prompt — no agent — and its content rules (lead with impact, reframe honestly, promote
+must-have hits, trim irrelevant bullets, **never fabricate**) are good source material for our prompt. We
+do **not** adopt its shape: it is a one-shot chat skill that holds the whole résumé in context and emits a
+`.docx`. Our architecture is durable evidence + a deterministic assembler + BYOK cost discipline; adopting
+its shape would mean discarding the grill.
+
+### 18.3 Decision — AD-18.2: copywriting happens IN the grill, human-validated, and PERSISTS
+The polished bullet is proposed **during grilling** and the user accepts / edits / rejects it. It is then
+**persisted state**, not something regenerated at export. Rationale, in order of importance:
+
+1. **No unreviewed prose can reach a PDF.** A copywriter pass at export could invent a verb or imply a
+   scope and land it in a document nobody proofread. If the user signed off on the sentence, the résumé
+   cannot contain a claim they never saw.
+2. **Export stays deterministic and free.** Because the approved bullet is durable state, assembly needs
+   **no model call** — no per-export burn on the user's own BYOK quota, and no cache/staleness machinery
+   (an earlier proposal to cache a copywritten résumé in `master_resume_json` is thereby **rejected** as
+   unnecessary).
+3. **It forces grill coverage to be honest** (AD-18.5 below).
+
+Batching is a hard requirement: propose rewordings for **all of an entry's bullets in one turn**. One turn
+per bullet would make the grill interminable and is the obvious failure mode of this design.
+
+### 18.5 Decision — AD-18.5: coverage is the product, not a side effect
+The grill currently selects a frontier entry and drills it for a metric. It will happily interrogate a
+"favourite project" while a dozen strong bullets from the user's uploaded résumé are never touched. When a
+user hands us rich source material, **covering it is the job**.
+
+Every supplied bullet must reach one of three terminal states: **quantified** (a metric was extracted),
+**strengthened** (reworded and accepted), or **explicitly skipped** (the user said it doesn't matter). The
+grill may not declare an entry done while any of its bullets is in none of them, and the user must be able
+to *see* the remaining coverage rather than guess at it.
+
+### 18.4 Decision — AD-18.4: an edit at render time has THREE destinations, and the user picks
+A tailored résumé is a **rendering** of the portfolio, not a copy of it. The place people actually notice
+bad wording is post-tailor / pre-render — the JD is in front of them. So an edit made there must be
+disambiguated rather than silently applied:
+
+1. **This résumé only** — a JD-specific rewording that must NOT pollute the master (echoing one company's
+   vocabulary). Lives in the exported document, nowhere else.
+2. **Persist as a new variant** — a genuinely better phrasing. Stored as a `Bullet` (`source="user"`),
+   available to every future résumé; the original is kept.
+3. **Overwrite the original** — the old line was simply worse. Stored with `supersedes` set, so the
+   superseded bullet stops appearing and dedup resolves it **by id**, not by guessing at text.
+
+Without bullet identity (AD-18.3) only option 1 is even expressible — which is precisely why today's UI can
+edit a bullet but cannot tell the user what became of it.
+
+### 18.5 Decision — AD-18.3: bullets need IDENTITY (contract v2.9.0, the prerequisite)
+`Entry.bullets` is a `list[str]`. Everything above is blocked on that:
+- Edits are addressed by **array index** (`PATCH /api/experience/{id}/bullet` takes `bullet_index`), which
+  shifts under any concurrent insert/delete.
+- There is no way to say *"this reworded line supersedes that original one"*, so the user cannot be offered
+  the overwrite-vs-keep-both choice — and "keep both" would silently reproduce the duplicate-content bug
+  fixed in `_merge_entry_bullets` (PR #86).
+- The résumé **merge/dedup** work (a second upload currently clobbers the first — see HANDOFF) must union
+  bullets on a matched entry, and has nothing stable to dedup *by*.
+
+So `list[str]` → `list[Bullet]` with a stable `bullet_id`, `text`, `source` (`parsed` | `user` | `grilled`)
+and `supersedes`. This is a **breaking shape change to persisted state**: version-gate to **contract
+v2.9.0** with a migration for existing sessions (per the contract-version convention — do not mutate a
+spec in place).
+
+**Bullet identity is the shared prerequisite** for merge/dedup, for delete-a-bullet, and for the
+copywriter loop. It is therefore sequenced first (see GROOMING).
