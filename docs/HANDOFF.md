@@ -1,48 +1,52 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-12 — **PARITY COMPLETE & DEPLOYED; now fixing bugs found in live qa use**)
-> ▶ **ACTIVE WORK: qa hardening.** Sumanta is using the qa deploy for real and finding bugs.
-> Status of each is canonical in [PROGRESS.md](PROGRESS.md) ("qa hardening" row). Shipped so far:
-> profile/preferences read+hydrate (#84), grill resume + master-résumé bullets + parse feedback +
-> dark-mode file input + add-a-bullet (#85), and the #85 follow-up review fixes (#86).
+## 👉 YOU ARE HERE (updated 2026-07-12 — **qa hardening + copy-quality build in flight**)
+> ▶ **ACTIVE: the Copy-quality tickets (CQ-*) in [GROOMING.md](GROOMING.md).** Build them IN ORDER.
+> Design: [ARCHITECTURE.md §18](ARCHITECTURE.md) (AD-18.1..18.5). Status: [PROGRESS.md](PROGRESS.md).
 >
-> 🔴 **NEXT, IN ORDER.** NOTE: grooming (2026-07-12) found that **CQ-1 bullet identity** is a prerequisite
-> for items 1 and 2 below — see item 3. Sequence is: CQ-1 → merge/dedup → delete → copywriter.
-> 1. **Résumé merge/dedup.** A second résumé upload CLOBBERS the first: `POST /api/grill/resume`
->    calls `session.create` → `cli.session.create_session`, which is **last-write-wins**, so the
->    whole `CareerEngineState` (every entry, every STAR story, every hour of grilling) is destroyed.
->    **Decision taken (Sumanta, 2026-07-12): MERGE + DEDUP** — match entries on (title, org,
->    date-range), keep the existing entry (preserving its `entry_id`, stories and GRILLED status),
->    append genuinely-new entries as ungrilled, union the bullets on matched entries. Never destroy.
-> 2. **Delete a bullet / delete an entry** — the store can replace and append a bullet but not
->    remove one; edit-only is half a tool, and it matters more once a merge can bring in a role the
->    user doesn't want.
-> 3. **Copy quality — GROOMED 2026-07-12.** Root cause found: a bullet is `story.result` verbatim; there
->    is **no copywriting stage at all**, and we discard S/T/A at render time keeping only R. It is a missing
->    **stage** — a prompt + node, NOT an agent, and NOT fixable by editing the tailor prompt (that call emits
->    no bullet text). Design: [ARCHITECTURE §18](ARCHITECTURE.md) (AD-18.1..18.5). Tickets:
->    [GROOMING §Copy quality](GROOMING.md) — **CQ-1 bullet identity (contract v2.9.0) comes FIRST**, because
->    merge/dedup, delete, and the copywriter loop all need a stable `bullet_id` + `supersedes`.
->    Then CQ-2 (= the merge/dedup item above), CQ-3 delete, CQ-4 copywriter-in-the-grill (human-validated,
->    so export needs no model call), CQ-5 grill coverage, CQ-6 post-tailor/pre-render editing with a
->    persist choice. `demo_output/joy-resumeskill.md` is REFERENCE ONLY — do not adopt its one-shot chat shape.
+> **DONE + deployed to qa:**
+> - ✅ **CQ-1** bullet identity — `Entry.bullets: list[str]` → `list[Bullet]` (bullet_id / text / source /
+>   supersedes), **contract v2.9.0**. Migration is READ-TIME (a pydantic before-validator coerces legacy
+>   `list[str]`), so no batch rewrite. Verified lossless against the real live documents before deploy. (#87, #89)
+> - ✅ **CQ-2** a résumé re-upload **MERGES** — it used to call `session.create` (last-write-wins) and
+>   DESTROY the whole portfolio. Matched role (title+org) keeps its entry_id/stories/GRILLED status and only
+>   gains bullets; new roles appended ungrilled + frontier moves to them; an omitted role is KEPT. (#90)
+> - ✅ **CQ-3** delete a bullet / delete an experience. Entry delete CASCADES to its STAR stories, prunes the
+>   per-entry grill buffers, and clears `pending_user_answer` (else the next turn attaches a story to the
+>   WRONG role). UI arms a confirm first. (#91)
 >
-> ⚠️ **MERGE RULE (Sumanta, 2026-07-12):** you may merge + deploy qa bugfix PRs without asking,
-> **on the condition that Copilot has reviewed the PR first**. If you push more commits after
-> Copilot's review, request a RE-review and wait — a stale review does not count. This rule exists
-> because it was broken once: #85's last two commits were merged on green CI alone, and a follow-up
-> review then found the grill bug was not actually fixed (stale question re-asked; a session with no
-> pending question still stranded the user; a failed status read offered a *destructive* start card).
-> Green CI is not a substitute for review.
+> 🔴 **NEXT — CQ-4, then CQ-5, then CQ-6** (full specs in [GROOMING.md](GROOMING.md)):
+> - **CQ-4 copywriter in the grill.** THE point of all of the above. A résumé bullet is `story.result`
+>   VERBATIM (`web/resume_builder._bullet_for`) — there is **no copywriting stage at all**, and we collect
+>   full S/T/A/R then discard S, T and A at render. It is a missing STAGE: a prompt + workflow node, NOT an
+>   agent, and NOT fixable by editing `STRUCTURED_TAILOR_SYSTEM_PROMPT` (that call emits no bullet text).
+>   Propose rewordings **batched per entry, one turn**; the user accepts/edits/rejects; accepted text
+>   persists as a `Bullet(source="grilled", supersedes=…)` — so **export needs no model call**.
+> - **CQ-5 grill coverage** — every supplied bullet must end quantified / strengthened / explicitly skipped.
+> - **CQ-6 post-tailor, pre-render editing** with the 3-way persist choice (this résumé only / new variant /
+>   overwrite).
+> - ⬜ **CLEAN-1** (non-blocking): rename the store's async fns from the prepended-`a` (`amerge`, `aset`,
+>   `adelete`) to a `_async` suffix — the prefix reads as part of the word.
+>
+> 🤖 **Cold-starting? Invoke the `resume-careerengine` skill** ([skills/resume-careerengine](../skills/resume-careerengine/SKILL.md)).
+> It carries the orientation order, the merge rules, and the build loop.
+>
+> ⚠️ **MERGE RULES (learned the hard way — do not relax):**
+> 1. **Never push to `master`**, not even docs. Branch → PR → Copilot → merge.
+> 2. **Never merge with an unresolved review thread.** Fix it or REPLY on the thread. Requesting a
+>    re-review means WAITING for the new review — a second review can land after the first looks clean.
+>    (#87 was merged over an unread second review; it shipped an `openapi.json` that disagreed with the
+>    deployed server.) `master` now has a Conversation Resolution blocker: a PR sits at `BLOCKED` until
+>    every thread is resolved.
+> 3. Merging + deploying **qa** is authorized without asking, **provided Copilot reviewed first**.
+> 4. **No secrets in code.** If a new GitHub secret is needed, ASK.
 >
 > `dev` still requires an explicit go-ahead + `-f confirm_dev_cutover=true` (Kaggle-visible).
 >
-> 🔴 **BEFORE LIFTING THE DEV BLOCKADE: back up Firestore + read-only dry-run the migration** — see
-> [QA_DEPLOY_RUNBOOK.md](QA_DEPLOY_RUNBOOK.md) §"Back up Firestore before any deploy that migrates state".
-> The shared Firestore holds **real user data — including at least one portfolio that is NOT the
-> operator's.** Live state is under the doc's `session_state` key; the `career_engine_state` key is, in
-> practice, **empty on live sessions** — read that one and you will conclude a portfolio is empty when it
-> is not.
+> 🔴 **BEFORE ANY DEPLOY THAT MIGRATES STATE: back up Firestore + read-only dry-run the migration** — see
+> [QA_DEPLOY_RUNBOOK.md](QA_DEPLOY_RUNBOOK.md). The shared Firestore holds **real user data — including at
+> least one portfolio that is NOT the operator's.** Live state is under the doc's `session_state` key; the
+> `career_engine_state` key is empty in practice and will lie to you.
 
 > ✅ **All parity slices are on `master` and LIVE on qa** (deploy run 29194226615, green). Verified on qa:
 > `/api/health` ok; `/api/master-resume`, `/api/jobs/dismiss`, `/api/experience/{id}/bullet|grill|highlight`,
