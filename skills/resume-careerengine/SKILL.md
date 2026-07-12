@@ -18,8 +18,9 @@ operator what to do next — the answer is in the docs. Just start.
    scope + acceptance criteria. Build them **in order**; later ones depend on earlier ones.
 4. `docs/ARCHITECTURE.md` §18 — the design decisions behind the copy-quality work (AD-18.1…18.5).
 
-Then check reality: `git status`, `git log --oneline -5`, `gh pr list`. An open PR of mine
-may be mid-review — finish that before starting anything new.
+Then check reality: `git status`, `git log --oneline -5`, `gh pr list`. **An already-open PR may be
+mid-review — finish that (address the comments, resolve the threads, merge) before starting
+anything new.**
 
 ## 2. The non-negotiable rules (these were learned the hard way)
 
@@ -28,8 +29,10 @@ may be mid-review — finish that before starting anything new.
   a written reply on the thread. Requesting a re-review means *waiting for the new review* —
   a second review can land after the first looks clean. (`master` has a Conversation
   Resolution blocker; a PR sits at `BLOCKED` until threads are resolved.)
-  - Reply: `gh api repos/suchakra/career-engine/pulls/N/comments/{id}/replies -f body="..."`
-  - Resolve: `gh api graphql -f query='mutation { resolveReviewThread(input:{threadId:"..."}) { thread { isResolved } } }'`
+  - Reply: `gh api repos/{owner}/{repo}/pulls/{N}/comments/{comment_id}/replies -f body="..."`
+  - Find unresolved threads (GraphQL, substituting the repo you are in):
+    `gh api graphql -f query='{ repository(owner:"{owner}", name:"{repo}") { pullRequest(number:{N}) { reviewThreads(first:30) { nodes { id isResolved path } } } } }'`
+  - Resolve: `gh api graphql -f query='mutation { resolveReviewThread(input:{threadId:"{thread_id}"}) { thread { isResolved } } }'`
 - **Merging + deploying qa is authorized** without asking, *provided* Copilot reviewed first.
   `gh pr edit N --add-reviewer copilot-pull-request-reviewer`, then wait.
 - **`dev` is BLOCKADED.** Never deploy there without an explicit go-ahead
