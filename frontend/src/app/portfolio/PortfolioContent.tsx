@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 import { ActionCard } from "@/components/ActionCard";
 import { EmptyState } from "@/components/EmptyState";
@@ -10,6 +11,7 @@ import { ResumePreview } from "@/components/ResumePreview";
 import { StatusBadge, type StatusKind } from "@/components/StatusBadge";
 import {
   useDeleteStory,
+  useEditBullet,
   useGrillEntry,
   useHighlightEntry,
   usePortfolio,
@@ -27,9 +29,87 @@ function statusKind(label: string): StatusKind {
 }
 
 /**
+ * One experience bullet, editable in place (parity P5). Reads as plain text until the
+ * user hits Edit; saving PATCHes the bullet by its index and refreshes the portfolio.
+ */
+function EditableBullet({
+  entryId,
+  index,
+  text,
+}: {
+  entryId: string;
+  index: number;
+  text: string;
+}): JSX.Element {
+  const edit = useEditBullet();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(text);
+
+  // The <li> must stay `display: list-item` or the list-disc marker disappears — so the
+  // flex row lives on an inner wrapper, not on the <li> itself.
+  if (!editing) {
+    return (
+      <li>
+        <div className="flex items-start justify-between gap-2">
+          <span>{text}</span>
+          <button
+            type="button"
+            aria-label={`Edit bullet: ${text}`}
+            onClick={() => {
+              setDraft(text);
+              setEditing(true);
+            }}
+            className="shrink-0 text-xs text-muted hover:text-text"
+          >
+            Edit
+          </button>
+        </div>
+      </li>
+    );
+  }
+
+  const save = (): void => {
+    const next = draft.trim();
+    if (!next || next === text) {
+      setEditing(false);
+      return;
+    }
+    edit.mutate(
+      { entryId, bulletIndex: index, newText: next },
+      { onSuccess: () => setEditing(false) },
+    );
+  };
+
+  return (
+    <li>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={draft}
+          aria-label={`Bullet ${index + 1}`}
+          maxLength={500}
+          onChange={(e) => setDraft(e.target.value)}
+          className="min-h-tap flex-1 rounded-card border border-border bg-surface px-2 text-sm text-text"
+        />
+        <PrimaryButton variant="secondary" onClick={save} disabled={edit.isPending}>
+          {edit.isPending ? "Saving…" : "Save"}
+        </PrimaryButton>
+        <button
+          type="button"
+          onClick={() => setEditing(false)}
+          className="text-xs text-muted hover:text-text"
+        >
+          Cancel
+        </button>
+      </div>
+    </li>
+  );
+}
+
+/**
  * A single portfolio entry with its parity actions (§4.4): grill this entry,
- * pin/unpin it (always tailored), and delete individual STAR stories. The action
- * mutations live in this component so each card manages its own pending state.
+ * pin/unpin it (always tailored), edit its bullets, and delete individual STAR
+ * stories. The action mutations live in this component so each card manages its
+ * own pending state.
  */
 function EntryCard({ entry }: { entry: EntryCardResponse }): JSX.Element {
   const router = useRouter();
@@ -48,9 +128,9 @@ function EntryCard({ entry }: { entry: EntryCardResponse }): JSX.Element {
         {entry.dates} · {entry.type_label}
       </p>
       {entry.bullets.length > 0 && (
-        <ul className="mb-3 list-disc pl-5 text-sm">
+        <ul className="mb-3 list-disc space-y-1 pl-5 text-sm">
           {entry.bullets.map((b, i) => (
-            <li key={i}>{b}</li>
+            <EditableBullet key={`${i}-${b}`} entryId={entry.entry_id} index={i} text={b} />
           ))}
         </ul>
       )}

@@ -1,15 +1,21 @@
-"""Protected job-discovery RUN route (parity P2).
+"""Protected job-discovery RUN + HITL routes (parity P2 / P5).
 
-``GET /api/jobs`` (10.2) only reads previously-accepted matches. This runs the bounded
-two-agent discovery loop (Scout ⇄ MCP ⇄ Primary) on the caller's BYOK key + saved rubric,
-persists accepted matches to the ledger, and returns the FRESH ``JobsView``. Reuses
-``web.jobs_runner`` (the tested run) — no new discovery logic here. The run is sync +
-blocking (own persistent loop), so it executes in a threadpool.
+``GET /api/jobs`` (10.2) only reads previously-accepted matches.
+
+- ``POST /api/jobs/discover`` (P2) runs the bounded two-agent discovery loop
+  (Scout ⇄ MCP ⇄ Primary) on the caller's BYOK key + saved rubric, persists accepted
+  matches to the ledger, and returns the FRESH ``JobsView``. Reuses ``web.jobs_runner``
+  (the tested run) — no new discovery logic here. The run is sync + blocking (own
+  persistent loop), so it executes in a threadpool.
+- ``POST /api/jobs/dismiss`` (P5) is the "Not interested" HITL signal: it records the
+  company in the discovery ledger (``add_rejected_company``) so future runs hard-reject
+  it. The READ side already subtracts ``rejected_companies`` (``hidden_companies``) —
+  only this write was missing. No BYOK key needed (no model call).
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from starlette.concurrency import run_in_threadpool
 
 from api.deps import (
@@ -18,7 +24,7 @@ from api.deps import (
     get_ledger_store,
     get_workspace_store,
 )
-from api.schemas import JobsResponse
+from api.schemas import DismissCompanyRequest, JobsResponse
 from auth.key_vault import SecretManagerKeyVault
 from auth.provider import KeyVaultError
 from database.workspace_store import FirestoreWorkspaceStore
@@ -61,3 +67,22 @@ async def discover_jobs(
         return JobsResponse.from_view(build_jobs_view(result, hidden_companies=hidden))
 
     return await run_in_threadpool(_run)
+
+
+@router.post("/api/jobs/dismiss", status_code=204)
+async def dismiss_company(
+    body: DismissCompanyRequest,
+    user_id: str = Depends(get_current_user_id),
+    ledger_store: FirestoreLedgerStore = Depends(get_ledger_store),
+) -> Response:
+    """Record a dismissed ("Not interested") company; future runs hard-reject it.
+
+    Idempotent — the ledger de-duplicates the company list. Requires a bearer token but
+    no BYOK key (a ledger write, no model call). A ledger fault surfaces as 502 rather
+    than a silent success, so the UI never claims a dismissal that was not persisted.
+    """
+    try:
+        await run_in_threadpool(ledger_store.add_rejected_company, user_id, body.company)
+    except Exception as exc:  # noqa: BLE001 — transport boundary: any store fault → 502
+        raise HTTPException(status_code=502, detail="Couldn't record the dismissal.") from exc
+    return Response(status_code=204)

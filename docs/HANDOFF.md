@@ -1,6 +1,9 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-11 — **PHASE 10 COMPLETE**; **FEATURE PARITY: P1–P4c done, P5 = last slice**)
+## 👉 YOU ARE HERE (updated 2026-07-11 — **PHASE 10 COMPLETE**; **FEATURE PARITY: all slices built — 3 PRs awaiting your merge**)
+> 🔴 **ACTION FOR YOU: merge the parity stack, in order — [#80](https://github.com/suchakra/career-engine/pull/80) → [#81](https://github.com/suchakra/career-engine/pull/81) → [#82](https://github.com/suchakra/career-engine/pull/82)** (each is
+> based on the previous; GitHub retargets to `master` as each merges). All are gate-green.
+> Then redeploy qa: `gh workflow run deploy.yml --ref master -f environment=qa` and walk the app.
 > ✅ **qa LIVE + sign-in WORKS** (auth fix PR #75 merged; Firebase token verifier). URL:
 > https://career-engine-qa-app-ontyg6kaja-uc.a.run.app · redeploy: `gh workflow run deploy.yml --ref master -f environment=qa`.
 >
@@ -15,16 +18,19 @@
 > - ✅ **P4c** (PR #81, stacked on #80) — Master résumé: `POST /api/master-resume` (deterministic
 >   `master_structured_resume` — **no model call ⇒ no BYOK key**) + Portfolio build/preview/export card.
 >   Export path shared with Tailor via `lib/tailor/resumeExport.ts`.
-> - ⬜ **P5 (LAST SLICE)** — the two remaining Streamlit affordances, both with store seams already in place:
->   1. **Jobs "Not interested"** → `POST /api/jobs/dismiss` over `discovery.store.add_rejected_company`
->      (reads already subtract `hidden_companies`; only the *write* is missing) + a Jobs card button.
->   2. **STAR bullet edit** → `PATCH /api/experience/{entry_id}/bullet` over
->      `web.portfolio_store.update_entry_bullet(entry_id, bullet_index, new_text)` + inline edit on the
->      Portfolio entry card.
-> Then: **final qa redeploy + parity walkthrough**, and parity is closed.
+> - ✅ **P5 (LAST SLICE)** (PR #82, stacked on #81) — **Jobs "Not interested"**
+>   (`POST /api/jobs/dismiss` → `discovery.store.add_rejected_company`; dismissal is by COMPANY, which is
+>   what the ledger records — the read side already subtracted it, only the write was missing) and
+>   **STAR bullet edit** (`PATCH /api/experience/{entry_id}/bullet` → `portfolio_store.update_entry_bullet`,
+>   inline edit on the Portfolio entry card).
+>
+> **Every parity item from the original list is now built and gate-green.** Remaining: merge the stack,
+> redeploy qa, walk the app end-to-end (key → résumé upload → grill → portfolio actions → master résumé →
+> jobs discover/dismiss → tailor → track application).
 >
 > ⚠️ **Merging is gated on you.** The agent may open + green PRs but cannot self-merge without your
-> explicit go-ahead (auto-mode classifier blocks agent-authored merges lacking human approval).
+> explicit go-ahead (auto-mode classifier blocks agent-authored merges lacking human approval). Say
+> "you're authorized to merge parity PRs" to let it self-merge next session.
 
 **`master` clean (10.7 + qa-env merged; PR #72/#73/#74). contract v2.8.0 · no contract change. `qa` DEPLOYED & healthy → https://career-engine-qa-app-ontyg6kaja-uc.a.run.app (same-project 2nd Cloud Run service, scale-to-zero; dev untouched). Deploy again anytime: `gh workflow run deploy.yml --ref master -f environment=qa`. Promote to dev only once validated (needs `-f confirm_dev_cutover=true`; dev is Kaggle-visible).**
 **Phases 1–7 + 8A–8G + all of Phase 9 + BUG-1 + BUG-2 + ALL of Phase 10 COMPLETE. Streamlit is GONE — the product runs on Next.js (App Router) + FastAPI, deployed as ONE container (static export served by FastAPI, AD-16.10). Open-core seam (ARCHITECTURE §17) in place. Nothing deployed yet.**
