@@ -375,3 +375,17 @@ def test_remove_entry_404_when_no_session(
 
 def test_remove_entry_401_without_token(client: TestClient) -> None:
     assert client.delete("/api/experience/e5").status_code == 401
+
+
+def test_accept_bullets_422_on_a_malformed_source_id(client: TestClient) -> None:
+    """A malformed source_id must be a 422, not a 500.
+
+    source_id comes from the CLIENT; `UUID("not-a-uuid")` raises ValueError, which would
+    surface as an unhandled 500.
+    """
+    resp = client.post(
+        "/api/experience/e9/bullets/accept",
+        json={"accepted": [{"source_id": "bullet:not-a-uuid", "text": "x"}]},
+        headers=_auth_headers(),
+    )
+    assert resp.status_code == 422

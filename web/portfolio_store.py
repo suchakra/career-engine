@@ -860,6 +860,9 @@ async def _aaccept_bullets(
     if existing is None:
         return None
 
+    # Normalise provenance HERE rather than trusting every caller to remember: anything
+    # persisted through this seam is, by definition, a copywriter bullet the user accepted.
+    bullets = [b.model_copy(update={"source": BulletSource.GRILLED}) for b in bullets]
     superseded = {str(b.supersedes) for b in bullets if b.supersedes is not None}
     found = False
     new_timeline: list[Entry] = []

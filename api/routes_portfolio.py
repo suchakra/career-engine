@@ -281,23 +281,35 @@ async def accept_copywritten_bullets(
 
     Because the accepted text is persisted, résumé export needs **no model call at all**.
     """
+    from uuid import UUID
+
     from web.copywriter import Proposal
 
-    bullets = [
-        accept_proposal(
-            Proposal(
-                source_id=a.source_id,
-                text=a.text,
-                original="",
-                source_bullet_id=(
-                    a.source_id.split(":", 1)[1]
-                    if a.source_id.startswith("bullet:")
-                    else None
-                ),
+    bullets = []
+    for a in body.accepted:
+        source_bullet_id: str | None = None
+        if a.source_id.startswith("bullet:"):
+            raw_id = a.source_id.split(":", 1)[1]
+            # source_id comes from the CLIENT. A malformed one must be a 422, not an
+            # unhandled ValueError out of UUID() surfacing as a 500.
+            try:
+                UUID(raw_id)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=422, detail=f"Malformed source_id: {a.source_id}"
+                ) from exc
+            source_bullet_id = raw_id
+        bullets.append(
+            accept_proposal(
+                Proposal(
+                    source_id=a.source_id,
+                    text=a.text,
+                    original="",
+                    source_bullet_id=source_bullet_id,
+                )
             )
         )
-        for a in body.accepted
-    ]
+
     if not bullets:
         return Response(status_code=204)  # nothing accepted → nothing to do
 

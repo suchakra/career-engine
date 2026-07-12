@@ -39,6 +39,10 @@ _MAX_BULLETS = 12
 """Bound one entry's proposals. A résumé role with more than a dozen lines is already
 unreadable, and an unbounded prompt is an unbounded bill on the user's own key."""
 
+_MAX_TEXT = 500
+"""Must match ``AcceptedBullet.text``'s cap. A proposal the user cannot SAVE is worse than no
+proposal at all: they would edit it, hit Keep, and get a 422 they cannot act on."""
+
 
 @dataclass(frozen=True)
 class Proposal:
@@ -133,7 +137,11 @@ def parse_proposals(raw: str, entry: Entry, stories: list[StarStory]) -> list[Pr
         if not isinstance(item, dict):
             continue
         source_id = str(item.get("source_id", ""))
-        text = str(item.get("text", "")).strip()
+        # Collapse newlines and cap the length. The model can return prose, but a résumé
+        # bullet is one line, and both the UI and AcceptedBullet cap at _MAX_TEXT — a proposal
+        # the user cannot SAVE is worse than no proposal (they would edit it, hit Keep, and
+        # get a 422 they cannot act on).
+        text = " ".join(str(item.get("text", "")).split())[:_MAX_TEXT].strip()
         if not text or source_id not in by_id:
             logger.warning("copywriter: dropped a proposal with an unknown source_id")
             continue

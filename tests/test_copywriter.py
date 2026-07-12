@@ -224,3 +224,24 @@ class TestCopywriteEntry:
         assert client.calls == 1, "one call for the entry, not one per bullet"
         assert len(proposals) == 3
         assert Capability.REASONING_HIGH  # capability-routed, no hardcoded model id
+
+
+class TestProposalIsAlwaysSaveable:
+    def test_overlong_or_multiline_model_output_is_normalised(self) -> None:
+        """A proposal the user cannot SAVE is worse than no proposal.
+
+        Both the UI and AcceptedBullet cap bullet text at 500 chars. Without normalising
+        here, the model could hand back prose the user would edit, hit Keep, and get a 422
+        they could not act on.
+        """
+        entry = _entry("Ran CI")
+        bid = entry.bullets[0].bullet_id
+        raw = json.dumps(
+            {"bullets": [{"source_id": f"bullet:{bid}", "text": "Line one\nline two  " + "x" * 600}]}
+        )
+
+        [proposal] = parse_proposals(raw, entry, [])
+
+        assert "\n" not in proposal.text  # one line, as a bullet must be
+        assert len(proposal.text) <= 500  # saveable
+        assert proposal.text.startswith("Line one line two")
