@@ -663,6 +663,46 @@ export interface components {
             file: string;
         };
         /**
+         * Bullet
+         * @description One line on an experience — with IDENTITY (contract v2.9.0, AD-18.3).
+         *
+         *     Bullets used to be bare strings, which made two things impossible:
+         *
+         *     - **Stable addressing.** Edits and deletes were addressed by ARRAY INDEX, which
+         *       shifts under any concurrent insert or delete — so a slow client could edit the
+         *       wrong line.
+         *     - **Provenance.** There was no way to say "this reworded line REPLACES that original
+         *       one", so the user could not be offered the overwrite-vs-keep-both choice, and the
+         *       résumé assembler had to guess (by text similarity) whether two bullets said the
+         *       same thing.
+         *
+         *     ``supersedes`` is what makes the copywriter loop (AD-18.2) and the résumé merge/dedup
+         *     honest: a superseded bullet is dropped by ID, never by guessing at wording.
+         */
+        Bullet: {
+            /**
+             * Bullet Id
+             * Format: uuid
+             * @description Stable identifier for this bullet (UUID)
+             */
+            bullet_id?: string;
+            /**
+             * Text
+             * @description The bullet's text as it appears on the résumé
+             */
+            text: string;
+            /**
+             * @description Where this bullet's text came from
+             * @default parsed
+             */
+            source: components["schemas"]["BulletSource"];
+            /**
+             * Supersedes
+             * @description The bullet_id this one REPLACES (a reworded/strengthened version of it). A superseded bullet is dropped from the résumé by id — never by guessing at text similarity.
+             */
+            supersedes?: string | null;
+        };
+        /**
          * BulletAddRequest
          * @description Request body for ``POST /api/experience/{entry_id}/bullet`` — append a bullet.
          *
@@ -675,19 +715,38 @@ export interface components {
             text: string;
         };
         /**
+         * BulletCardResponse
+         * @description Mirror of :class:`web.portfolio.BulletCard` — a bullet WITH its id (v2.9.0).
+         */
+        BulletCardResponse: {
+            /** Bullet Id */
+            bullet_id: string;
+            /** Text */
+            text: string;
+        };
+        /**
          * BulletEditRequest
          * @description Request body for ``PATCH /api/experience/{entry_id}/bullet`` (parity P5).
          *
          *     ``new_text`` is stripped BEFORE the length check, so a whitespace-only edit is a 422
          *     rather than a silent no-op: the store strips it too, and would otherwise leave the
          *     bullet untouched while the endpoint reported 204.
+         *
+         *     Addressed by ``bullet_id``, not by array index (v2.9.0, AD-18.3) — an index shifts
+         *     under any concurrent insert/delete, so a slow client could edit the wrong line.
          */
         BulletEditRequest: {
-            /** Bullet Index */
-            bullet_index: number;
+            /** Bullet Id */
+            bullet_id: string;
             /** New Text */
             new_text: string;
         };
+        /**
+         * BulletSource
+         * @description Where a bullet's text came from — its provenance.
+         * @enum {string}
+         */
+        BulletSource: "parsed" | "user" | "grilled";
         /**
          * ContactDTO
          * @description Résumé header identity (mirrors ``web.resume_builder.Contact``).
@@ -808,9 +867,9 @@ export interface components {
             source: "resume" | "discovered" | "manual";
             /**
              * Bullets
-             * @description Existing resume bullets or notes for this entry
+             * @description Existing resume bullets or notes for this entry (v2.9.0: identified)
              */
-            bullets?: string[];
+            bullets?: components["schemas"]["Bullet"][];
             /**
              * @description Processing status of this entry in the discovery pipeline
              * @default needs_quantifying
@@ -841,7 +900,7 @@ export interface components {
             /** Status Label */
             status_label: string;
             /** Bullets */
-            bullets: string[];
+            bullets: components["schemas"]["BulletCardResponse"][];
             /** Stories */
             stories: components["schemas"]["StoryCardResponse"][];
             /** Highlighted */
@@ -1111,7 +1170,7 @@ export interface components {
             nice_to_haves?: string[];
             /**
              * Contract Version
-             * @default 2.8.0
+             * @default 2.9.0
              */
             contract_version: string;
         };
@@ -1208,7 +1267,7 @@ export interface components {
             links?: string[];
             /**
              * Contract Version
-             * @default 2.8.0
+             * @default 2.9.0
              */
             contract_version: string;
         };

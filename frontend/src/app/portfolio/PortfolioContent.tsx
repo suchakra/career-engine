@@ -30,15 +30,19 @@ function statusKind(label: string): StatusKind {
 }
 
 /**
- * One experience bullet, editable in place (parity P5). Reads as plain text until the
- * user hits Edit; saving PATCHes the bullet by its index and refreshes the portfolio.
+ * One experience bullet, editable in place. Reads as plain text until the user hits
+ * Edit; saving PATCHes the bullet by its stable `bullet_id` (v2.9.0) and refreshes the
+ * portfolio. It used to be addressed by ARRAY INDEX, which shifts under any concurrent
+ * insert or delete — a slow client could edit the wrong line.
  */
 function EditableBullet({
   entryId,
+  bulletId,
   index,
   text,
 }: {
   entryId: string;
+  bulletId: string;
   index: number;
   text: string;
 }): JSX.Element {
@@ -76,7 +80,7 @@ function EditableBullet({
       return;
     }
     edit.mutate(
-      { entryId, bulletIndex: index, newText: next },
+      { entryId, bulletId, newText: next },
       { onSuccess: () => setEditing(false) },
     );
   };
@@ -195,7 +199,13 @@ function EntryCard({ entry }: { entry: EntryCardResponse }): JSX.Element {
       {entry.bullets.length > 0 && (
         <ul className="mb-2 list-disc space-y-1 pl-5 text-sm">
           {entry.bullets.map((b, i) => (
-            <EditableBullet key={`${i}-${b}`} entryId={entry.entry_id} index={i} text={b} />
+            <EditableBullet
+              key={b.bullet_id}
+              entryId={entry.entry_id}
+              bulletId={b.bullet_id}
+              index={i}
+              text={b.text}
+            />
           ))}
         </ul>
       )}

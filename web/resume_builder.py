@@ -184,7 +184,7 @@ def assemble_resume(
         # education section — that content belongs to the experience narrative, and the
         # renderer has never had to lay it out.
         if include_entry_bullets and not is_education:
-            bullets = _merge_entry_bullets(bullets, list(entry.bullets))
+            bullets = _merge_entry_bullets(bullets, entry.bullet_texts)
         block = RoleBlock(title=entry.title, org=entry.org, dates=_dates(entry), bullets=bullets)
         if is_education:
             education.append(block)

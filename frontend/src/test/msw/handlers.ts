@@ -37,7 +37,7 @@ export const mockPortfolio: PortfolioResponse = {
       dates: "2022–present",
       type_label: "role",
       status_label: "DOCUMENTED",
-      bullets: ["Cut p95 latency 40%"],
+      bullets: [{ bullet_id: "bullet-1", text: "Cut p95 latency 40%" }],
       stories: [
         {
           situation: "Latency spikes on checkout",

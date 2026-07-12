@@ -10,11 +10,19 @@ from __future__ import annotations
 
 import asyncio
 from typing import cast
+from uuid import uuid4
 
 from google.adk.sessions import BaseSessionService, InMemorySessionService
 
 from config import CONTRACT_VERSION
-from schema import CareerEngineState, Entry, ExperienceType, StarStory
+from schema import (
+    Bullet,
+    BulletSource,
+    CareerEngineState,
+    Entry,
+    ExperienceType,
+    StarStory,
+)
 from web.portfolio_store import (
     add_entry_bullet,
     add_manual_entry,
@@ -109,9 +117,9 @@ class TestAddManualEntry:
             user_id=_UID,
             reference_date=_REF,
             title="Thing",
-            bullets=["Did X", "  ", "Did Y"],
+            bullets=["Did X", "  ", "Did Y"],  # add_manual_entry takes raw text
         )
-        assert _read_latest(service).work_timeline[0].bullets == ["Did X", "Did Y"]
+        assert _read_latest(service).work_timeline[0].bullet_texts == ["Did X", "Did Y"]
 
     def test_empty_title_rejected(self) -> None:
         service = _service()
@@ -272,7 +280,7 @@ class TestAddEntryBullet:
         """A new bullet lands at the END of the entry's existing bullets."""
         service = _service()
         entry = Entry(
-            type=ExperienceType.PROJECT, title="Billing rewrite", bullets=["first"]
+            type=ExperienceType.PROJECT, title="Billing rewrite", bullets=[Bullet(text="first")]
         )
         _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
 
@@ -285,38 +293,83 @@ class TestAddEntryBullet:
         )
         assert sid is not None
         state = _read_latest(service)
-        assert state.work_timeline[0].bullets == ["first", "second"]  # stripped + appended
+        assert state.work_timeline[0].bullet_texts == ["first", "second"]  # stripped + appended
         assert state.contract_version == CONTRACT_VERSION
 
     def test_add_entry_bullet_refuses_a_blank(self) -> None:
         """A whitespace-only bullet is a no-op — never persist an empty line."""
         service = _service()
-        entry = Entry(type=ExperienceType.PROJECT, title="Billing", bullets=["first"])
+        entry = Entry(type=ExperienceType.PROJECT, title="Billing", bullets=[Bullet(text="first")])
         _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
 
         add_entry_bullet(
             service, app_name=_APP, user_id=_UID, entry_id=str(entry.entry_id), text="   "
         )
-        assert _read_latest(service).work_timeline[0].bullets == ["first"]
+        assert _read_latest(service).work_timeline[0].bullet_texts == ["first"]
 
     def test_add_entry_bullet_missing_entry_is_a_no_op(self) -> None:
         """An unknown entry_id is a logged no-op, not a raise."""
         service = _service()
-        entry = Entry(type=ExperienceType.PROJECT, title="Billing", bullets=["first"])
+        entry = Entry(type=ExperienceType.PROJECT, title="Billing", bullets=[Bullet(text="first")])
         _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
 
         sid = add_entry_bullet(
             service, app_name=_APP, user_id=_UID, entry_id="nope", text="x"
         )
         assert sid is not None
-        assert _read_latest(service).work_timeline[0].bullets == ["first"]
+        assert _read_latest(service).work_timeline[0].bullet_texts == ["first"]
+
+
+class TestBulletIdentityMigration:
+    """v2.8.0 persisted bullets as a bare list[str]; v2.9.0 gives them identity."""
+
+    def test_a_legacy_v280_document_loads_and_migrates_losslessly(self) -> None:
+        """A REAL v2.8.0-shaped payload (bullets: list[str]) round-trips as Bullets.
+
+        This is the migration that touches live user data, so it is asserted against the
+        persisted SHAPE, not against a synthetic model: no line is dropped, none is
+        reordered, and every one gets an id.
+        """
+        legacy = {
+            "reference_date": _REF,
+            "contract_version": "2.8.0",
+            "work_timeline": [
+                {
+                    "entry_id": str(uuid4()),
+                    "type": "full_time",
+                    "title": "Staff Engineer",
+                    "org": "Texada",
+                    "bullets": ["Hired and mentored engineers", "Led the cloud migration"],
+                    "status": "grilled",
+                }
+            ],
+        }
+
+        state = CareerEngineState.model_validate(legacy)
+
+        entry = state.work_timeline[0]
+        assert entry.bullet_texts == [
+            "Hired and mentored engineers",
+            "Led the cloud migration",
+        ]
+        assert all(b.source is BulletSource.PARSED for b in entry.bullets)
+        assert len({b.bullet_id for b in entry.bullets}) == 2  # distinct, stable ids
+
+    def test_migration_is_idempotent(self) -> None:
+        """Re-validating an already-migrated document must not re-id or duplicate."""
+        entry = Entry(type=ExperienceType.PROJECT, title="X", bullets=[Bullet(text="one"), Bullet(text="two")])
+        state = CareerEngineState(reference_date=_REF, work_timeline=[entry])
+
+        again = CareerEngineState.model_validate(state.model_dump(mode="json"))
+
+        assert again.work_timeline[0].bullets == entry.bullets  # same ids, same order
 
 
 class TestUpdateEntryBullet:
     def test_update_entry_bullet_mutates_correctly(self) -> None:
         service = _service()
         entry = Entry(
-            type=ExperienceType.PROJECT, title="Billing rewrite", bullets=["old bullet"]
+            type=ExperienceType.PROJECT, title="Billing rewrite", bullets=[Bullet(text="old bullet")]
         )
         _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
 
@@ -325,37 +378,39 @@ class TestUpdateEntryBullet:
             app_name=_APP,
             user_id=_UID,
             entry_id=str(entry.entry_id),
-            bullet_index=0,
+            bullet_id=str(entry.bullets[0].bullet_id),
             new_text="new bullet",
         )
         assert sid is not None
         state = _read_latest(service)
-        assert state.work_timeline[0].bullets == ["new bullet"]
+        assert state.work_timeline[0].bullet_texts == ["new bullet"]
         assert state.contract_version == CONTRACT_VERSION
 
     def test_update_entry_bullet_out_of_range(self) -> None:
         service = _service()
         entry = Entry(
-            type=ExperienceType.PROJECT, title="Billing rewrite", bullets=["only bullet"]
+            type=ExperienceType.PROJECT, title="Billing rewrite", bullets=[Bullet(text="only bullet")]
         )
         _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
 
-        # An out-of-range index is a logged no-op — must not raise IndexError.
+        # An UNKNOWN bullet_id is a logged no-op — must not raise (v2.9.0: ids, not
+        # indices, so a stale client can no longer edit whatever line happens to sit at
+        # that position).
         sid = update_entry_bullet(
             service,
             app_name=_APP,
             user_id=_UID,
             entry_id=str(entry.entry_id),
-            bullet_index=5,
+            bullet_id=str(uuid4()),
             new_text="ignored",
         )
         assert sid is not None
-        assert _read_latest(service).work_timeline[0].bullets == ["only bullet"]
+        assert _read_latest(service).work_timeline[0].bullet_texts == ["only bullet"]
 
     def test_update_entry_bullet_empty_is_noop(self) -> None:
         service = _service()
         entry = Entry(
-            type=ExperienceType.PROJECT, title="Billing rewrite", bullets=["keep me"]
+            type=ExperienceType.PROJECT, title="Billing rewrite", bullets=[Bullet(text="keep me")]
         )
         _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
 
@@ -366,11 +421,11 @@ class TestUpdateEntryBullet:
             app_name=_APP,
             user_id=_UID,
             entry_id=str(entry.entry_id),
-            bullet_index=0,
+            bullet_id=str(entry.bullets[0].bullet_id),
             new_text="   ",
         )
         assert sid is not None
-        assert _read_latest(service).work_timeline[0].bullets == ["keep me"]
+        assert _read_latest(service).work_timeline[0].bullet_texts == ["keep me"]
 
     def test_returns_none_when_no_session(self) -> None:
         service = _service()
@@ -380,7 +435,7 @@ class TestUpdateEntryBullet:
                 app_name=_APP,
                 user_id=_UID,
                 entry_id="x",
-                bullet_index=0,
+                bullet_id=str(uuid4()),
                 new_text="y",
             )
             is None

@@ -107,6 +107,13 @@ class StoryCardResponse(_StrictModel):
         )
 
 
+class BulletCardResponse(_StrictModel):
+    """Mirror of :class:`web.portfolio.BulletCard` — a bullet WITH its id (v2.9.0)."""
+
+    bullet_id: str
+    text: str
+
+
 class EntryCardResponse(_StrictModel):
     """Mirror of :class:`web.portfolio.EntryCard`."""
 
@@ -116,7 +123,7 @@ class EntryCardResponse(_StrictModel):
     dates: str
     type_label: str
     status_label: str
-    bullets: list[str]
+    bullets: list[BulletCardResponse]
     stories: list[StoryCardResponse]
     highlighted: bool
     story_count: int
@@ -132,7 +139,7 @@ class EntryCardResponse(_StrictModel):
             dates=card.dates,
             type_label=card.type_label,
             status_label=card.status_label,
-            bullets=list(card.bullets),
+            bullets=[BulletCardResponse(bullet_id=b.bullet_id, text=b.text) for b in card.bullets],
             stories=[StoryCardResponse.from_card(s) for s in card.stories],
             highlighted=card.highlighted,
             story_count=card.story_count,
@@ -396,9 +403,12 @@ class BulletEditRequest(_StrictModel):
     ``new_text`` is stripped BEFORE the length check, so a whitespace-only edit is a 422
     rather than a silent no-op: the store strips it too, and would otherwise leave the
     bullet untouched while the endpoint reported 204.
+
+    Addressed by ``bullet_id``, not by array index (v2.9.0, AD-18.3) — an index shifts
+    under any concurrent insert/delete, so a slow client could edit the wrong line.
     """
 
-    bullet_index: int = Field(ge=0)
+    bullet_id: str = Field(min_length=1)
     new_text: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)
     ]

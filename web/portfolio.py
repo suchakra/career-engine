@@ -8,8 +8,6 @@ persisted ``CareerEngineState`` only — no workflow logic, no contract change.
 Same two-layer, UI-logic-only pattern as :mod:`web.dashboard`:
 - :func:`stories_by_entry` / :func:`build_portfolio_view` — PURE, testable
   without a Streamlit runtime.
-- :func:`render_portfolio` — thin map from view-model → widgets via an injected
-  ``st``-like module.
 """
 
 from __future__ import annotations
@@ -51,6 +49,19 @@ class StoryCard:
 
 
 @dataclass(frozen=True)
+class BulletCard:
+    """One experience bullet, display-ready — carries its ID so the UI can address it.
+
+    The UI used to edit bullets by array INDEX, which shifts under any concurrent insert
+    or delete. Since v2.9.0 a bullet has a stable ``bullet_id`` (AD-18.3); the view hands
+    it to the client so edits and deletes name the line they mean.
+    """
+
+    bullet_id: str
+    text: str
+
+
+@dataclass(frozen=True)
 class EntryCard:
     """One experience entry with its recorded stories, display-ready."""
 
@@ -60,7 +71,7 @@ class EntryCard:
     dates: str
     type_label: str
     status_label: str
-    bullets: list[str] = field(default_factory=list)
+    bullets: list[BulletCard] = field(default_factory=list)
     stories: list[StoryCard] = field(default_factory=list)
     highlighted: bool = False
     story_count: int = 0
@@ -120,7 +131,7 @@ def _entry_card(entry: Entry, stories: list[StarStory]) -> EntryCard:
         dates=_dates(entry),
         type_label=_label(str(entry.type.value)),
         status_label=_label(str(entry.status.value)),
-        bullets=list(entry.bullets),
+        bullets=[BulletCard(bullet_id=str(b.bullet_id), text=b.text) for b in entry.bullets],
         stories=[
             StoryCard(
                 situation=s.situation,
@@ -242,143 +253,6 @@ def build_portfolio_view(state: CareerEngineState) -> PortfolioView:
     return PortfolioView(entries=entries)
 
 
-def render_portfolio(
-    view: PortfolioView,
-    *,
-    st: Any,
-    on_grill_entry: Callable[[str], None] | None = None,
-    on_toggle_highlight: Callable[[str, bool], None] | None = None,
-    on_save_profile: Callable[[UserProfile], None] | None = None,
-    on_delete_story: Callable[[str], None] | None = None,
-    on_edit_bullet: Callable[[str, int, str], None] | None = None,
-    profile_view: ProfileView | None = None,
-) -> None:
-    """Render the portfolio via an injected ``st``-like module (thin pass-through).
-
-    Args:
-        view: The view-model from :func:`build_portfolio_view`.
-        st: A Streamlit-like module (real ``streamlit`` in the app; a fake in tests).
-        on_grill_entry: Optional callback wired to each entry's "Grill me about
-            this" button; receives the entry_id. The backend frontier-write +
-            view switch live in the caller (``streamlit_app``), keeping this
-            renderer free of persistence logic (4C).
-        on_toggle_highlight: Optional callback for the pin control (4E); receives
-            ``(entry_id, new_highlighted)``. The persistence lives in the caller.
-        on_save_profile: Optional callback for the editable Profile section (9C);
-            receives a :class:`~schema.UserProfile`. Omitting it hides the section.
-        on_delete_story: Optional callback for the per-story delete control (9A);
-            receives the ``story_id``. Omitting it hides the delete buttons.
-        on_edit_bullet: Optional callback for editing an entry's résumé bullets in
-            place (9A); receives ``(entry_id, bullet_index, new_text)``. Omitting it
-            renders bullets read-only.
-        profile_view: Pre-built :class:`ProfileView` to display in the editable
-            section. Paired with ``on_save_profile``; ignored when that is None.
-            Defaults to an empty ProfileView when omitted.
-    """
-    st.title("Your portfolio")
-
-    if on_save_profile is not None:
-        pv = profile_view if profile_view is not None else ProfileView(
-            name="", email="", phone="", location="", links=[]
-        )
-        render_profile_section(pv, on_save=on_save_profile, st=st)
-
-    if view.is_empty:
-        st.info(view.empty_text)
-        return
-
-    st.caption(
-        "Everything recorded about you, by experience. Pin the ones you want the "
-        "Tailor to always prioritize."
-    )
-    for entry in view.entries:
-        st.divider()
-        pin = "📌 " if entry.highlighted else ""
-        st.subheader(f"{pin}{entry.title or '(untitled experience)'}")
-        meta = " · ".join(p for p in (entry.org, entry.dates, entry.type_label) if p)
-        if meta:
-            st.caption(meta)
-        st.caption(f"Status: {entry.status_label}")
-        if entry.highlighted:
-            st.caption("⭐ Pinned as tailoring priority — always included when tailoring.")
-
-        if entry.story_count == 0:
-            st.caption("No stories recorded yet.")
-        else:
-            target = entry.stories_target if entry.stories_target > 0 else 1
-            st.progress(
-                min(entry.story_count / target, 1.0),
-                text=(
-                    f"{entry.story_count} stor{'y' if entry.story_count == 1 else 'ies'} recorded"
-                    + (" ✓" if entry.story_count >= entry.stories_target else "")
-                ),
-            )
-
-        # Existing resume bullets/notes for this entry (may be present even before
-        # any grilling has produced STAR stories).
-        if entry.bullets:
-            st.caption("From your resume:")
-            for idx, bullet in enumerate(entry.bullets):
-                if on_edit_bullet is None:
-                    st.write(f"• {bullet}")
-                    continue
-                # Edit-in-place: a prefilled input + Save button per bullet, mirroring
-                # the Profile section's capture-return-value pattern (no session_state).
-                bc1, bc2 = st.columns([5, 1])
-                edited = bc1.text_input(
-                    "Bullet",
-                    value=bullet,
-                    key=f"bullet_{entry.entry_id}_{idx}",
-                    label_visibility="collapsed",
-                )
-                bc2.button(
-                    "Save",
-                    key=f"save_bullet_{entry.entry_id}_{idx}",
-                    on_click=lambda eid=entry.entry_id, i=idx, text=edited: on_edit_bullet(
-                        eid, i, text
-                    ),
-                )
-
-        if entry.not_grilled_yet:
-            st.write(f"_{_NOT_GRILLED_TEXT}_")
-        else:
-            st.caption("Recorded achievements:")
-            for story in entry.stories:
-                check = "✅" if story.metric_validated else "•"
-                st.write(f"{check} {story.result}")
-                # Supporting context (we deliberately never surface the STAR labels
-                # to the user — see StarStory docstring), one line per present field.
-                for context in (story.situation, story.task, story.action):
-                    if context:
-                        st.caption(context)
-                # Delete this recorded story (9A).
-                if on_delete_story is not None and story.story_id:
-                    st.button(
-                        "🗑 Delete",
-                        key=f"delete_story_{story.story_id}",
-                        on_click=lambda sid=story.story_id: on_delete_story(sid),
-                    )
-
-        # Steer the grill onto this specific experience (4C).
-        if on_grill_entry is not None:
-            st.button(
-                "Grill me about this",
-                key=f"grill_entry_{entry.entry_id}",
-                on_click=lambda eid=entry.entry_id: on_grill_entry(eid),
-            )
-
-        # Pin/unpin this experience as a tailoring priority (4E).
-        if on_toggle_highlight is not None:
-            label = "Unpin from tailoring priority" if entry.highlighted else "📌 Pin for tailoring priority"
-            st.button(
-                label,
-                key=f"pin_entry_{entry.entry_id}",
-                on_click=lambda eid=entry.entry_id, val=not entry.highlighted: on_toggle_highlight(
-                    eid, val
-                ),
-            )
-
-
 __all__ = [
     "EntryCard",
     "PortfolioView",
@@ -386,7 +260,6 @@ __all__ = [
     "StoryCard",
     "build_portfolio_view",
     "build_profile_view",
-    "render_portfolio",
     "render_profile_section",
     "stories_by_entry",
 ]

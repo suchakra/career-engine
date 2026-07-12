@@ -264,7 +264,7 @@ def _is_soft_horizon(entry: Entry, reference_date: str) -> bool:
 
 def _has_metric_bullet(entry: Entry) -> bool:
     """Return True if the entry already has at least one metric-bearing bullet."""
-    return any(_contains_real_metric(b) for b in entry.bullets)
+    return any(_contains_real_metric(b) for b in entry.bullet_texts)
 
 
 def _find_entry_by_id(timeline: list[Entry], entry_id: str) -> Entry | None:

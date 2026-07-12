@@ -75,9 +75,10 @@ describe("Portfolio actions (parity P4b)", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
+      // Addressed by the bullet's stable id (v2.9.0), never by array index.
       expect(patched).toEqual({
         id: "entry-1",
-        body: { bullet_index: 0, new_text: "Cut p99 latency 60%" },
+        body: { bullet_id: "bullet-1", new_text: "Cut p99 latency 60%" },
       }),
     );
   });
