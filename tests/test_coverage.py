@@ -117,30 +117,29 @@ class TestEntryNeedsWork:
         assert entry_needs_work(_entry(), []) is False
 
 
-class TestFrontierHonoursCoverage:
-    def test_the_frontier_does_not_abandon_an_entry_with_uncovered_lines(self) -> None:
-        from workflows.nodes import _next_frontier
+class TestFrontierIsNotYetCoverageDriven:
+    """CQ-5b, deliberately NOT shipped here — see the note in ``_next_frontier``.
 
-        rich = _entry(*[Bullet(text=f"line {i}") for i in range(12)])
-        from schema import EntryStatus
+    Re-selecting an entry while it has uncovered bullets can trap the grill in an INFINITE
+    LOOP: coverage is detected by TEXT CONTAINMENT, so a story worded differently enough to
+    match no bullet leaves coverage unchanged, the frontier stays put, and the grill asks
+    forever. This test pins the CURRENT (safe) behaviour so the gap is visible rather than
+    silently assumed fixed.
+    """
 
-        rich = rich.model_copy(update={"status": EntryStatus.GRILLED})
-        other = Entry(type=ExperienceType.PROJECT, title="Side project")
-        story = _story(rich, "line 0, quantified 40%")
-
-        # Without stories the old status-only rule applies and the rich entry looks done…
-        assert _next_frontier([rich, other], "") == str(other.entry_id)
-        # …but with coverage, the rich entry outranks the side project (recent + substantive).
-        assert _next_frontier([rich, other], "", [story]) == str(rich.entry_id)
-
-    def test_a_fully_covered_grilled_entry_is_left_behind(self) -> None:
+    def test_a_grilled_entry_is_still_left_behind_today(self) -> None:
         from schema import EntryStatus
         from workflows.nodes import _next_frontier
 
-        done = _entry(Bullet(text="Rebuilt CI", skipped=True)).model_copy(
+        rich = _entry(*[Bullet(text=f"line {i}") for i in range(12)]).model_copy(
             update={"status": EntryStatus.GRILLED}
         )
-        assert _next_frontier([done], "", []) == ""
+        other = Entry(type=ExperienceType.PROJECT, title="Side project")
+
+        # The rich entry has 12 uncovered lines, yet the frontier moves on. That is the
+        # bug CQ-5b closes; coverage is currently VISIBLE (the user can see and act on it)
+        # but does not yet steer the grill.
+        assert _next_frontier([rich, other], "") == str(other.entry_id)
 
 
 def test_coverage_survives_a_state_round_trip() -> None:
