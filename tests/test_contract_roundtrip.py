@@ -28,6 +28,7 @@ from schema import (
     AgentMessage,
     Application,
     ApplicationStatus,
+    Bullet,
     Capability,
     CareerEngineState,
     Entry,
@@ -76,7 +77,7 @@ class TestEntryRoundTrip:
             start_date="2020-03",
             end_date="2024-01",
             source="resume",
-            bullets=["Led a team of 8 engineers.", "Reduced p99 latency by 70%."],
+            bullets=[Bullet(text="Led a team of 8 engineers."), Bullet(text="Reduced p99 latency by 70%.")],
             status=EntryStatus.GRILLED,
             highlighted=True,
         )
@@ -231,11 +232,11 @@ class TestCareerEngineStateRoundTrip:
         reconstructed = _roundtrip(original)
         assert original == reconstructed
 
-    def test_state_carries_contract_version_280(self) -> None:
-        """CareerEngineState must be stamped with CONTRACT_VERSION == "2.8.0"."""
+    def test_state_carries_contract_version_290(self) -> None:
+        """CareerEngineState must be stamped with CONTRACT_VERSION == "2.9.0"."""
         state = CareerEngineState()
         assert state.contract_version == CONTRACT_VERSION
-        assert CONTRACT_VERSION == "2.8.0"
+        assert CONTRACT_VERSION == "2.9.0"
 
     def test_coverage_confirmed_defaults_false_and_roundtrips(self) -> None:
         """coverage_confirmed (v2.1.0) defaults to False and round-trips."""
@@ -342,7 +343,7 @@ class TestCareerEngineStateRoundTrip:
             start_date="2023-01",
             end_date="",
             source="discovered",
-            bullets=["Built CLI with 500+ stars."],
+            bullets=[Bullet(text="Built CLI with 500+ stars.")],
             status=EntryStatus.GRILLED,
         )
         story = StarStory(
@@ -652,9 +653,9 @@ class TestCapabilityEnum:
 class TestContractVersion:
     """Tests to ensure CONTRACT_VERSION is semver-formatted and consistent."""
 
-    def test_contract_version_is_280(self) -> None:
-        """CONTRACT_VERSION must be exactly "2.8.0" (UserWorkspace.discovery_preferences additive bump)."""
-        assert CONTRACT_VERSION == "2.8.0"
+    def test_contract_version_is_290(self) -> None:
+        """CONTRACT_VERSION must be exactly "2.9.0" (UserWorkspace.discovery_preferences additive bump)."""
+        assert CONTRACT_VERSION == "2.9.0"
 
     def test_contract_version_is_semver(self) -> None:
         """CONTRACT_VERSION must be a valid semver string (MAJOR.MINOR.PATCH)."""

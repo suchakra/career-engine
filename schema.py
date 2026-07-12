@@ -41,7 +41,7 @@ from enum import StrEnum
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from config import CONTRACT_VERSION
 
@@ -112,6 +112,56 @@ class EntryStatus(StrEnum):
 # ── Core domain models ────────────────────────────────────────────────────────
 
 
+
+class BulletSource(StrEnum):
+    """Where a bullet's text came from — its provenance."""
+
+    PARSED = "parsed"
+    """Read off the user's uploaded résumé by the vision parser."""
+
+    USER = "user"
+    """Typed or edited by the user directly."""
+
+    GRILLED = "grilled"
+    """Written during the grill (a quantified/strengthened restatement) and accepted."""
+
+
+class Bullet(BaseModel):
+    """One line on an experience — with IDENTITY (contract v2.9.0, AD-18.3).
+
+    Bullets used to be bare strings, which made two things impossible:
+
+    - **Stable addressing.** Edits and deletes were addressed by ARRAY INDEX, which
+      shifts under any concurrent insert or delete — so a slow client could edit the
+      wrong line.
+    - **Provenance.** There was no way to say "this reworded line REPLACES that original
+      one", so the user could not be offered the overwrite-vs-keep-both choice, and the
+      résumé assembler had to guess (by text similarity) whether two bullets said the
+      same thing.
+
+    ``supersedes`` is what makes the copywriter loop (AD-18.2) and the résumé merge/dedup
+    honest: a superseded bullet is dropped by ID, never by guessing at wording.
+    """
+
+    model_config = ConfigDict(frozen=False)
+
+    bullet_id: UUID = Field(
+        default_factory=uuid4, description="Stable identifier for this bullet (UUID)"
+    )
+    text: str = Field(description="The bullet's text as it appears on the résumé")
+    source: BulletSource = Field(
+        default=BulletSource.PARSED, description="Where this bullet's text came from"
+    )
+    supersedes: UUID | None = Field(
+        default=None,
+        description=(
+            "The bullet_id this one REPLACES (a reworded/strengthened version of it). "
+            "A superseded bullet is dropped from the résumé by id — never by guessing "
+            "at text similarity."
+        ),
+    )
+
+
 class Entry(BaseModel):
     """A single career experience entry in the work timeline.
 
@@ -148,10 +198,31 @@ class Entry(BaseModel):
         default="manual",
         description="How this entry entered the timeline",
     )
-    bullets: list[str] = Field(
+    bullets: list[Bullet] = Field(
         default_factory=list,
-        description="Existing resume bullets or notes for this entry",
+        description="Existing resume bullets or notes for this entry (v2.9.0: identified)",
     )
+
+    @field_validator("bullets", mode="before")
+    @classmethod
+    def _coerce_legacy_bullets(cls, value: object) -> object:
+        """Read-time migration: v2.8.0 persisted ``bullets`` as a bare ``list[str]``.
+
+        Coercing here rather than batch-rewriting Firestore means every existing session
+        loads transparently and is re-persisted in the new shape on its next write — the
+        migration is lossless (no line is dropped or reordered), idempotent, and needs no
+        maintenance window. A legacy string becomes a ``Bullet`` with a fresh id and
+        ``source="parsed"``: it predates provenance tracking, and it came from the user's
+        own résumé or typing, which is exactly what ``parsed`` means here.
+        """
+        if not isinstance(value, list):
+            return value
+        return [{"text": b} if isinstance(b, str) else b for b in value]
+
+    @property
+    def bullet_texts(self) -> list[str]:
+        """The bullets as plain strings — for consumers that only render text."""
+        return [b.text for b in self.bullets]
     status: EntryStatus = Field(
         default=EntryStatus.NEEDS_QUANTIFYING,
         description="Processing status of this entry in the discovery pipeline",

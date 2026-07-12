@@ -25,7 +25,15 @@ from typing import Any, Protocol
 
 from integration.model_client import MediaPart
 from models.registry import get_registry
-from schema import Capability, Entry, EntryStatus, ExperienceType, UpgradeRequired
+from schema import (
+    Bullet,
+    BulletSource,
+    Capability,
+    Entry,
+    EntryStatus,
+    ExperienceType,
+    UpgradeRequired,
+)
 from workflows.prompts import RESUME_PARSE_SYSTEM_PROMPT
 
 # ── Accepted input formats ────────────────────────────────────────────────────
@@ -138,7 +146,8 @@ def _entry_from_item(item: dict[str, Any]) -> Entry:
         start_date=str(item.get("start_date", "")),
         end_date=str(item.get("end_date", "")),
         source="resume",
-        bullets=bullets,
+        # The vision parser read these off the user's own résumé → source="parsed".
+        bullets=[Bullet(text=b, source=BulletSource.PARSED) for b in bullets],
         status=status,
     )
 

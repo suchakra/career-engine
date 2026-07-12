@@ -10,7 +10,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from schema import CareerEngineState, Entry, EntryStatus, ExperienceType, StarStory, UserProfile
+from schema import (
+    Bullet,
+    CareerEngineState,
+    Entry,
+    EntryStatus,
+    ExperienceType,
+    StarStory,
+    UserProfile,
+)
 from web.portfolio import (
     ProfileView,
     build_portfolio_view,
@@ -221,7 +229,7 @@ class TestRenderPortfolio:
             type=ExperienceType.FULL_TIME,
             title="A",
             org="Acme",
-            bullets=["Built the thing", "Owned the roadmap"],
+            bullets=[Bullet(text="Built the thing"), Bullet(text="Owned the roadmap")],
         )
         st = FakeSt()
         render_portfolio(build_portfolio_view(CareerEngineState(work_timeline=[entry])), st=st)
@@ -337,7 +345,7 @@ class TestRenderPortfolio:
             type=ExperienceType.FULL_TIME,
             title="A",
             org="Acme",
-            bullets=["first bullet", "second bullet"],
+            bullets=[Bullet(text="first bullet"), Bullet(text="second bullet")],
         )
         seen: list[tuple[str, int, str]] = []
         st = FakeSt()

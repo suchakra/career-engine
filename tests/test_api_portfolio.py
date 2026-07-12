@@ -220,25 +220,25 @@ def test_edit_bullet_204(client: TestClient, monkeypatch: pytest.MonkeyPatch) ->
         app_name: str,
         user_id: str,
         entry_id: str,
-        bullet_index: int,
+        bullet_id: str,
         new_text: str,
     ) -> str:
         calls.update(
-            user_id=user_id, entry_id=entry_id, bullet_index=bullet_index, new_text=new_text
+            user_id=user_id, entry_id=entry_id, bullet_id=bullet_id, new_text=new_text
         )
         return entry_id
 
     monkeypatch.setattr(routes_portfolio, "update_entry_bullet", _fake)
     resp = client.patch(
         "/api/experience/e3/bullet",
-        json={"bullet_index": 1, "new_text": "Cut p99 latency 40%"},
+        json={"bullet_id": "b-1", "new_text": "Cut p99 latency 40%"},
         headers=_auth_headers(),
     )
     assert resp.status_code == 204
     assert calls == {
         "user_id": _USER_ID,
         "entry_id": "e3",
-        "bullet_index": 1,
+        "bullet_id": "b-1",
         "new_text": "Cut p99 latency 40%",
     }
 
@@ -254,7 +254,7 @@ def test_edit_bullet_404_when_no_session(
     monkeypatch.setattr(routes_portfolio, "update_entry_bullet", lambda *a, **k: None)
     resp = client.patch(
         "/api/experience/e3/bullet",
-        json={"bullet_index": 0, "new_text": "x"},
+        json={"bullet_id": "b-1", "new_text": "x"},
         headers=_auth_headers(),
     )
     assert resp.status_code == 404
@@ -268,9 +268,9 @@ def test_edit_bullet_422_on_bad_body(client: TestClient) -> None:
     """
     headers = _auth_headers()
     for body in (
-        {"bullet_index": 0, "new_text": ""},
-        {"bullet_index": 0, "new_text": "   "},
-        {"bullet_index": -1, "new_text": "x"},
+        {"bullet_id": "b-1", "new_text": ""},
+        {"bullet_id": "b-1", "new_text": "   "},
+        {"bullet_id": "", "new_text": "x"},  # an empty bullet_id addresses nothing
     ):
         resp = client.patch("/api/experience/e3/bullet", json=body, headers=headers)
         assert resp.status_code == 422, body
@@ -278,7 +278,7 @@ def test_edit_bullet_422_on_bad_body(client: TestClient) -> None:
 
 def test_edit_bullet_401_without_token(client: TestClient) -> None:
     resp = client.patch(
-        "/api/experience/e3/bullet", json={"bullet_index": 0, "new_text": "x"}
+        "/api/experience/e3/bullet", json={"bullet_id": "b-1", "new_text": "x"}
     )
     assert resp.status_code == 401
 

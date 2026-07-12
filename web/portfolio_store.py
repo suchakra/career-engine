@@ -28,7 +28,7 @@ from google.adk.sessions import BaseSessionService
 
 from cli import session as session_helpers
 from config import CONTRACT_VERSION
-from schema import CareerEngineState, Entry, EntryStatus, ExperienceType
+from schema import Bullet, BulletSource, CareerEngineState, Entry, EntryStatus, ExperienceType
 from web.async_runner import run_async
 from web.session_loader import web_session_id
 
@@ -265,7 +265,8 @@ async def _aadd_entry_bullet(
     new_timeline: list[Entry] = []
     for entry in existing.work_timeline:
         if str(entry.entry_id) == entry_id:
-            entry = entry.model_copy(update={"bullets": [*entry.bullets, clean_text]})
+            new_bullet = Bullet(text=clean_text, source=BulletSource.USER)
+            entry = entry.model_copy(update={"bullets": [*entry.bullets, new_bullet]})
             found = True
         new_timeline.append(entry)
     if not found:
@@ -290,23 +291,26 @@ async def _aupdate_entry_bullet(
     app_name: str,
     user_id: str,
     entry_id: str,
-    bullet_index: int,
+    bullet_id: str,
     new_text: str,
 ) -> str | None:
     """Replace one bullet on an entry with ``new_text`` on the canonical session.
 
     Guards against a missing entry or an out-of-range ``bullet_index`` (logs a
-    warning and leaves state untouched — no ``IndexError``). An empty or
-    whitespace-only ``new_text`` is treated as a no-op so we never persist a
-    blank bullet (matching :func:`add_manual_entry`, which filters empties).
-    Returns the session_id, or ``None`` if the user has no session.
+    warning and leaves state untouched). An empty or whitespace-only ``new_text`` is
+    treated as a no-op so we never persist a blank bullet (matching
+    :func:`add_manual_entry`, which filters empties). Returns the session_id, or ``None``
+    if the user has no session.
+
+    Addressed by ``bullet_id``, not by array index (v2.9.0, AD-18.3): an index shifts
+    under any concurrent insert or delete, so a slow client could edit the wrong line.
     """
     clean_text = new_text.strip()
     if not clean_text:
         logger.warning(
-            "update_entry_bullet: empty edit for entry %s bullet %d ignored",
+            "update_entry_bullet: empty edit for entry %s bullet %s ignored",
             entry_id,
-            bullet_index,
+            bullet_id,
         )
         return web_session_id(user_id)  # no-op: refuse to persist a blank bullet
     session_id = web_session_id(user_id)
@@ -322,16 +326,23 @@ async def _aupdate_entry_bullet(
     new_timeline: list[Entry] = []
     for entry in existing.work_timeline:
         if str(entry.entry_id) == entry_id:
-            if not 0 <= bullet_index < len(entry.bullets):
-                logger.warning(
-                    "update_entry_bullet: bullet_index %d out of range for entry %s (has %d bullets)",
-                    bullet_index,
-                    entry_id,
-                    len(entry.bullets),
-                )
-                return session_id  # no-op: out of range
             updated_bullets = list(entry.bullets)
-            updated_bullets[bullet_index] = clean_text
+            match = next(
+                (i for i, b in enumerate(updated_bullets) if str(b.bullet_id) == bullet_id),
+                None,
+            )
+            if match is None:
+                logger.warning(
+                    "update_entry_bullet: bullet %s not found on entry %s",
+                    bullet_id,
+                    entry_id,
+                )
+                return session_id  # no-op: no such bullet
+            # Edit in place: the bullet keeps its id (so anything that supersedes it, or
+            # is superseded by it, stays linked) but is now the user's own wording.
+            updated_bullets[match] = updated_bullets[match].model_copy(
+                update={"text": clean_text, "source": BulletSource.USER}
+            )
             entry = entry.model_copy(update={"bullets": updated_bullets})
             found = True
         new_timeline.append(entry)
@@ -383,7 +394,11 @@ def add_manual_entry(
         start_date=start_date.strip(),
         end_date=end_date.strip(),
         source="manual",
-        bullets=[b for b in (bullets or []) if b.strip()],
+        bullets=[
+            Bullet(text=b.strip(), source=BulletSource.USER)
+            for b in (bullets or [])
+            if b.strip()
+        ],
         status=EntryStatus.NEEDS_QUANTIFYING,
     )
     return run_async(
@@ -493,14 +508,14 @@ def update_entry_bullet(
     app_name: str,
     user_id: str,
     entry_id: str,
-    bullet_index: int,
+    bullet_id: str,
     new_text: str,
 ) -> str | None:
     """Edit one existing bullet on an experience in place (9A; sync bridge).
 
-    Replaces ``entry.bullets[bullet_index]`` with ``new_text`` (stripped). A missing
-    entry or an out-of-range index is a logged no-op (never raises). Returns the
-    session_id, or ``None`` if the user has no session.
+    Replaces the bullet identified by ``bullet_id`` with ``new_text`` (stripped). A
+    missing entry or an unknown ``bullet_id`` is a logged no-op (never raises). Returns
+    the session_id, or ``None`` if the user has no session.
     """
     return run_async(
         _aupdate_entry_bullet(
@@ -508,7 +523,7 @@ def update_entry_bullet(
             app_name=app_name,
             user_id=user_id,
             entry_id=entry_id,
-            bullet_index=bullet_index,
+            bullet_id=bullet_id,
             new_text=new_text,
         )
     )

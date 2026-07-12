@@ -124,7 +124,7 @@ async def edit_bullet(
         app_name=app_name,
         user_id=user_id,
         entry_id=entry_id,
-        bullet_index=body.bullet_index,
+        bullet_id=body.bullet_id,
         new_text=body.new_text,
     )
     if result is None:

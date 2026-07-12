@@ -11,7 +11,14 @@ import pytest
 
 import workflows.nodes as nodes
 from integration.model_client import GeminiModelClient
-from schema import CareerEngineState, Entry, EntryStatus, ExperienceType, StarStory
+from schema import (
+    Bullet,
+    CareerEngineState,
+    Entry,
+    EntryStatus,
+    ExperienceType,
+    StarStory,
+)
 from tests.test_integration import ScriptedNodeClient
 from web.resume_builder import (
     Contact,
@@ -40,6 +47,12 @@ def _edu() -> Entry:
         type=ExperienceType.EDUCATION, title="BSc Computer Science", org="MIT",
         start_date="2016", end_date="2020", status=EntryStatus.SUMMARIZED,
     )
+
+
+def _bullets(*texts: str) -> list[Bullet]:
+    """Entry.bullets are Bullet objects (v2.9.0). model_copy(update=) skips validators,
+    so tests must build them explicitly rather than passing bare strings."""
+    return [Bullet(text=t) for t in texts]
 
 
 def _story(entry: Entry, result: str) -> StarStory:
@@ -75,7 +88,7 @@ class TestMasterStructuredResume:
         every line the user actually supplied.
         """
         job = _job()
-        job = job.model_copy(update={"bullets": ["Ran the platform team", "Owned CI/CD"]})
+        job = job.model_copy(update={"bullets": _bullets("Ran the platform team", "Owned CI/CD")})
         state = CareerEngineState(work_timeline=[job], professional_summary="Staff engineer.")
 
         resume = master_structured_resume(state)
@@ -87,7 +100,7 @@ class TestMasterStructuredResume:
         """Quantified achievements lead; the user's remaining lines follow, deduped."""
         job = _job()
         job = job.model_copy(
-            update={"bullets": ["Cut p99 latency 40%", "Mentored four engineers"]}
+            update={"bullets": _bullets("Cut p99 latency 40%", "Mentored four engineers")}
         )
         state = CareerEngineState(
             work_timeline=[job],
@@ -105,7 +118,7 @@ class TestMasterStructuredResume:
     def test_tailored_pass_still_ignores_entry_bullets(self) -> None:
         """Only the MASTER résumé carries raw entry bullets — the JD pass selects."""
         job = _job()
-        job = job.model_copy(update={"bullets": ["Ran the platform team"]})
+        job = job.model_copy(update={"bullets": _bullets("Ran the platform team")})
         state = CareerEngineState(work_timeline=[job])
 
         resume = assemble_resume(
@@ -123,7 +136,7 @@ class TestMasterStructuredResume:
         master résumé got MORE repetitive the more the user grilled.
         """
         job = _job()
-        job = job.model_copy(update={"bullets": ["Rebuilt CI", "Mentored four engineers"]})
+        job = job.model_copy(update={"bullets": _bullets("Rebuilt CI", "Mentored four engineers")})
         state = CareerEngineState(
             work_timeline=[job],
             # The grilled result quotes the original line and adds the metric.
@@ -137,7 +150,7 @@ class TestMasterStructuredResume:
     def test_education_keeps_a_clean_degree_line(self) -> None:
         """Raw entry bullets must NOT spill into the education section."""
         edu = _edu()
-        edu = edu.model_copy(update={"bullets": ["Coursework: compilers", "Dean's list"]})
+        edu = edu.model_copy(update={"bullets": _bullets("Coursework: compilers", "Dean's list")})
         state = CareerEngineState(work_timeline=[edu])
 
         resume = master_structured_resume(state)

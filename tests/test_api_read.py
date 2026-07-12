@@ -34,6 +34,7 @@ from auth.firebase_auth import FirebaseAuthProvider
 from database.firestore_session import ContractVersionError
 from schema import (
     Application,
+    Bullet,
     CareerEngineState,
     EmploymentType,
     Entry,
@@ -161,7 +162,7 @@ def _seeded_state() -> CareerEngineState:
         org="Acme",
         start_date="2020",
         end_date="2023",
-        bullets=["Led the platform team"],
+        bullets=[Bullet(text="Led the platform team")],
         status=EntryStatus.GRILLED,
         highlighted=True,
     )

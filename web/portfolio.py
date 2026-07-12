@@ -51,6 +51,19 @@ class StoryCard:
 
 
 @dataclass(frozen=True)
+class BulletCard:
+    """One experience bullet, display-ready — carries its ID so the UI can address it.
+
+    The UI used to edit bullets by array INDEX, which shifts under any concurrent insert
+    or delete. Since v2.9.0 a bullet has a stable ``bullet_id`` (AD-18.3); the view hands
+    it to the client so edits and deletes name the line they mean.
+    """
+
+    bullet_id: str
+    text: str
+
+
+@dataclass(frozen=True)
 class EntryCard:
     """One experience entry with its recorded stories, display-ready."""
 
@@ -60,7 +73,7 @@ class EntryCard:
     dates: str
     type_label: str
     status_label: str
-    bullets: list[str] = field(default_factory=list)
+    bullets: list[BulletCard] = field(default_factory=list)
     stories: list[StoryCard] = field(default_factory=list)
     highlighted: bool = False
     story_count: int = 0
@@ -120,7 +133,7 @@ def _entry_card(entry: Entry, stories: list[StarStory]) -> EntryCard:
         dates=_dates(entry),
         type_label=_label(str(entry.type.value)),
         status_label=_label(str(entry.status.value)),
-        bullets=list(entry.bullets),
+        bullets=[BulletCard(bullet_id=str(b.bullet_id), text=b.text) for b in entry.bullets],
         stories=[
             StoryCard(
                 situation=s.situation,
@@ -318,7 +331,8 @@ def render_portfolio(
         # any grilling has produced STAR stories).
         if entry.bullets:
             st.caption("From your resume:")
-            for idx, bullet in enumerate(entry.bullets):
+            for idx, bullet_obj in enumerate(entry.bullets):
+                bullet = bullet_obj.text
                 if on_edit_bullet is None:
                     st.write(f"• {bullet}")
                     continue

@@ -319,15 +319,15 @@ export function useAddBullet(): UseMutationResult<
 export function useEditBullet(): UseMutationResult<
   void,
   unknown,
-  { entryId: string; bulletIndex: number; newText: string }
+  { entryId: string; bulletId: string; newText: string }
 > {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   return useMutation({
-    mutationFn: ({ entryId, bulletIndex, newText }) =>
+    mutationFn: ({ entryId, bulletId, newText }) =>
       apiFetch<void>(`/api/experience/${entryId}/bullet`, {
         method: "PATCH",
-        body: { bullet_index: bulletIndex, new_text: newText },
+        body: { bullet_id: bulletId, new_text: newText },
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.portfolio });
