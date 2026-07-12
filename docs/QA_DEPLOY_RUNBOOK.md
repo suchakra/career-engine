@@ -93,19 +93,26 @@ Any deploy that changes the SHAPE of persisted state (a `CONTRACT_VERSION` bump 
 
 1. **Back up, in-database.** Copy every `sessions/{app}/users/{uid}/sessions/{sid}` document to
    `session_backups/{UTC timestamp}/docs/{app}__{uid}__{sid}`. Keep it *inside* Firestore — do **not**
-   dump personal data to a local file or a bucket. Assert each copy is byte-identical to its source.
+   dump personal data to a local file or a bucket. Assert each copy compares **field-for-field equal** to
+   its source (deep equality of the decoded document; "byte-identical" is not a meaningful notion for a
+   Firestore document — field order, encoding and metadata are not stable).
 2. **Dry-run the migration READ-ONLY against the real documents.** Load each live `session_state` blob
-   through the new `CareerEngineState.model_validate` and assert the result is **lossless** (same
-   entries, same bullets, same order) *before anything is written*. This is the actual production code
-   path — a synthetic fixture does not prove it.
+   and assert the result is **lossless** (same entries, same bullets, same order) *before anything is
+   written*. **Mirror the production read path** — `workflows.discovery_graph._read_state` filters the raw
+   dict down to `CareerEngineState.model_fields` before validating, so the dry-run must filter the same way
+   or it will be validating a shape production never sees (ADK-internal keys included). A synthetic fixture
+   does not prove this; the real documents do.
 3. Only then deploy.
 
-This is exactly what was done for v2.9.0: the backup was verified byte-identical, a read-only dry-run over
-the live documents proved every bullet survived in order with an id, and only then did the deploy go out.
+This is exactly what was done for v2.9.0: the backup was verified field-for-field equal to source, a
+read-only dry-run over the live documents proved every bullet survived in order with an id, and only then
+did the deploy go out.
 
 **Gotcha that nearly fooled us:** the live state is under the document's **`session_state`** key. There is
-also a `career_engine_state` key — a *stale empty snapshot* written at creation and never updated. Read
-that one and you will conclude a portfolio is empty when it is not. (Duplicate-truth smell; fix separately.)
+also a `career_engine_state` key which, in practice, is **empty** on live sessions. Read that one and you
+will conclude a portfolio is empty when it in fact holds many entries. (Two fields that both look like the
+session's state, only one of which carries it — a duplicate-truth smell worth investigating separately;
+this note does not claim to know why the second one ends up empty.)
 
 The v2.9.0 migration itself is **read-time** (a Pydantic `field_validator(mode="before")` coerces legacy
 `list[str]` bullets on load), so there was no batch rewrite and nothing to roll back — but the backup +
