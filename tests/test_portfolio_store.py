@@ -29,6 +29,8 @@ from web.portfolio_store import (
     add_entry_bullet,
     add_manual_entry,
     amerge_parsed_entries,
+    delete_entry,
+    delete_entry_bullet,
     delete_star_story,
     merge_work_timeline,
     set_entry_highlight,
@@ -601,3 +603,114 @@ class TestMergeParsedEntriesIntoSession:
             )
             is None
         )
+
+
+class TestDeleteEntryBullet:
+    def test_removes_only_the_named_bullet(self) -> None:
+        service = _service()
+        entry = Entry(
+            type=ExperienceType.PROJECT,
+            title="Billing",
+            bullets=[Bullet(text="keep me"), Bullet(text="delete me")],
+        )
+        _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
+
+        sid = delete_entry_bullet(
+            service,
+            app_name=_APP,
+            user_id=_UID,
+            entry_id=str(entry.entry_id),
+            bullet_id=str(entry.bullets[1].bullet_id),
+        )
+
+        assert sid is not None
+        assert _read_latest(service).work_timeline[0].bullet_texts == ["keep me"]
+
+    def test_unknown_bullet_is_a_no_op(self) -> None:
+        service = _service()
+        entry = Entry(type=ExperienceType.PROJECT, title="Billing", bullets=[Bullet(text="keep")])
+        _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
+
+        sid = delete_entry_bullet(
+            service, app_name=_APP, user_id=_UID,
+            entry_id=str(entry.entry_id), bullet_id=str(uuid4()),
+        )
+
+        assert sid is not None  # idempotent, not an error
+        assert _read_latest(service).work_timeline[0].bullet_texts == ["keep"]
+
+    def test_returns_none_when_no_session(self) -> None:
+        service = _service()
+        assert (
+            delete_entry_bullet(
+                service, app_name=_APP, user_id=_UID, entry_id="x", bullet_id=str(uuid4())
+            )
+            is None
+        )
+
+
+class TestDeleteEntry:
+    def test_deleting_an_entry_CASCADES_to_its_star_stories(self) -> None:
+        """Leaving the stories behind would orphan them against a dead entry_id.
+
+        An orphan still counts toward the portfolio meter and can still be selected onto
+        a résumé under a role the user just removed — so the delete must cascade.
+        """
+        service = _service()
+        doomed = Entry(type=ExperienceType.PROJECT, title="Doomed", org="Acme")
+        kept = Entry(type=ExperienceType.PROJECT, title="Kept", org="Acme")
+        _seed(
+            service,
+            CareerEngineState(
+                reference_date=_REF,
+                work_timeline=[doomed, kept],
+                extracted_star_stories=[
+                    StarStory(entry_id=str(doomed.entry_id), pillar="delivery", result="A"),
+                    StarStory(entry_id=str(kept.entry_id), pillar="delivery", result="B"),
+                ],
+            ),
+        )
+
+        sid = delete_entry(service, app_name=_APP, user_id=_UID, entry_id=str(doomed.entry_id))
+
+        assert sid is not None
+        state = _read_latest(service)
+        assert [e.title for e in state.work_timeline] == ["Kept"]
+        # The doomed entry's story is gone; the other one is untouched.
+        assert [s.result for s in state.extracted_star_stories] == ["B"]
+        assert all(s.entry_id != str(doomed.entry_id) for s in state.extracted_star_stories)
+
+    def test_deleting_the_frontier_entry_clears_the_frontier(self) -> None:
+        """The next grill turn must not be aimed at an experience that no longer exists."""
+        service = _service()
+        entry = Entry(type=ExperienceType.PROJECT, title="Doomed")
+        _seed(
+            service,
+            CareerEngineState(
+                reference_date=_REF,
+                work_timeline=[entry],
+                grill_frontier=str(entry.entry_id),
+                current_question="Tell me about the doomed project?",
+            ),
+        )
+
+        delete_entry(service, app_name=_APP, user_id=_UID, entry_id=str(entry.entry_id))
+
+        state = _read_latest(service)
+        assert state.work_timeline == []
+        assert state.grill_frontier == ""
+        assert state.current_question == ""
+
+    def test_unknown_entry_is_a_no_op(self) -> None:
+        service = _service()
+        entry = Entry(type=ExperienceType.PROJECT, title="Keep")
+        _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
+
+        sid = delete_entry(service, app_name=_APP, user_id=_UID, entry_id="nope")
+
+        assert sid is not None
+        assert len(_read_latest(service).work_timeline) == 1
+
+    def test_returns_none_when_no_session(self) -> None:
+        service = _service()
+        assert delete_entry(service, app_name=_APP, user_id=_UID, entry_id="x") is None

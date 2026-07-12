@@ -675,3 +675,145 @@ async def amerge_parsed_entries(
     return await _amerge_parsed_entries(
         session_service, app_name=app_name, user_id=user_id, entries=entries
     )
+
+# ── Delete (CQ-3): the store could replace and append a bullet, never remove one ──
+
+
+async def _adelete_entry_bullet(
+    session_service: BaseSessionService,
+    *,
+    app_name: str,
+    user_id: str,
+    entry_id: str,
+    bullet_id: str,
+) -> str | None:
+    """Remove one bullet from an entry, addressed by its ``bullet_id``.
+
+    Idempotent: an unknown entry or bullet is a logged no-op. Returns the session_id, or
+    ``None`` if the user has no session.
+    """
+    session_id = web_session_id(user_id)
+    existing = await session_helpers.get_session_state_if_exists(
+        session_service=session_service,
+        app_name=app_name,
+        user_id=user_id,
+        session_id=session_id,
+    )
+    if existing is None:
+        return None
+    found = False
+    new_timeline: list[Entry] = []
+    for entry in existing.work_timeline:
+        if str(entry.entry_id) == entry_id:
+            remaining = [b for b in entry.bullets if str(b.bullet_id) != bullet_id]
+            if len(remaining) == len(entry.bullets):
+                logger.warning(
+                    "delete_entry_bullet: bullet %s not found on entry %s", bullet_id, entry_id
+                )
+                return session_id  # no-op: no such bullet
+            entry = entry.model_copy(update={"bullets": remaining})
+            found = True
+        new_timeline.append(entry)
+    if not found:
+        logger.warning("delete_entry_bullet: entry %s not found", entry_id)
+        return session_id  # no-op: entry not found
+    await _patch_session(
+        session_service,
+        app_name=app_name,
+        user_id=user_id,
+        session_id=session_id,
+        state_delta={
+            "work_timeline": [e.model_dump(mode="json") for e in new_timeline],
+            "contract_version": CONTRACT_VERSION,
+        },
+    )
+    return session_id
+
+
+async def _adelete_entry(
+    session_service: BaseSessionService,
+    *,
+    app_name: str,
+    user_id: str,
+    entry_id: str,
+) -> str | None:
+    """Remove an experience AND every STAR story linked to it.
+
+    Deleting the entry without its stories would leave them pointing at an ``entry_id``
+    that no longer exists — orphans that still count toward the portfolio meter and can
+    still be selected onto a résumé under a role the user just removed. So the delete is
+    a cascade, and it is the ONLY place in the store that removes a STAR story as a side
+    effect. If the deleted entry was the grill frontier, the frontier is cleared too, so
+    the next turn is not aimed at an experience that is gone.
+
+    Idempotent: an unknown entry is a logged no-op. Returns the session_id, or ``None``
+    if the user has no session.
+    """
+    session_id = web_session_id(user_id)
+    existing = await session_helpers.get_session_state_if_exists(
+        session_service=session_service,
+        app_name=app_name,
+        user_id=user_id,
+        session_id=session_id,
+    )
+    if existing is None:
+        return None
+    remaining = [e for e in existing.work_timeline if str(e.entry_id) != entry_id]
+    if len(remaining) == len(existing.work_timeline):
+        logger.warning("delete_entry: entry %s not found", entry_id)
+        return session_id  # no-op: entry not found
+
+    kept_stories = [s for s in existing.extracted_star_stories if s.entry_id != entry_id]
+    dropped = len(existing.extracted_star_stories) - len(kept_stories)
+    delta: dict[str, object] = {
+        "work_timeline": [e.model_dump(mode="json") for e in remaining],
+        "extracted_star_stories": [s.model_dump(mode="json") for s in kept_stories],
+        "contract_version": CONTRACT_VERSION,
+    }
+    if existing.grill_frontier == entry_id:
+        delta["grill_frontier"] = ""
+        delta["current_question"] = ""
+    await _patch_session(
+        session_service,
+        app_name=app_name,
+        user_id=user_id,
+        session_id=session_id,
+        state_delta=delta,
+    )
+    logger.info("delete_entry: removed entry %s and %d orphaned story/ies", entry_id, dropped)
+    return session_id
+
+
+def delete_entry_bullet(
+    session_service: BaseSessionService,
+    *,
+    app_name: str,
+    user_id: str,
+    entry_id: str,
+    bullet_id: str,
+) -> str | None:
+    """Remove one bullet from an experience (sync bridge). Idempotent."""
+    return run_async(
+        _adelete_entry_bullet(
+            session_service,
+            app_name=app_name,
+            user_id=user_id,
+            entry_id=entry_id,
+            bullet_id=bullet_id,
+        )
+    )
+
+
+def delete_entry(
+    session_service: BaseSessionService,
+    *,
+    app_name: str,
+    user_id: str,
+    entry_id: str,
+) -> str | None:
+    """Remove an experience and its STAR stories (sync bridge). Idempotent."""
+    return run_async(
+        _adelete_entry(
+            session_service, app_name=app_name, user_id=user_id, entry_id=entry_id
+        )
+    )
