@@ -147,9 +147,21 @@ export const handlers = [
   http.post(`${BASE}/api/jobs/discover`, () => HttpResponse.json({ ...mockJobs, ran: true })),
   http.post(`${BASE}/api/jobs/dismiss`, () => new HttpResponse(null, { status: 204 })),
   http.patch(`${BASE}/api/experience/:id/bullet`, () => new HttpResponse(null, { status: 204 })),
+  http.post(`${BASE}/api/experience/:id/bullet`, () => new HttpResponse(null, { status: 204 })),
   http.get(`${BASE}/api/key`, () => HttpResponse.json({ has_key: false })),
   http.post(`${BASE}/api/key`, () => new HttpResponse(null, { status: 204 })),
   http.delete(`${BASE}/api/key`, () => new HttpResponse(null, { status: 204 })),
+  // Default: NO existing session, so the Grill page shows the start card.
+  http.get(`${BASE}/api/grill`, () =>
+    HttpResponse.json({
+      has_session: false,
+      phase: "",
+      frontier_label: "",
+      awaiting: "idle",
+      current_question: "",
+      checkpoint_summary: "",
+    }),
+  ),
   http.post(`${BASE}/api/grill`, () =>
     HttpResponse.json({
       phase: "grilling",

@@ -22,10 +22,11 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from starlette.concurrency import run_in_threadpool
 
 from api.deps import get_current_user_id, get_session_service
-from api.schemas import BulletEditRequest, HighlightRequest
+from api.schemas import BulletAddRequest, BulletEditRequest, HighlightRequest
 from config import get_settings
 from database.firestore_session import FirestoreSessionService
 from web.portfolio_store import (
+    add_entry_bullet,
     delete_star_story,
     set_entry_highlight,
     set_grill_frontier,
@@ -74,6 +75,32 @@ async def highlight_entry(
     )
     if result is None:
         raise HTTPException(status_code=404, detail="No such entry, or no active session.")
+    return Response(status_code=204)
+
+
+@router.post("/api/experience/{entry_id}/bullet", status_code=204)
+async def add_bullet(
+    entry_id: str,
+    body: BulletAddRequest,
+    session_service: FirestoreSessionService = Depends(get_session_service),
+    user_id: str = Depends(get_current_user_id),
+) -> Response:
+    """Append a new bullet to an experience — add a line without re-grilling the entry.
+
+    Like the PATCH twin below, the bridge treats a missing entry as a logged no-op, so
+    the 404 fires only when the user has no discovery session at all.
+    """
+    app_name = get_settings().app_name
+    result = await run_in_threadpool(
+        add_entry_bullet,
+        session_service,
+        app_name=app_name,
+        user_id=user_id,
+        entry_id=entry_id,
+        text=body.text,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="No active session.")
     return Response(status_code=204)
 
 

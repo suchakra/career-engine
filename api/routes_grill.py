@@ -35,18 +35,23 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
-from api.deps import get_current_user_id, get_discovery_session
+from api.deps import get_current_user_id, get_discovery_session, get_session_service
 from api.schemas import (
     GrillActionRequest,
     GrillErrorEvent,
     GrillSnapshot,
+    GrillStatus,
     GrillTurnEvent,
 )
 from cli.app import DiscoverySession, TurnResult, guess_resume_mime
+from cli.session import get_session_state_if_exists
+from config import get_settings
+from database.firestore_session import FirestoreSessionService
 from integration.model_client import ModelAPIError
 from schema import CareerEngineState, PhaseStatus
 from tools.resume_parser import ParseError, parse_resume
 from web.grill_labels import _effective_frontier_label
+from web.session_loader import web_session_id
 
 router = APIRouter()
 
@@ -78,6 +83,47 @@ def _turn_event(turn: TurnResult, state: CareerEngineState) -> GrillTurnEvent:
         stories_count=turn.stories_count,
         phase=turn.phase.value,
         frontier_label=_effective_frontier_label(state),
+    )
+
+
+@router.get("/api/grill")
+async def grill_status(
+    user_id: str = Depends(get_current_user_id),
+    session_service: FirestoreSessionService = Depends(get_session_service),
+) -> GrillStatus:
+    """Report whether a durable grill session already exists, so the client can RESUME.
+
+    Read-only: it reports what the session already holds (``current_question`` and
+    ``checkpoint_delta_summary`` are persisted state), so it runs NO graph turn and
+    needs NO BYOK key — and resuming can never re-ask a question the user already saw.
+
+    Without this the Grill page had no way to know a session existed: it decided what to
+    render from in-memory state alone, so every fresh page load showed the "upload your
+    résumé" start card — stranding users who had a live session, including anyone who
+    had just clicked "Grill me about this" in the Portfolio.
+    """
+    state = await get_session_state_if_exists(
+        session_service=session_service,
+        app_name=get_settings().app_name,
+        user_id=user_id,
+        session_id=web_session_id(user_id),
+    )
+    if state is None:
+        return GrillStatus(
+            has_session=False,
+            phase="",
+            frontier_label="",
+            awaiting="idle",
+            current_question="",
+            checkpoint_summary="",
+        )
+    return GrillStatus(
+        has_session=True,
+        phase=state.current_phase.value,
+        frontier_label=_effective_frontier_label(state),
+        awaiting=_awaiting(state),
+        current_question=state.current_question,
+        checkpoint_summary=state.checkpoint_delta_summary,
     )
 
 

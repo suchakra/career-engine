@@ -80,7 +80,17 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Profile
+         * @description Return the caller's persisted résumé-header profile (empty for a new user).
+         *
+         *     Reads through :func:`_safe_load_workspace`, so it obeys this module's contract:
+         *     a transient store fault degrades to an empty profile (never a 500) while a
+         *     ``ContractVersionError`` still propagates. The defensive copy matches
+         *     :func:`web.profile_store.load_profile` — a caller mutating the result must not
+         *     write through to a cached workspace instance.
+         */
+        get: operations["profile_api_profile_get"];
         put?: never;
         /**
          * Save Profile Endpoint
@@ -104,7 +114,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Preferences
+         * @description Return the caller's persisted discovery rubric (empty for a new user).
+         *
+         *     Same degrade-to-empty contract as :func:`profile` above.
+         */
+        get: operations["preferences_api_preferences_get"];
         /**
          * Save Preferences Endpoint
          * @description Persist the caller's discovery preferences and return the re-read value.
@@ -178,7 +194,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Grill Status
+         * @description Report whether a durable grill session already exists, so the client can RESUME.
+         *
+         *     Read-only: it reports what the session already holds (``current_question`` and
+         *     ``checkpoint_delta_summary`` are persisted state), so it runs NO graph turn and
+         *     needs NO BYOK key — and resuming can never re-ask a question the user already saw.
+         *
+         *     Without this the Grill page had no way to know a session existed: it decided what to
+         *     render from in-memory state alone, so every fresh page load showed the "upload your
+         *     résumé" start card — stranding users who had a live session, including anyone who
+         *     had just clicked "Grill me about this" in the Portfolio.
+         */
+        get: operations["grill_status_api_grill_get"];
         put?: never;
         /**
          * Record Grill Action
@@ -194,6 +223,32 @@ export interface paths {
          *     422 (recording a turn with no user input is a client error, not a valid state).
          */
         post: operations["record_grill_action_api_grill_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/grill/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Seed From Resume
+         * @description Vision-parse an uploaded résumé into a starting timeline and seed the grill.
+         *
+         *     Requires a valid bearer token AND a BYOK key (``get_discovery_session`` → 409). The
+         *     file (PDF/PNG/JPG/WEBP) is parsed by the multimodal model on the user's OWN key
+         *     (``tools.resume_parser.parse_resume``) into ``Entry`` objects — the raw bytes are
+         *     never stored — and used to ``create`` the durable session (``work_timeline``). Returns
+         *     the post-record snapshot so the client can open the SSE stream, exactly like ``start``.
+         */
+        post: operations["seed_from_resume_api_grill_resume_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -253,6 +308,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/master-resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Master Resume
+         * @description Assemble the caller's MASTER résumé — every validated achievement, no tailoring.
+         *
+         *     Requires a valid bearer token but NOT a BYOK key: the assembly is deterministic
+         *     (``web.resume_builder.master_structured_resume`` — no model call), so it must not be
+         *     gated behind ``get_discovery_session``. A missing discovery session degrades to an
+         *     empty résumé rather than an error, exactly like ``GET /api/portfolio``.
+         *
+         *     Returned for preview/export; not persisted (the client exports it via
+         *     ``POST /api/resume/{fmt}``).
+         */
+        post: operations["master_resume_api_master_resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/resume/{fmt}": {
         parameters: {
             query?: never;
@@ -272,6 +355,177 @@ export interface paths {
          */
         post: operations["render_resume_api_resume__fmt__post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Key Status
+         * @description Return whether the caller has a saved BYOK key (never the key itself).
+         *
+         *     Uses ``key_exists`` so the secret PAYLOAD is never pulled into memory. A genuine
+         *     vault fault surfaces as 502 (not a misleading ``has_key: false``).
+         */
+        get: operations["key_status_api_key_get"];
+        put?: never;
+        /**
+         * Set Key
+         * @description Store the caller's Gemini key in Secret Manager. Returns 204 (no body).
+         */
+        post: operations["set_key_api_key_post"];
+        /**
+         * Remove Key
+         * @description Remove the caller's saved key (idempotent). Returns 204.
+         */
+        delete: operations["remove_key_api_key_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/discover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Discover Jobs
+         * @description Run job discovery on the caller's BYOK key + saved rubric; return fresh matches.
+         *
+         *     409 if no BYOK key is configured (the run consumes the user's own Gemini quota).
+         */
+        post: operations["discover_jobs_api_jobs_discover_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dismiss Company
+         * @description Record a dismissed ("Not interested") company; future runs hard-reject it.
+         *
+         *     Idempotent — the ledger de-duplicates the company list. Requires a bearer token but
+         *     no BYOK key (a ledger write, no model call). A ledger fault surfaces as 502 rather
+         *     than a silent success, so the UI never claims a dismissal that was not persisted.
+         */
+        post: operations["dismiss_company_api_jobs_dismiss_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/experience/{entry_id}/grill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Grill Entry
+         * @description Pin the grill frontier to ``entry_id`` so the next grill turn focuses on it.
+         */
+        post: operations["grill_entry_api_experience__entry_id__grill_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/experience/{entry_id}/highlight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Highlight Entry
+         * @description Flip an entry's ``highlighted`` (pin) flag — pinned entries are always tailored.
+         */
+        post: operations["highlight_entry_api_experience__entry_id__highlight_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/experience/{entry_id}/bullet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Bullet
+         * @description Append a new bullet to an experience — add a line without re-grilling the entry.
+         *
+         *     Like the PATCH twin below, the bridge treats a missing entry as a logged no-op, so
+         *     the 404 fires only when the user has no discovery session at all.
+         */
+        post: operations["add_bullet_api_experience__entry_id__bullet_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Edit Bullet
+         * @description Edit one existing bullet on an experience in place (parity P5).
+         *
+         *     The bridge treats a missing entry or an out-of-range ``bullet_index`` as a logged
+         *     no-op (it never raises), so those still return 204. The 404 fires only when the user
+         *     has no discovery session at all (bridge returns ``None``).
+         */
+        patch: operations["edit_bullet_api_experience__entry_id__bullet_patch"];
+        trace?: never;
+    };
+    "/api/story/{story_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Story
+         * @description Delete a STAR story by id.
+         *
+         *     Idempotent: a missing ``story_id`` is a no-op that still returns 204. The 404 fires
+         *     only when the user has no discovery session at all (bridge returns ``None``).
+         */
+        delete: operations["delete_story_api_story__story_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -403,6 +657,37 @@ export interface components {
             /** Tailored Resume Json */
             tailored_resume_json: string;
         };
+        /** Body_seed_from_resume_api_grill_resume_post */
+        Body_seed_from_resume_api_grill_resume_post: {
+            /** File */
+            file: string;
+        };
+        /**
+         * BulletAddRequest
+         * @description Request body for ``POST /api/experience/{entry_id}/bullet`` — append a bullet.
+         *
+         *     ``text`` is stripped before the length check for the same reason as
+         *     ``BulletEditRequest.new_text`` below: the store strips it too, so a blank line would
+         *     be a silently-dropped write reported to the UI as a success.
+         */
+        BulletAddRequest: {
+            /** Text */
+            text: string;
+        };
+        /**
+         * BulletEditRequest
+         * @description Request body for ``PATCH /api/experience/{entry_id}/bullet`` (parity P5).
+         *
+         *     ``new_text`` is stripped BEFORE the length check, so a whitespace-only edit is a 422
+         *     rather than a silent no-op: the store strips it too, and would otherwise leave the
+         *     bullet untouched while the endpoint reported 204.
+         */
+        BulletEditRequest: {
+            /** Bullet Index */
+            bullet_index: number;
+            /** New Text */
+            new_text: string;
+        };
         /**
          * ContactDTO
          * @description Résumé header identity (mirrors ``web.resume_builder.Contact``).
@@ -456,6 +741,21 @@ export interface components {
             pending_actions_detail: {
                 [key: string]: string;
             }[];
+        };
+        /**
+         * DismissCompanyRequest
+         * @description Request body for ``POST /api/jobs/dismiss`` (parity P5).
+         *
+         *     Dismissal is by COMPANY, not by job: the discovery ledger hard-rejects the company
+         *     on future runs (``discovery.store.add_rejected_company``), which is what the old
+         *     "Not interested" affordance did.
+         *
+         *     ``company`` is stripped before the length check (same reason as ``new_text`` above —
+         *     the ledger strips it, so a blank name would be a silently-dropped dismissal).
+         */
+        DismissCompanyRequest: {
+            /** Company */
+            company: string;
         };
         /**
          * Entry
@@ -635,6 +935,36 @@ export interface components {
              */
             awaiting: "question" | "checkpoint" | "complete";
         };
+        /**
+         * GrillStatus
+         * @description Response for ``GET /api/grill``: does a durable grill session already exist?
+         *
+         *     Read-only and model-free — it reports what the session ALREADY holds
+         *     (``current_question`` / ``checkpoint_delta_summary`` are persisted), so resuming a
+         *     grill costs no model call and cannot re-ask a question the user already saw.
+         *
+         *     Without this the client had no way to know a session existed: the Grill page decided
+         *     what to render purely from in-memory state, so a fresh page load always showed the
+         *     "upload your résumé" start card — even with a live session full of ungrilled
+         *     entries, and even when the user had just clicked "Grill me about this".
+         */
+        GrillStatus: {
+            /** Has Session */
+            has_session: boolean;
+            /** Phase */
+            phase: string;
+            /** Frontier Label */
+            frontier_label: string;
+            /**
+             * Awaiting
+             * @enum {string}
+             */
+            awaiting: "idle" | "question" | "checkpoint" | "complete";
+            /** Current Question */
+            current_question: string;
+            /** Checkpoint Summary */
+            checkpoint_summary: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -647,6 +977,14 @@ export interface components {
         HealthResponse: {
             /** Status */
             status: string;
+        };
+        /**
+         * HighlightRequest
+         * @description Request body for ``POST /api/experience/{entry_id}/highlight``.
+         */
+        HighlightRequest: {
+            /** Highlighted */
+            highlighted: boolean;
         };
         /**
          * JobCardResponse
@@ -691,6 +1029,25 @@ export interface components {
             empty_text: string;
             /** Is Empty */
             is_empty: boolean;
+        };
+        /**
+         * KeyStatusResponse
+         * @description Response for ``GET /api/key`` — whether the caller has a saved key. The raw
+         *     key is NEVER returned.
+         */
+        KeyStatusResponse: {
+            /** Has Key */
+            has_key: boolean;
+        };
+        /**
+         * KeyWriteRequest
+         * @description Request body for ``POST /api/key`` — the user's raw Gemini API key (BYOK).
+         *
+         *     Never logged or echoed back; stored in Secret Manager (``ce-key-{user_id}``).
+         */
+        KeyWriteRequest: {
+            /** Api Key */
+            api_key: string;
         };
         /**
          * MeResponse
@@ -970,6 +1327,37 @@ export interface operations {
             };
         };
     };
+    profile_api_profile_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserProfile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     save_profile_endpoint_api_profile_post: {
         parameters: {
             query?: never;
@@ -992,6 +1380,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserProfile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preferences_api_preferences_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionPreferences"];
                 };
             };
             /** @description Validation Error */
@@ -1110,6 +1529,37 @@ export interface operations {
             };
         };
     };
+    grill_status_api_grill_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GrillStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     record_grill_action_api_grill_post: {
         parameters: {
             query?: never;
@@ -1122,6 +1572,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["GrillActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GrillSnapshot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    seed_from_resume_api_grill_resume_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_seed_from_resume_api_grill_resume_post"];
             };
         };
         responses: {
@@ -1211,6 +1696,37 @@ export interface operations {
             };
         };
     };
+    master_resume_api_master_resume_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StructuredResumeDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     render_resume_api_resume__fmt__post: {
         parameters: {
             query?: never;
@@ -1239,6 +1755,330 @@ export interface operations {
                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": unknown;
                     "text/markdown": unknown;
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    key_status_api_key_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KeyStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_key_api_key_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KeyWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_key_api_key_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    discover_jobs_api_jobs_discover_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dismiss_company_api_jobs_dismiss_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DismissCompanyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    grill_entry_api_experience__entry_id__grill_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    highlight_entry_api_experience__entry_id__highlight_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HighlightRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_bullet_api_experience__entry_id__bullet_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulletAddRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_bullet_api_experience__entry_id__bullet_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulletEditRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_story_api_story__story_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                story_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

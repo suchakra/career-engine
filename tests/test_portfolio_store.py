@@ -16,6 +16,7 @@ from google.adk.sessions import BaseSessionService, InMemorySessionService
 from config import CONTRACT_VERSION
 from schema import CareerEngineState, Entry, ExperienceType, StarStory
 from web.portfolio_store import (
+    add_entry_bullet,
     add_manual_entry,
     delete_star_story,
     set_entry_highlight,
@@ -237,6 +238,51 @@ class TestDeleteStarStory:
         assert (
             delete_star_story(service, app_name=_APP, user_id=_UID, story_id="anything") is None
         )
+
+
+class TestAddEntryBullet:
+    def test_add_entry_bullet_appends(self) -> None:
+        """A new bullet lands at the END of the entry's existing bullets."""
+        service = _service()
+        entry = Entry(
+            type=ExperienceType.PROJECT, title="Billing rewrite", bullets=["first"]
+        )
+        _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
+
+        sid = add_entry_bullet(
+            service,
+            app_name=_APP,
+            user_id=_UID,
+            entry_id=str(entry.entry_id),
+            text="  second  ",
+        )
+        assert sid is not None
+        state = _read_latest(service)
+        assert state.work_timeline[0].bullets == ["first", "second"]  # stripped + appended
+        assert state.contract_version == CONTRACT_VERSION
+
+    def test_add_entry_bullet_refuses_a_blank(self) -> None:
+        """A whitespace-only bullet is a no-op — never persist an empty line."""
+        service = _service()
+        entry = Entry(type=ExperienceType.PROJECT, title="Billing", bullets=["first"])
+        _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
+
+        add_entry_bullet(
+            service, app_name=_APP, user_id=_UID, entry_id=str(entry.entry_id), text="   "
+        )
+        assert _read_latest(service).work_timeline[0].bullets == ["first"]
+
+    def test_add_entry_bullet_missing_entry_is_a_no_op(self) -> None:
+        """An unknown entry_id is a logged no-op, not a raise."""
+        service = _service()
+        entry = Entry(type=ExperienceType.PROJECT, title="Billing", bullets=["first"])
+        _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
+
+        sid = add_entry_bullet(
+            service, app_name=_APP, user_id=_UID, entry_id="nope", text="x"
+        )
+        assert sid is not None
+        assert _read_latest(service).work_timeline[0].bullets == ["first"]
 
 
 class TestUpdateEntryBullet:

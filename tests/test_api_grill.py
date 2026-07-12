@@ -49,6 +49,7 @@ from tests.test_integration import (
     _specific_extraction,
     _vague_extraction,
 )
+from web.async_runner import run_async
 from web.session_loader import web_session_id
 
 _GOOGLE_ISSUER = "https://accounts.google.com"
@@ -375,3 +376,64 @@ def test_grill_model_error_emits_error_event(client: TestClient) -> None:
     assert events[-1][0] == "error", events
     assert events[-1][1]["rate_limited"] is True
     assert events[-1][1]["message"]
+
+
+# ── GET /api/grill — resume an existing session ───────────────────────────────
+
+
+def test_grill_status_reports_no_session_for_a_new_user(client: TestClient) -> None:
+    """A user with no session gets has_session=False → the client shows the start card."""
+    from api.deps import get_session_service
+
+    svc = cast(BaseSessionService, InMemorySessionService())  # type: ignore[no-untyped-call]
+    app.dependency_overrides[get_session_service] = lambda: svc
+
+    resp = client.get("/api/grill", headers=_auth_headers())
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["has_session"] is False
+    assert body["awaiting"] == "idle"
+
+
+def test_grill_status_rehydrates_the_pending_question(client: TestClient) -> None:
+    """An existing session is reported WITH its persisted pending question.
+
+    Regression (reported on qa): the Grill page decided what to render from in-memory
+    state, so a fresh load always showed the "upload your résumé" start card — even with
+    a live session, and even straight after "Grill me about this". The client needs this
+    read to resume. It must cost NO model call: `current_question` is persisted state.
+    """
+    from api.deps import get_session_service
+    from cli.session import create_session
+    from config import get_settings
+    from web.session_loader import web_session_id
+
+    svc = cast(BaseSessionService, InMemorySessionService())  # type: ignore[no-untyped-call]
+    state = CareerEngineState(
+        reference_date="2026-07-12",
+        current_phase=PhaseStatus.GRILLING,
+        current_question="What did that migration actually save?",
+    )
+    run_async(
+        create_session(
+            session_service=svc,
+            app_name=get_settings().app_name,
+            user_id=_USER_ID,
+            session_id=web_session_id(_USER_ID),
+            initial_state=state,
+        )
+    )
+    app.dependency_overrides[get_session_service] = lambda: svc
+
+    resp = client.get("/api/grill", headers=_auth_headers())
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["has_session"] is True
+    assert body["current_question"] == "What did that migration actually save?"
+    assert body["awaiting"] == "question"
+
+
+def test_grill_status_requires_auth(client: TestClient) -> None:
+    assert client.get("/api/grill").status_code == 401

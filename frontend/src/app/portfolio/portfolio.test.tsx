@@ -82,6 +82,30 @@ describe("Portfolio actions (parity P4b)", () => {
     );
   });
 
+  it("adds a new bullet to an experience", async () => {
+    let posted: { id: string; body: Record<string, unknown> } | null = null;
+    server.use(
+      http.post(`${BASE}/api/experience/:id/bullet`, async ({ params, request }) => {
+        posted = {
+          id: String(params.id),
+          body: (await request.json()) as Record<string, unknown>,
+        };
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderWithProviders(<PortfolioContent />);
+
+    await user.click(await screen.findByRole("button", { name: /add a bullet/i }));
+    await user.type(screen.getByLabelText("New bullet"), "Shipped billing v2");
+    await user.click(screen.getByRole("button", { name: "Add" }));
+
+    await waitFor(() =>
+      expect(posted).toEqual({ id: "entry-1", body: { text: "Shipped billing v2" } }),
+    );
+  });
+
   it("deletes a STAR story", async () => {
     let deleted: string | null = null;
     server.use(

@@ -232,6 +232,27 @@ class GrillActionRequest(_StrictModel):
     reference_date: str = ""
 
 
+class GrillStatus(_StrictModel):
+    """Response for ``GET /api/grill``: does a durable grill session already exist?
+
+    Read-only and model-free — it reports what the session ALREADY holds
+    (``current_question`` / ``checkpoint_delta_summary`` are persisted), so resuming a
+    grill costs no model call and cannot re-ask a question the user already saw.
+
+    Without this the client had no way to know a session existed: the Grill page decided
+    what to render purely from in-memory state, so a fresh page load always showed the
+    "upload your résumé" start card — even with a live session full of ungrilled
+    entries, and even when the user had just clicked "Grill me about this".
+    """
+
+    has_session: bool
+    phase: str
+    frontier_label: str
+    awaiting: Literal["idle", "question", "checkpoint", "complete"]
+    current_question: str
+    checkpoint_summary: str
+
+
 class GrillSnapshot(_StrictModel):
     """Response for ``POST /api/grill``: a small post-record status snapshot.
 
@@ -354,6 +375,19 @@ class HighlightRequest(_StrictModel):
     """Request body for ``POST /api/experience/{entry_id}/highlight``."""
 
     highlighted: bool
+
+
+class BulletAddRequest(_StrictModel):
+    """Request body for ``POST /api/experience/{entry_id}/bullet`` — append a bullet.
+
+    ``text`` is stripped before the length check for the same reason as
+    ``BulletEditRequest.new_text`` below: the store strips it too, so a blank line would
+    be a silently-dropped write reported to the UI as a success.
+    """
+
+    text: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)
+    ]
 
 
 class BulletEditRequest(_StrictModel):
