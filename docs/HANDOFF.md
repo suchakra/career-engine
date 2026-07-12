@@ -1,36 +1,43 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-11 — **PHASE 10 COMPLETE**; **FEATURE PARITY: all slices built — 3 PRs awaiting your merge**)
-> 🔴 **ACTION FOR YOU: merge the parity stack, in order — [#80](https://github.com/suchakra/career-engine/pull/80) → [#81](https://github.com/suchakra/career-engine/pull/81) → [#82](https://github.com/suchakra/career-engine/pull/82)** (each is
-> based on the previous; GitHub retargets to `master` as each merges). All are gate-green.
-> Then redeploy qa: `gh workflow run deploy.yml --ref master -f environment=qa` and walk the app.
-> ✅ **qa LIVE + sign-in WORKS** (auth fix PR #75 merged; Firebase token verifier). URL:
-> https://career-engine-qa-app-ontyg6kaja-uc.a.run.app · redeploy: `gh workflow run deploy.yml --ref master -f environment=qa`.
+## 👉 YOU ARE HERE (updated 2026-07-12 — **PHASE 10 COMPLETE · FEATURE PARITY COMPLETE, MERGED & DEPLOYED TO qa**)
+> ✅ **All parity slices are on `master` and LIVE on qa** (deploy run 29194226615, green). Verified on qa:
+> `/api/health` ok; `/api/master-resume`, `/api/jobs/dismiss`, `/api/experience/{id}/bullet|grill|highlight`,
+> `/api/story/{id}`, `/api/key`, `/api/jobs/discover`, `/api/grill/resume` all present in the served OpenAPI
+> and still 401 without a bearer.
 >
-> ▶ **ACTIVE WORK: FEATURE PARITY** (new Next.js UI vs old Streamlit). Autonomous, slice-by-slice
-> (each: backend endpoint + frontend + tests → PR → Copilot review → merge → deploy qa).
+> ▶ **NEXT: walk the app end-to-end on qa** — sign in → set your Gemini key → upload a résumé → grill →
+> Portfolio (grill-this / pin / edit bullet / delete story / **Build master résumé** → export) → Jobs
+> (Find jobs → **Not interested**) → Tailor (JD → preview → export → track as application).
+> URL: https://career-engine-qa-app-ontyg6kaja-uc.a.run.app · redeploy: `gh workflow run deploy.yml --ref master -f environment=qa`.
+> After that: **promote to dev** (needs `-f confirm_dev_cutover=true`; dev is Kaggle-visible) and groom Phase 11.
+>
+> ⚠️ **Stacked-PR gotcha (cost us two PRs — don't repeat):** squash-merging a base PR **with
+> `--delete-branch` auto-CLOSES the PRs stacked on it** (GitHub does NOT retarget; a closed PR whose base
+> branch is gone cannot be reopened or re-based). #81 died this way and had to be re-filed as #83. If you
+> stack, merge the base **without** `--delete-branch`, then `git rebase --onto origin/master <old-base-tip>`
+> the child and `gh pr edit <n> --base master` before merging it.
+>
+> **Parity slices as shipped** (each: backend endpoint + frontend + tests → PR → Copilot review → merge):
 > - ✅ **P1 BYOK key management** (PR #76) — `GET/POST/DELETE /api/key` + Settings key entry.
 > - ✅ **P2 Jobs "Find jobs"** (PR #77) — `POST /api/jobs/discover` (live two-agent discovery) + run button.
 > - ✅ **P3 Résumé upload** (PR #78) — `POST /api/grill/resume` (multipart → vision parse → seeds the grill).
 > - ✅ **P4a** (PR #79) — Dashboard first-run key card + Tailor "track as application".
 > - ✅ **P4b** (PR #80) — Portfolio entry actions: "Grill me about this" (`set_grill_frontier`),
 >   pin/highlight (`set_entry_highlight`), delete STAR story (`delete_star_story`).
-> - ✅ **P4c** (PR #81, stacked on #80) — Master résumé: `POST /api/master-resume` (deterministic
->   `master_structured_resume` — **no model call ⇒ no BYOK key**) + Portfolio build/preview/export card.
->   Export path shared with Tailor via `lib/tailor/resumeExport.ts`.
-> - ✅ **P5 (LAST SLICE)** (PR #82, stacked on #81) — **Jobs "Not interested"**
+> - ✅ **P4c** (PR **#83**, ex-#81) — Master résumé: `POST /api/master-resume` (deterministic
+>   `master_structured_resume` — **no model call ⇒ no BYOK key**, so it must NOT depend on
+>   `get_discovery_session`; a test proves it by exploding that dep if resolved) + Portfolio
+>   build/preview/export card. Export path shared with Tailor via `lib/tailor/resumeExport.ts`.
+> - ✅ **P5 (LAST SLICE)** (PR #82) — **Jobs "Not interested"**
 >   (`POST /api/jobs/dismiss` → `discovery.store.add_rejected_company`; dismissal is by COMPANY, which is
 >   what the ledger records — the read side already subtracted it, only the write was missing) and
 >   **STAR bullet edit** (`PATCH /api/experience/{entry_id}/bullet` → `portfolio_store.update_entry_bullet`,
 >   inline edit on the Portfolio entry card).
 >
-> **Every parity item from the original list is now built and gate-green.** Remaining: merge the stack,
-> redeploy qa, walk the app end-to-end (key → résumé upload → grill → portfolio actions → master résumé →
-> jobs discover/dismiss → tailor → track application).
->
-> ⚠️ **Merging is gated on you.** The agent may open + green PRs but cannot self-merge without your
-> explicit go-ahead (auto-mode classifier blocks agent-authored merges lacking human approval). Say
-> "you're authorized to merge parity PRs" to let it self-merge next session.
+> **The Next.js UI now does everything the old Streamlit app did.** Gate at merge: 774 backend tests,
+> 23 frontend tests, mypy --strict / ruff / tsc / eslint / next build all clean. No contract change (v2.8.0) —
+> every slice is transport over an existing `web/` · `discovery/` · `auth/` seam.
 
 **`master` clean (10.7 + qa-env merged; PR #72/#73/#74). contract v2.8.0 · no contract change. `qa` DEPLOYED & healthy → https://career-engine-qa-app-ontyg6kaja-uc.a.run.app (same-project 2nd Cloud Run service, scale-to-zero; dev untouched). Deploy again anytime: `gh workflow run deploy.yml --ref master -f environment=qa`. Promote to dev only once validated (needs `-f confirm_dev_cutover=true`; dev is Kaggle-visible).**
 **Phases 1–7 + 8A–8G + all of Phase 9 + BUG-1 + BUG-2 + ALL of Phase 10 COMPLETE. Streamlit is GONE — the product runs on Next.js (App Router) + FastAPI, deployed as ONE container (static export served by FastAPI, AD-16.10). Open-core seam (ARCHITECTURE §17) in place. Nothing deployed yet.**
