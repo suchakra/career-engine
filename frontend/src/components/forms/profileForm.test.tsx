@@ -82,6 +82,23 @@ describe("ProfileForm hydration", () => {
     expect(screen.getByDisplayValue("Remote · UK")).toBeInTheDocument();
   });
 
+  it("keeps Save disabled when the profile can't be read (data-loss prevention)", async () => {
+    // Saving on top of a profile we never loaded would post a partial body, and the
+    // store's full-document write would blank email/phone/links.
+    server.use(
+      http.get(`${BASE}/api/profile`, () => new HttpResponse(null, { status: 500 })),
+    );
+
+    const user = userEvent.setup();
+    renderWithProviders(<ProfileForm />);
+
+    await user.type(screen.getByLabelText("Full name"), "Jane Doe");
+    // Dirty, not pending — yet Save stays disabled because there is nothing to merge into.
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /save/i })).toBeDisabled(),
+    );
+  });
+
   it("preserves fields it does not edit (the store does a full-document write)", async () => {
     let posted: Record<string, unknown> | null = null;
     server.use(

@@ -458,3 +458,32 @@ def test_preferences_empty_for_a_new_user(client: TestClient) -> None:
 
 def test_preferences_requires_auth(client: TestClient) -> None:
     assert client.get("/api/preferences").status_code == 401
+
+
+def test_profile_degrades_to_empty_on_store_fault(client: TestClient) -> None:
+    """A transient store fault yields an EMPTY profile, never a 500 (module contract)."""
+    app.dependency_overrides[get_workspace_store] = lambda: _FakeWorkspaceStore(
+        UserWorkspace(), error=RuntimeError("firestore down")
+    )
+    resp = client.get("/api/profile", headers=_auth_headers())
+    assert resp.status_code == 200
+    assert resp.json()["name"] == ""
+
+
+def test_profile_propagates_contract_version_error(client: TestClient) -> None:
+    """A schema mismatch must NOT masquerade as an empty (lost) profile."""
+    app.dependency_overrides[get_workspace_store] = lambda: _FakeWorkspaceStore(
+        UserWorkspace(), error=ContractVersionError("bad major")
+    )
+    with pytest.raises(ContractVersionError):
+        client.get("/api/profile", headers=_auth_headers())
+
+
+def test_preferences_degrades_to_empty_on_store_fault(client: TestClient) -> None:
+    """A transient store fault yields an EMPTY rubric, never a 500."""
+    app.dependency_overrides[get_workspace_store] = lambda: _FakeWorkspaceStore(
+        UserWorkspace(), error=RuntimeError("firestore down")
+    )
+    resp = client.get("/api/preferences", headers=_auth_headers())
+    assert resp.status_code == 200
+    assert resp.json()["target_roles"] == []

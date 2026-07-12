@@ -45,6 +45,11 @@ export function PreferencesForm({ disabled = false }: { disabled?: boolean }): J
 
   const onSubmit = (e: React.FormEvent): void => {
     e.preventDefault();
+    // Never submit before the rubric has loaded: spreading an `undefined` value would
+    // post a partial body, and the store's full-document write would reset the fields
+    // this form doesn't edit (`nice_to_haves`). Save is disabled until then; this guard
+    // closes the race for a submit already in flight.
+    if (!preferences) return;
     // Clear dirty only on success so a failed save stays retryable (rollback via the
     // hook keeps the cache consistent; the form keeps the user's input).
     save.mutate(
@@ -81,7 +86,13 @@ export function PreferencesForm({ disabled = false }: { disabled?: boolean }): J
           }}
         />
         <div>
-          <PrimaryButton type="submit" disabled={disabled || !dirty || save.isPending}>
+          {/* `!preferences` also covers a FAILED read: saving on top of a rubric we
+              couldn't load would reset it, so Save stays disabled (data-loss
+              prevention, same rule as the `disabled` prop). */}
+          <PrimaryButton
+            type="submit"
+            disabled={disabled || !dirty || save.isPending || !preferences}
+          >
             {save.isPending ? "Saving…" : "Save"}
           </PrimaryButton>
         </div>
