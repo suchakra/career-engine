@@ -594,6 +594,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/experience/{entry_id}/copywrite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Copywrite
+         * @description Propose rewritten bullets for ONE experience (CQ-4). Nothing is persisted.
+         *
+         *     ONE model call on the caller's own key, batched across the whole entry — a call per
+         *     bullet would make the grill interminable (AD-18.2). The user then accepts / edits /
+         *     rejects each proposal; only what they accept is written back (via ``/bullets/accept``),
+         *     so **no unreviewed prose can reach a PDF**.
+         *
+         *     Requires a BYOK key (``get_discovery_session`` → 409 without one). An unknown entry, or a
+         *     model/parse failure, yields an EMPTY proposal list rather than an error: copywriting is an
+         *     improvement, never a dependency, and must not be able to take the portfolio down with it.
+         */
+        post: operations["copywrite_api_experience__entry_id__copywrite_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/experience/{entry_id}/bullets/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept Copywritten Bullets
+         * @description Persist the rewrites the user ACCEPTED (CQ-4). No model call, no key needed.
+         *
+         *     A rewrite of an existing bullet SUPERSEDES it — the original is removed here, resolved by
+         *     id, so the résumé can never carry both the polished line and the one it replaced. A
+         *     rewrite derived from a STAR story adds a bullet the entry did not have. Rejected proposals
+         *     are simply absent from the request and the original is untouched.
+         *
+         *     Because the accepted text is persisted, résumé export needs **no model call at all**.
+         */
+        post: operations["accept_copywritten_bullets_api_experience__entry_id__bullets_accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -648,6 +704,29 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AcceptBulletsRequest
+         * @description Request body for ``POST /api/experience/{entry_id}/bullets/accept`` (CQ-4).
+         *
+         *     Only the rewrites the user actually accepted are sent. A rewrite of an existing bullet
+         *     supersedes it (the original stops appearing on the résumé, resolved BY ID); a rewrite
+         *     derived from a STAR story adds a bullet the entry did not have. Rejected proposals are
+         *     simply absent, and the original stays untouched.
+         */
+        AcceptBulletsRequest: {
+            /** Accepted */
+            accepted: components["schemas"]["AcceptedBullet"][];
+        };
+        /**
+         * AcceptedBullet
+         * @description One rewrite the user ACCEPTED (possibly after editing the proposed text).
+         */
+        AcceptedBullet: {
+            /** Source Id */
+            source_id: string;
+            /** Text */
+            text: string;
+        };
         /**
          * Application
          * @description A single tracked job application (no secrets/PII beyond what the user enters).
@@ -837,6 +916,26 @@ export interface components {
             location: string;
             /** Links */
             links?: string[];
+        };
+        /**
+         * CopyProposalResponse
+         * @description One proposed rewrite from the copywriter (CQ-4), linked to what it came from.
+         */
+        CopyProposalResponse: {
+            /** Source Id */
+            source_id: string;
+            /** Text */
+            text: string;
+            /** Original */
+            original: string;
+        };
+        /**
+         * CopyProposalsResponse
+         * @description Response for ``POST /api/experience/{entry_id}/copywrite``.
+         */
+        CopyProposalsResponse: {
+            /** Proposals */
+            proposals: components["schemas"]["CopyProposalResponse"][];
         };
         /**
          * DashboardResponse
@@ -2257,6 +2356,74 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    copywrite_api_experience__entry_id__copywrite_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CopyProposalsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    accept_copywritten_bullets_api_experience__entry_id__bullets_accept_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptBulletsRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             204: {

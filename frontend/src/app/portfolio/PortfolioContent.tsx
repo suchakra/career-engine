@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { ActionCard } from "@/components/ActionCard";
+import { CopywriterPanel } from "@/components/CopywriterPanel";
 import { EmptyState } from "@/components/EmptyState";
 import { InlineError } from "@/components/InlineError";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -226,6 +227,9 @@ function EntryCard({ entry }: { entry: EntryCardResponse }): JSX.Element {
         </ul>
       )}
       <AddBullet entryId={entry.entry_id} />
+      <div className="mb-3">
+        <CopywriterPanel entryId={entry.entry_id} />
+      </div>
       {entry.stories.length > 0 && (
         <div className="rounded-card border border-border bg-surface p-3">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">

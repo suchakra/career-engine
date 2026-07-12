@@ -13,6 +13,7 @@ import workflows.nodes as nodes
 from integration.model_client import GeminiModelClient
 from schema import (
     Bullet,
+    BulletSource,
     CareerEngineState,
     Entry,
     EntryStatus,
@@ -157,6 +158,27 @@ class TestMasterStructuredResume:
 
         assert len(resume.education) == 1
         assert resume.education[0].bullets == []
+
+    def test_a_superseded_bullet_never_reaches_the_resume(self) -> None:
+        """CQ-4: accepting a rewrite replaces the original — resolved BY ID, not by text.
+
+        Text-similarity dedup can't be trusted for this: a good rewrite deliberately reads
+        differently from the line it replaces, so guessing would leave both on the page.
+        """
+        job = _job()
+        original = Bullet(text="Ran CI")
+        polished = Bullet(
+            text="Rebuilt CI, cutting deploy failures 40%",
+            source=BulletSource.GRILLED,
+            supersedes=original.bullet_id,
+        )
+        job = job.model_copy(update={"bullets": [original, polished]})
+        state = CareerEngineState(work_timeline=[job])
+
+        bullets = master_structured_resume(state).experience[0].bullets
+
+        assert bullets == ["Rebuilt CI, cutting deploy failures 40%"]
+        assert "Ran CI" not in bullets
 
     def test_empty_when_no_validated_stories(self) -> None:
         assert master_structured_resume(CareerEngineState()).is_empty

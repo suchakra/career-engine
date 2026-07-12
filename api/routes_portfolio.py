@@ -21,11 +21,22 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Response
 from starlette.concurrency import run_in_threadpool
 
-from api.deps import get_current_user_id, get_session_service
-from api.schemas import BulletAddRequest, BulletEditRequest, HighlightRequest
+from api.deps import get_current_user_id, get_discovery_session, get_session_service
+from api.schemas import (
+    AcceptBulletsRequest,
+    BulletAddRequest,
+    BulletEditRequest,
+    CopyProposalResponse,
+    CopyProposalsResponse,
+    HighlightRequest,
+)
+from cli.app import DiscoverySession
 from config import get_settings
 from database.firestore_session import FirestoreSessionService
+from web.copywriter import accept as accept_proposal
+from web.copywriter import copywrite_entry
 from web.portfolio_store import (
+    accept_bullets,
     add_entry_bullet,
     delete_entry,
     delete_entry_bullet,
@@ -212,6 +223,103 @@ async def delete_story(
         app_name=app_name,
         user_id=user_id,
         story_id=story_id,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="No active session.")
+    return Response(status_code=204)
+
+
+# ── Copywriter (CQ-4) ─────────────────────────────────────────────────────────
+
+
+@router.post("/api/experience/{entry_id}/copywrite")
+async def copywrite(
+    entry_id: str,
+    session: DiscoverySession = Depends(get_discovery_session),
+) -> CopyProposalsResponse:
+    """Propose rewritten bullets for ONE experience (CQ-4). Nothing is persisted.
+
+    ONE model call on the caller's own key, batched across the whole entry — a call per
+    bullet would make the grill interminable (AD-18.2). The user then accepts / edits /
+    rejects each proposal; only what they accept is written back (via ``/bullets/accept``),
+    so **no unreviewed prose can reach a PDF**.
+
+    Requires a BYOK key (``get_discovery_session`` → 409 without one). An unknown entry, or a
+    model/parse failure, yields an EMPTY proposal list rather than an error: copywriting is an
+    improvement, never a dependency, and must not be able to take the portfolio down with it.
+    """
+    state = await session.current_state()
+    entry = next((e for e in state.work_timeline if str(e.entry_id) == entry_id), None)
+    if entry is None:
+        return CopyProposalsResponse(proposals=[])
+    stories = [s for s in state.extracted_star_stories if s.entry_id == entry_id]
+
+    proposals = await run_in_threadpool(
+        copywrite_entry, entry, stories, client=session.model_client
+    )
+    return CopyProposalsResponse(
+        proposals=[
+            CopyProposalResponse(source_id=p.source_id, text=p.text, original=p.original)
+            for p in proposals
+        ]
+    )
+
+
+@router.post("/api/experience/{entry_id}/bullets/accept", status_code=204)
+async def accept_copywritten_bullets(
+    entry_id: str,
+    body: AcceptBulletsRequest,
+    session_service: FirestoreSessionService = Depends(get_session_service),
+    user_id: str = Depends(get_current_user_id),
+) -> Response:
+    """Persist the rewrites the user ACCEPTED (CQ-4). No model call, no key needed.
+
+    A rewrite of an existing bullet SUPERSEDES it — the original is removed here, resolved by
+    id, so the résumé can never carry both the polished line and the one it replaced. A
+    rewrite derived from a STAR story adds a bullet the entry did not have. Rejected proposals
+    are simply absent from the request and the original is untouched.
+
+    Because the accepted text is persisted, résumé export needs **no model call at all**.
+    """
+    from uuid import UUID
+
+    from web.copywriter import Proposal
+
+    bullets = []
+    for a in body.accepted:
+        source_bullet_id: str | None = None
+        if a.source_id.startswith("bullet:"):
+            raw_id = a.source_id.split(":", 1)[1]
+            # source_id comes from the CLIENT. A malformed one must be a 422, not an
+            # unhandled ValueError out of UUID() surfacing as a 500.
+            try:
+                UUID(raw_id)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=422, detail=f"Malformed source_id: {a.source_id}"
+                ) from exc
+            source_bullet_id = raw_id
+        bullets.append(
+            accept_proposal(
+                Proposal(
+                    source_id=a.source_id,
+                    text=a.text,
+                    original="",
+                    source_bullet_id=source_bullet_id,
+                )
+            )
+        )
+
+    if not bullets:
+        return Response(status_code=204)  # nothing accepted → nothing to do
+
+    result = await run_in_threadpool(
+        accept_bullets,
+        session_service,
+        app_name=get_settings().app_name,
+        user_id=user_id,
+        entry_id=entry_id,
+        bullets=bullets,
     )
     if result is None:
         raise HTTPException(status_code=404, detail="No active session.")

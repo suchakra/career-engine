@@ -829,3 +829,86 @@ def delete_entry(
             session_service, app_name=app_name, user_id=user_id, entry_id=entry_id
         )
     )
+
+
+async def _aaccept_bullets(
+    session_service: BaseSessionService,
+    *,
+    app_name: str,
+    user_id: str,
+    entry_id: str,
+    bullets: list[Bullet],
+) -> str | None:
+    """Persist copywriter bullets the user ACCEPTED (CQ-4).
+
+    Each accepted bullet is appended with ``source="grilled"``. When it ``supersedes`` one of
+    the entry's existing bullets, that original is REMOVED here — resolved by id, so the
+    résumé can never show both the polished line and the original it replaced. (The
+    alternative, leaving both and de-duplicating at render time by text similarity, is exactly
+    the guessing game that AD-18.3 exists to end.)
+
+    Idempotent-ish: an unknown entry is a logged no-op. Returns the session_id, or ``None`` if
+    the user has no session.
+    """
+    session_id = web_session_id(user_id)
+    existing = await session_helpers.get_session_state_if_exists(
+        session_service=session_service,
+        app_name=app_name,
+        user_id=user_id,
+        session_id=session_id,
+    )
+    if existing is None:
+        return None
+
+    # Normalise provenance HERE rather than trusting every caller to remember: anything
+    # persisted through this seam is, by definition, a copywriter bullet the user accepted.
+    bullets = [b.model_copy(update={"source": BulletSource.GRILLED}) for b in bullets]
+    superseded = {str(b.supersedes) for b in bullets if b.supersedes is not None}
+    found = False
+    new_timeline: list[Entry] = []
+    for entry in existing.work_timeline:
+        if str(entry.entry_id) == entry_id:
+            kept = [b for b in entry.bullets if str(b.bullet_id) not in superseded]
+            entry = entry.model_copy(update={"bullets": [*kept, *bullets]})
+            found = True
+        new_timeline.append(entry)
+    if not found:
+        logger.warning("accept_bullets: entry %s not found", entry_id)
+        return session_id
+    await _patch_session(
+        session_service,
+        app_name=app_name,
+        user_id=user_id,
+        session_id=session_id,
+        state_delta={
+            "work_timeline": [e.model_dump(mode="json") for e in new_timeline],
+            "contract_version": CONTRACT_VERSION,
+        },
+    )
+    logger.info(
+        "accept_bullets: entry %s gained %d bullet(s), superseding %d",
+        entry_id,
+        len(bullets),
+        len(superseded),
+    )
+    return session_id
+
+
+def accept_bullets(
+    session_service: BaseSessionService,
+    *,
+    app_name: str,
+    user_id: str,
+    entry_id: str,
+    bullets: list[Bullet],
+) -> str | None:
+    """Sync bridge over :func:`_aaccept_bullets`."""
+    return run_async(
+        _aaccept_bullets(
+            session_service,
+            app_name=app_name,
+            user_id=user_id,
+            entry_id=entry_id,
+            bullets=bullets,
+        )
+    )

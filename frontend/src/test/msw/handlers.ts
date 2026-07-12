@@ -150,6 +150,18 @@ export const handlers = [
   http.post(`${BASE}/api/experience/:id/bullet`, () => new HttpResponse(null, { status: 204 })),
   http.delete(`${BASE}/api/experience/:id/bullet/:bid`, () => new HttpResponse(null, { status: 204 })),
   http.delete(`${BASE}/api/experience/:id`, () => new HttpResponse(null, { status: 204 })),
+  http.post(`${BASE}/api/experience/:id/copywrite`, () =>
+    HttpResponse.json({
+      proposals: [
+        {
+          source_id: "bullet:bullet-1",
+          text: "Cut p95 latency 40% by rebuilding the caching layer",
+          original: "Cut p95 latency 40%",
+        },
+      ],
+    }),
+  ),
+  http.post(`${BASE}/api/experience/:id/bullets/accept`, () => new HttpResponse(null, { status: 204 })),
   http.get(`${BASE}/api/key`, () => HttpResponse.json({ has_key: false })),
   http.post(`${BASE}/api/key`, () => new HttpResponse(null, { status: 204 })),
   http.delete(`${BASE}/api/key`, () => new HttpResponse(null, { status: 204 })),

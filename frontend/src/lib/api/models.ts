@@ -28,3 +28,7 @@ export type RoleBlock = Schemas["RoleBlockDTO"];
 // Applications (parity P4)
 export type ApplicationWriteRequest = Schemas["ApplicationWriteRequest"];
 export type Application = Schemas["Application"];
+
+// Copywriter (CQ-4)
+export type CopyProposalsResponse = Schemas["CopyProposalsResponse"];
+export type CopyProposalResponse = Schemas["CopyProposalResponse"];

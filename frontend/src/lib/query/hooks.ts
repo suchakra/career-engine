@@ -10,6 +10,7 @@ import {
 
 import { apiFetch } from "@/lib/api/client";
 import type {
+  CopyProposalsResponse,
   Application,
   ApplicationWriteRequest,
   DashboardResponse,
@@ -312,6 +313,45 @@ export function useAddBullet(): UseMutationResult<
       showToast("Bullet added.", "success");
     },
     onError: () => showToast("Couldn't add that bullet — try again.", "error"),
+  });
+}
+
+/**
+ * Ask the copywriter to propose rewritten bullets for ONE experience (CQ-4).
+ * One model call on the user's key, batched across the entry. Nothing is persisted —
+ * the user accepts/edits/rejects, and only what they accept is written back.
+ */
+export function useCopywrite(): UseMutationResult<CopyProposalsResponse, unknown, string> {
+  const { showToast } = useToast();
+  return useMutation({
+    mutationFn: (entryId: string) =>
+      apiFetch<CopyProposalsResponse>(`/api/experience/${entryId}/copywrite`, {
+        method: "POST",
+      }),
+    onError: () =>
+      showToast("Couldn't draft rewrites — check your key and try again.", "error"),
+  });
+}
+
+/** Persist the rewrites the user ACCEPTED (CQ-4). An accepted rewrite supersedes its original. */
+export function useAcceptBullets(): UseMutationResult<
+  void,
+  unknown,
+  { entryId: string; accepted: { source_id: string; text: string }[] }
+> {
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+  return useMutation({
+    mutationFn: ({ entryId, accepted }) =>
+      apiFetch<void>(`/api/experience/${entryId}/bullets/accept`, {
+        method: "POST",
+        body: { accepted },
+      }),
+    onSuccess: (_d, { accepted }) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.portfolio });
+      showToast(`${accepted.length} bullet${accepted.length === 1 ? "" : "s"} updated.`, "success");
+    },
+    onError: () => showToast("Couldn't save those bullets — try again.", "error"),
   });
 }
 
