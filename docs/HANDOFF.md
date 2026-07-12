@@ -40,8 +40,9 @@
 > 🔴 **BEFORE LIFTING THE DEV BLOCKADE: back up Firestore + read-only dry-run the migration** — see
 > [QA_DEPLOY_RUNBOOK.md](QA_DEPLOY_RUNBOOK.md) §"Back up Firestore before any deploy that migrates state".
 > The shared Firestore holds **real user data — including at least one portfolio that is NOT the
-> operator's.** Live state is under the doc's `session_state` key; `career_engine_state` is a stale empty
-> snapshot and will lie to you.
+> operator's.** Live state is under the doc's `session_state` key; the `career_engine_state` key is, in
+> practice, **empty on live sessions** — read that one and you will conclude a portfolio is empty when it
+> is not.
 
 > ✅ **All parity slices are on `master` and LIVE on qa** (deploy run 29194226615, green). Verified on qa:
 > `/api/health` ok; `/api/master-resume`, `/api/jobs/dismiss`, `/api/experience/{id}/bullet|grill|highlight`,
