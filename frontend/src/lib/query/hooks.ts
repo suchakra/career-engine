@@ -274,6 +274,46 @@ export function useHighlightEntry(): UseMutationResult<
   });
 }
 
+/** Edit one bullet on an experience in place (parity P5). Refreshes the portfolio. */
+export function useEditBullet(): UseMutationResult<
+  void,
+  unknown,
+  { entryId: string; bulletIndex: number; newText: string }
+> {
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+  return useMutation({
+    mutationFn: ({ entryId, bulletIndex, newText }) =>
+      apiFetch<void>(`/api/experience/${entryId}/bullet`, {
+        method: "PATCH",
+        body: { bullet_index: bulletIndex, new_text: newText },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.portfolio });
+      showToast("Bullet updated.", "success");
+    },
+    onError: () => showToast("Couldn't update that bullet — try again.", "error"),
+  });
+}
+
+/**
+ * Dismiss a company ("Not interested", parity P5): future discovery runs hard-reject it.
+ * Refreshes the jobs list, which already filters out dismissed companies server-side.
+ */
+export function useDismissCompany(): UseMutationResult<void, unknown, string> {
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+  return useMutation({
+    mutationFn: (company: string) =>
+      apiFetch<void>("/api/jobs/dismiss", { method: "POST", body: { company } }),
+    onSuccess: (_data, company) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.jobs });
+      showToast(`${company} won't be suggested again.`, "success");
+    },
+    onError: () => showToast("Couldn't dismiss that company — try again.", "error"),
+  });
+}
+
 /** Delete a STAR story (§4.4). Refreshes the portfolio on success. */
 export function useDeleteStory(): UseMutationResult<void, unknown, string> {
   const queryClient = useQueryClient();

@@ -4,10 +4,13 @@ import { ActionCard } from "@/components/ActionCard";
 import { EmptyState } from "@/components/EmptyState";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { StatusBadge, type StatusKind } from "@/components/StatusBadge";
-import { useDiscoverJobs, useJobs } from "@/lib/query/hooks";
+import { useDiscoverJobs, useDismissCompany, useJobs } from "@/lib/query/hooks";
 import type { JobCardResponse } from "@/lib/api/models";
 
 function JobTile({ job, status }: { job: JobCardResponse; status: StatusKind }): JSX.Element {
+  // "Not interested" is a HITL signal on the COMPANY (that is what the discovery ledger
+  // records), so future runs hard-reject it — not just this one posting.
+  const dismiss = useDismissCompany();
   return (
     <ActionCard
       title={`${job.title} — ${job.company}`}
@@ -17,11 +20,22 @@ function JobTile({ job, status }: { job: JobCardResponse; status: StatusKind }):
         {job.location} · {job.work_model} · {job.employment_type}
       </p>
       {job.rationale && <p className="text-sm">{job.rationale}</p>}
-      {job.url && (
-        <a href={job.url} target="_blank" rel="noreferrer" className="text-sm text-primary">
-          View posting ↗
-        </a>
-      )}
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        {job.url && (
+          <a href={job.url} target="_blank" rel="noreferrer" className="text-sm text-primary">
+            View posting ↗
+          </a>
+        )}
+        <button
+          type="button"
+          disabled={dismiss.isPending}
+          onClick={() => dismiss.mutate(job.company)}
+          title={`Stop suggesting jobs at ${job.company}`}
+          className="min-h-tap rounded-card text-sm text-muted hover:text-text disabled:opacity-50"
+        >
+          {dismiss.isPending ? "Dismissing…" : "Not interested"}
+        </button>
+      </div>
     </ActionCard>
   );
 }

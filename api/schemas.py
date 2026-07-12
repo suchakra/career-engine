@@ -354,3 +354,21 @@ class HighlightRequest(_StrictModel):
     """Request body for ``POST /api/experience/{entry_id}/highlight``."""
 
     highlighted: bool
+
+
+class BulletEditRequest(_StrictModel):
+    """Request body for ``PATCH /api/experience/{entry_id}/bullet`` (parity P5)."""
+
+    bullet_index: int = Field(ge=0)
+    new_text: str = Field(min_length=1, max_length=500)
+
+
+class DismissCompanyRequest(_StrictModel):
+    """Request body for ``POST /api/jobs/dismiss`` (parity P5).
+
+    Dismissal is by COMPANY, not by job: the discovery ledger hard-rejects the company
+    on future runs (``discovery.store.add_rejected_company``), which is what the old
+    "Not interested" affordance did.
+    """
+
+    company: str = Field(min_length=1, max_length=200)

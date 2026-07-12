@@ -1,8 +1,8 @@
-"""Protected portfolio action routes (parity P4b).
+"""Protected portfolio action routes (parity P4b / P5).
 
 Thin transport over the existing portfolio-mutation seams (``web.portfolio_store``):
-steer the grill onto an entry, pin/unpin an entry, and delete a STAR story. No new
-domain logic.
+steer the grill onto an entry, pin/unpin an entry, edit an experience bullet, and
+delete a STAR story. No new domain logic.
 
 Async / threadpool discipline (identical to ``routes_write``): endpoints are
 ``async``; the SYNC session-mutation bridges (``set_grill_frontier`` etc., which own
@@ -22,13 +22,14 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from starlette.concurrency import run_in_threadpool
 
 from api.deps import get_current_user_id, get_session_service
-from api.schemas import HighlightRequest
+from api.schemas import BulletEditRequest, HighlightRequest
 from config import get_settings
 from database.firestore_session import FirestoreSessionService
 from web.portfolio_store import (
     delete_star_story,
     set_entry_highlight,
     set_grill_frontier,
+    update_entry_bullet,
 )
 
 router = APIRouter()
@@ -73,6 +74,34 @@ async def highlight_entry(
     )
     if result is None:
         raise HTTPException(status_code=404, detail="No such entry, or no active session.")
+    return Response(status_code=204)
+
+
+@router.patch("/api/experience/{entry_id}/bullet", status_code=204)
+async def edit_bullet(
+    entry_id: str,
+    body: BulletEditRequest,
+    session_service: FirestoreSessionService = Depends(get_session_service),
+    user_id: str = Depends(get_current_user_id),
+) -> Response:
+    """Edit one existing bullet on an experience in place (parity P5).
+
+    The bridge treats a missing entry or an out-of-range ``bullet_index`` as a logged
+    no-op (it never raises), so those still return 204. The 404 fires only when the user
+    has no discovery session at all (bridge returns ``None``).
+    """
+    app_name = get_settings().app_name
+    result = await run_in_threadpool(
+        update_entry_bullet,
+        session_service,
+        app_name=app_name,
+        user_id=user_id,
+        entry_id=entry_id,
+        bullet_index=body.bullet_index,
+        new_text=body.new_text,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="No active session.")
     return Response(status_code=204)
 
 

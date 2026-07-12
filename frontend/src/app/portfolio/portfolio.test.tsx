@@ -52,6 +52,36 @@ describe("Portfolio actions (parity P4b)", () => {
     await waitFor(() => expect(body).toEqual({ highlighted: false }));
   });
 
+  it("edits an experience bullet in place (P5)", async () => {
+    let patched: { id: string; body: Record<string, unknown> } | null = null;
+    server.use(
+      http.patch(`${BASE}/api/experience/:id/bullet`, async ({ params, request }) => {
+        patched = {
+          id: String(params.id),
+          body: (await request.json()) as Record<string, unknown>,
+        };
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderWithProviders(<PortfolioContent />);
+
+    // The fixture entry has one bullet: "Cut p95 latency 40%".
+    await user.click(await screen.findByRole("button", { name: /edit bullet: cut p95/i }));
+    const input = screen.getByLabelText("Bullet 1");
+    await user.clear(input);
+    await user.type(input, "Cut p99 latency 60%");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(patched).toEqual({
+        id: "entry-1",
+        body: { bullet_index: 0, new_text: "Cut p99 latency 60%" },
+      }),
+    );
+  });
+
   it("deletes a STAR story", async () => {
     let deleted: string | null = null;
     server.use(

@@ -54,6 +54,9 @@ class _FakeVault:
 
 
 class _FakeLedgerStore:
+    def __init__(self) -> None:
+        self.dismissed: list[tuple[str, str]] = []
+
     def load_ledger(self, user_id: str) -> InteractionLedger:
         return InteractionLedger()
 
@@ -62,6 +65,9 @@ class _FakeLedgerStore:
 
     def record_accepted(self, user_id: str, jobs: list[Any]) -> int:
         return 0
+
+    def add_rejected_company(self, user_id: str, company: str) -> None:
+        self.dismissed.append((user_id, company))
 
 
 @pytest.fixture
@@ -106,3 +112,51 @@ def test_discover_requires_a_byok_key(client: TestClient) -> None:
 
 def test_discover_requires_auth(client: TestClient) -> None:
     assert client.post("/api/jobs/discover").status_code == 401
+
+
+# ── POST /api/jobs/dismiss — "Not interested" (parity P5) ─────────────────────
+
+
+def test_dismiss_records_the_company_in_the_ledger(client: TestClient) -> None:
+    """204, and the company is written to the ledger for the CALLING user."""
+    ledger = _FakeLedgerStore()
+    app.dependency_overrides[get_ledger_store] = lambda: ledger
+
+    resp = client.post(
+        "/api/jobs/dismiss", json={"company": "Initech"}, headers=_auth_headers()
+    )
+
+    assert resp.status_code == 204
+    assert ledger.dismissed == [("user-123", "Initech")]
+
+
+def test_dismiss_needs_no_byok_key(client: TestClient) -> None:
+    """A ledger write consumes no model quota, so a keyless caller still succeeds."""
+    app.dependency_overrides[get_key_vault] = lambda: _FakeVault(has=False)
+    resp = client.post(
+        "/api/jobs/dismiss", json={"company": "Initech"}, headers=_auth_headers()
+    )
+    assert resp.status_code == 204
+
+
+def test_dismiss_surfaces_a_ledger_fault_as_502(client: TestClient) -> None:
+    """A store fault must not be reported to the UI as a successful dismissal."""
+
+    class _BrokenLedger(_FakeLedgerStore):
+        def add_rejected_company(self, user_id: str, company: str) -> None:
+            raise RuntimeError("firestore unavailable")
+
+    app.dependency_overrides[get_ledger_store] = lambda: _BrokenLedger()
+    resp = client.post(
+        "/api/jobs/dismiss", json={"company": "Initech"}, headers=_auth_headers()
+    )
+    assert resp.status_code == 502
+
+
+def test_dismiss_rejects_an_empty_company(client: TestClient) -> None:
+    resp = client.post("/api/jobs/dismiss", json={"company": ""}, headers=_auth_headers())
+    assert resp.status_code == 422
+
+
+def test_dismiss_requires_auth(client: TestClient) -> None:
+    assert client.post("/api/jobs/dismiss", json={"company": "Initech"}).status_code == 401
