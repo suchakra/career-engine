@@ -173,6 +173,22 @@ export const handlers = [
       education: [],
     }),
   ),
+  http.post(`${BASE}/api/master-resume`, () =>
+    HttpResponse.json({
+      contact: { name: "Jane Doe", email: "jane@example.com", phone: "", location: "Berlin", links: [] },
+      summary: "Staff engineer.",
+      skills: [], // skills are JD-aligned in the tailored pass only
+      experience: [
+        {
+          title: "Senior Engineer",
+          org: "Acme",
+          dates: "2022–now",
+          bullets: ["Cut p95 latency 40%", "Shipped billing v2"],
+        },
+      ],
+      education: [{ title: "BSc Computer Science", org: "MIT", dates: "2016–2020", bullets: [] }],
+    }),
+  ),
   http.post(`${BASE}/api/resume/:fmt`, () =>
     HttpResponse.text("JANE DOE\nSummary…", {
       headers: { "Content-Type": "text/markdown" },

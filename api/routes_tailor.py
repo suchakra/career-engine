@@ -8,6 +8,11 @@ Presentation/transport over the existing deterministic résumé assembly + rende
   writes a tailored summary + JD-aligned skills; returns the ``StructuredResume`` for
   preview. Instructions travel in the *user* prompt (injection-safe, per 9I) and are
   never persisted.
+- ``POST /api/master-resume`` — assemble the caller's MASTER résumé (every validated
+  achievement, no JD tailoring). Deterministic: no model call, so *no BYOK key is
+  required* — it only needs the caller's discovery state. Returns the same
+  ``StructuredResume`` shape as ``/api/tailor``, so the client exports it through the
+  same ``POST /api/resume/{fmt}`` renderer.
 - ``POST /api/resume/{fmt}`` — render a ``StructuredResume`` (from the request body) to
   PDF / DOCX / Markdown bytes via the existing renderers. Stateless: no model call, no
   persistence. The domain renders a résumé object in one shot and only persists a
@@ -23,6 +28,7 @@ threadpool so the event loop never blocks.
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Response
@@ -30,14 +36,17 @@ from fastapi.responses import PlainTextResponse
 from starlette.concurrency import run_in_threadpool
 
 import workflows.nodes as _nodes
-from api.deps import get_current_user_id, get_discovery_session
+from api.deps import get_current_user_id, get_discovery_session, get_session_service
 from api.schemas import StructuredResumeDTO, TailorRequest
 from cli.app import DiscoverySession
+from config import get_settings
+from database.firestore_session import FirestoreSessionService
 from schema import CareerEngineState
 from web.resume_builder import (
     Contact,
     RoleBlock,
     StructuredResume,
+    master_structured_resume,
     tailor_structured_resume,
 )
 from web.resume_render import (
@@ -45,6 +54,7 @@ from web.resume_render import (
     structured_to_markdown,
     structured_to_pdf_bytes,
 )
+from web.session_loader import atry_load_latest_discovery_state
 
 router = APIRouter()
 
@@ -108,6 +118,31 @@ async def tailor(
         client=session.model_client,
         instructions=body.instructions,
     )
+    return StructuredResumeDTO.model_validate(asdict(resume))
+
+
+@router.post("/api/master-resume")
+async def master_resume(
+    user_id: str = Depends(get_current_user_id),
+    session_service: FirestoreSessionService = Depends(get_session_service),
+) -> StructuredResumeDTO:
+    """Assemble the caller's MASTER résumé — every validated achievement, no tailoring.
+
+    Requires a valid bearer token but NOT a BYOK key: the assembly is deterministic
+    (``web.resume_builder.master_structured_resume`` — no model call), so it must not be
+    gated behind ``get_discovery_session``. A missing discovery session degrades to an
+    empty résumé rather than an error, exactly like ``GET /api/portfolio``.
+
+    Returned for preview/export; not persisted (the client exports it via
+    ``POST /api/resume/{fmt}``).
+    """
+    state = await atry_load_latest_discovery_state(
+        session_service,
+        app_name=get_settings().app_name,
+        user_id=user_id,
+        reference_date=date.today().isoformat(),
+    )
+    resume = await run_in_threadpool(master_structured_resume, state)
     return StructuredResumeDTO.model_validate(asdict(resume))
 
 

@@ -2,31 +2,11 @@
 
 import { useCallback, useState } from "react";
 
-import { apiFetch, apiFetchBlob } from "@/lib/api/client";
+import { apiFetch } from "@/lib/api/client";
 import type { StructuredResume, TailorRequest } from "@/lib/api/models";
+import { downloadResume, FORMAT_LABEL, type ExportFormat } from "@/lib/tailor/resumeExport";
 
-export type ExportFormat = "pdf" | "docx" | "md";
-
-/** User-facing labels (avoid showing raw "MD"). */
-const FORMAT_LABEL: Record<ExportFormat, string> = {
-  pdf: "PDF",
-  docx: "Word",
-  md: "Markdown",
-};
-
-/** Trigger a browser download of a blob (separated so the fetch stays testable). */
-function triggerDownload(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  // Revoke on a later tick so the download has started (revoking synchronously can
-  // invalidate the blob URL before the browser reads it).
-  setTimeout(() => URL.revokeObjectURL(url), 0);
-}
+export type { ExportFormat };
 
 export interface TailorController {
   resume: StructuredResume | null;
@@ -39,8 +19,8 @@ export interface TailorController {
 
 /**
  * Tailor turn controller: `POST /api/tailor` → a `StructuredResume` for preview,
- * then `POST /api/resume/{fmt}` → download the rendered bytes. Export is a stateless
- * POST-render RPC (the resume the server returned is passed back), matching the API.
+ * then `POST /api/resume/{fmt}` → download the rendered bytes (see
+ * {@link downloadResume}, shared with the master résumé).
  */
 export function useTailor(): TailorController {
   const [resume, setResume] = useState<StructuredResume | null>(null);
@@ -70,8 +50,7 @@ export function useTailor(): TailorController {
       setExporting(fmt);
       setError(null);
       try {
-        const blob = await apiFetchBlob(`/api/resume/${fmt}`, { method: "POST", body: resume });
-        triggerDownload(blob, `resume.${fmt}`);
+        await downloadResume(resume, fmt);
       } catch {
         setError(`Couldn't export ${FORMAT_LABEL[fmt]} — try again.`);
       } finally {
