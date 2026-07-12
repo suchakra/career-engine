@@ -11,6 +11,8 @@ import { ResumePreview } from "@/components/ResumePreview";
 import { StatusBadge, type StatusKind } from "@/components/StatusBadge";
 import {
   useAddBullet,
+  useDeleteBullet,
+  useDeleteEntry,
   useDeleteStory,
   useEditBullet,
   useGrillEntry,
@@ -47,6 +49,7 @@ function EditableBullet({
   text: string;
 }): JSX.Element {
   const edit = useEditBullet();
+  const remove = useDeleteBullet();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(text);
 
@@ -57,17 +60,28 @@ function EditableBullet({
       <li>
         <div className="flex items-start justify-between gap-2">
           <span>{text}</span>
-          <button
-            type="button"
-            aria-label={`Edit bullet: ${text}`}
-            onClick={() => {
-              setDraft(text);
-              setEditing(true);
-            }}
-            className="shrink-0 text-xs text-muted hover:text-text"
-          >
-            Edit
-          </button>
+          <span className="flex shrink-0 gap-2">
+            <button
+              type="button"
+              aria-label={`Edit bullet: ${text}`}
+              onClick={() => {
+                setDraft(text);
+                setEditing(true);
+              }}
+              className="text-xs text-muted hover:text-text"
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              aria-label={`Delete bullet: ${text}`}
+              disabled={remove.isPending}
+              onClick={() => remove.mutate({ entryId, bulletId })}
+              className="text-xs text-muted hover:text-text disabled:opacity-50"
+            >
+              Delete
+            </button>
+          </span>
         </div>
       </li>
     );
@@ -185,6 +199,8 @@ function EntryCard({ entry }: { entry: EntryCardResponse }): JSX.Element {
   const grill = useGrillEntry();
   const highlight = useHighlightEntry();
   const deleteStory = useDeleteStory();
+  const deleteEntry = useDeleteEntry();
+  const [confirming, setConfirming] = useState(false);
 
   return (
     <ActionCard
@@ -256,6 +272,39 @@ function EntryCard({ entry }: { entry: EntryCardResponse }): JSX.Element {
         >
           {entry.highlighted ? "★ Pinned" : "☆ Pin"}
         </PrimaryButton>
+        {/* Deleting an experience CASCADES to its STAR stories on the server, so it
+            destroys grilled work — it gets a confirm step, unlike the other actions. */}
+        {confirming ? (
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted">
+              Delete this experience and its {entry.story_count} STAR{" "}
+              {entry.story_count === 1 ? "story" : "stories"}?
+            </span>
+            <PrimaryButton
+              variant="secondary"
+              disabled={deleteEntry.isPending}
+              onClick={() => deleteEntry.mutate(entry.entry_id)}
+            >
+              {deleteEntry.isPending ? "Deleting…" : "Yes, delete"}
+            </PrimaryButton>
+            <button
+              type="button"
+              onClick={() => setConfirming(false)}
+              className="text-xs text-muted hover:text-text"
+            >
+              Cancel
+            </button>
+          </span>
+        ) : (
+          <button
+            type="button"
+            aria-label={`Delete experience: ${entry.title}`}
+            onClick={() => setConfirming(true)}
+            className="min-h-tap text-xs text-muted hover:text-text"
+          >
+            Delete experience
+          </button>
+        )}
       </div>
     </ActionCard>
   );

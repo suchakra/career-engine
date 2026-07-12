@@ -107,6 +107,44 @@ describe("Portfolio actions (parity P4b)", () => {
     );
   });
 
+  it("deletes a bullet by id (CQ-3)", async () => {
+    let deleted: { id: string; bid: string } | null = null;
+    server.use(
+      http.delete(`${BASE}/api/experience/:id/bullet/:bid`, ({ params }) => {
+        deleted = { id: String(params.id), bid: String(params.bid) };
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderWithProviders(<PortfolioContent />);
+    await user.click(await screen.findByRole("button", { name: /delete bullet: cut p95/i }));
+
+    await waitFor(() => expect(deleted).toEqual({ id: "entry-1", bid: "bullet-1" }));
+  });
+
+  it("deletes a whole experience, but only after confirming (it cascades)", async () => {
+    let deletedEntry: string | null = null;
+    server.use(
+      http.delete(`${BASE}/api/experience/:id`, ({ params }) => {
+        deletedEntry = String(params.id);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderWithProviders(<PortfolioContent />);
+
+    // First click only ARMS the confirm — deleting an experience destroys its STAR
+    // stories server-side, so it must not fire on a single stray click.
+    await user.click(await screen.findByRole("button", { name: /delete experience/i }));
+    expect(deletedEntry).toBeNull();
+    expect(screen.getByText(/delete this experience and its 1 star story\?/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /yes, delete/i }));
+    await waitFor(() => expect(deletedEntry).toBe("entry-1"));
+  });
+
   it("deletes a STAR story", async () => {
     let deleted: string | null = null;
     server.use(

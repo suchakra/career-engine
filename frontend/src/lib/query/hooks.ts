@@ -315,6 +315,44 @@ export function useAddBullet(): UseMutationResult<
   });
 }
 
+/** Delete one bullet from an experience (CQ-3). Refreshes the portfolio. */
+export function useDeleteBullet(): UseMutationResult<
+  void,
+  unknown,
+  { entryId: string; bulletId: string }
+> {
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+  return useMutation({
+    mutationFn: ({ entryId, bulletId }) =>
+      apiFetch<void>(`/api/experience/${entryId}/bullet/${bulletId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.portfolio });
+      showToast("Bullet deleted.", "success");
+    },
+    onError: () => showToast("Couldn't delete that bullet — try again.", "error"),
+  });
+}
+
+/**
+ * Delete a whole experience (CQ-3). The server CASCADES to its STAR stories, so this
+ * also removes the grilled work attached to that role — hence the confirm in the UI.
+ */
+export function useDeleteEntry(): UseMutationResult<void, unknown, string> {
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+  return useMutation({
+    mutationFn: (entryId: string) =>
+      apiFetch<void>(`/api/experience/${entryId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.portfolio });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+      showToast("Experience deleted.", "success");
+    },
+    onError: () => showToast("Couldn't delete that experience — try again.", "error"),
+  });
+}
+
 /** Edit one bullet on an experience in place (parity P5). Refreshes the portfolio. */
 export function useEditBullet(): UseMutationResult<
   void,

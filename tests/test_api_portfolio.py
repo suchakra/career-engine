@@ -317,3 +317,61 @@ def test_delete_story_404_when_no_session(
 def test_delete_story_401_without_token(client: TestClient) -> None:
     """Protected: no bearer token → 401."""
     assert client.delete("/api/story/s1").status_code == 401
+
+
+# ── DELETE bullet / entry (CQ-3) ──────────────────────────────────────────────
+
+
+def test_remove_bullet_204(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Happy path: forwards user_id, entry_id and bullet_id to the bridge."""
+    calls: dict[str, Any] = {}
+
+    def _fake(
+        session_service: Any, *, app_name: str, user_id: str, entry_id: str, bullet_id: str
+    ) -> str:
+        calls.update(user_id=user_id, entry_id=entry_id, bullet_id=bullet_id)
+        return entry_id
+
+    monkeypatch.setattr(routes_portfolio, "delete_entry_bullet", _fake)
+    resp = client.delete("/api/experience/e5/bullet/b-9", headers=_auth_headers())
+
+    assert resp.status_code == 204
+    assert calls == {"user_id": _USER_ID, "entry_id": "e5", "bullet_id": "b-9"}
+
+
+def test_remove_bullet_404_when_no_session(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(routes_portfolio, "delete_entry_bullet", lambda *a, **k: None)
+    resp = client.delete("/api/experience/e5/bullet/b-9", headers=_auth_headers())
+    assert resp.status_code == 404
+
+
+def test_remove_bullet_401_without_token(client: TestClient) -> None:
+    assert client.delete("/api/experience/e5/bullet/b-9").status_code == 401
+
+
+def test_remove_entry_204(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Happy path: forwards user_id + entry_id (the store cascades to its stories)."""
+    calls: dict[str, Any] = {}
+
+    def _fake(session_service: Any, *, app_name: str, user_id: str, entry_id: str) -> str:
+        calls.update(user_id=user_id, entry_id=entry_id)
+        return entry_id
+
+    monkeypatch.setattr(routes_portfolio, "delete_entry", _fake)
+    resp = client.delete("/api/experience/e5", headers=_auth_headers())
+
+    assert resp.status_code == 204
+    assert calls == {"user_id": _USER_ID, "entry_id": "e5"}
+
+
+def test_remove_entry_404_when_no_session(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(routes_portfolio, "delete_entry", lambda *a, **k: None)
+    assert client.delete("/api/experience/e5", headers=_auth_headers()).status_code == 404
+
+
+def test_remove_entry_401_without_token(client: TestClient) -> None:
+    assert client.delete("/api/experience/e5").status_code == 401

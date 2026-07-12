@@ -517,6 +517,60 @@ export interface paths {
         patch: operations["edit_bullet_api_experience__entry_id__bullet_patch"];
         trace?: never;
     };
+    "/api/experience/{entry_id}/bullet/{bullet_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Bullet
+         * @description Delete one bullet from an experience (CQ-3).
+         *
+         *     The store could replace a bullet and append one, but never remove one — edit-only is
+         *     half a tool, and it matters more now that a résumé re-upload can merge in lines the
+         *     user does not want. Idempotent: an unknown entry or bullet is a no-op (204). The 404
+         *     fires only when the user has no discovery session at all.
+         */
+        delete: operations["remove_bullet_api_experience__entry_id__bullet__bullet_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/experience/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Entry
+         * @description Delete an experience AND every STAR story linked to it (CQ-3).
+         *
+         *     The cascade is deliberate: leaving the stories behind would orphan them against an
+         *     ``entry_id`` that no longer exists — they would still count toward the portfolio
+         *     meter and could still be selected onto a résumé under a role the user just removed.
+         *     If the deleted entry was the grill frontier, the frontier is cleared so the next turn
+         *     is not aimed at an experience that is gone.
+         *
+         *     Idempotent: an unknown entry is a no-op (204). The 404 fires only when there is no
+         *     session at all.
+         */
+        delete: operations["remove_entry_api_experience__entry_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/story/{story_id}": {
         parameters: {
             query?: never;
@@ -2109,6 +2163,69 @@ export interface operations {
                 "application/json": components["schemas"]["BulletEditRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_bullet_api_experience__entry_id__bullet__bullet_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                entry_id: string;
+                bullet_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_entry_api_experience__entry_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             204: {

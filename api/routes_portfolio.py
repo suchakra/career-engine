@@ -27,6 +27,8 @@ from config import get_settings
 from database.firestore_session import FirestoreSessionService
 from web.portfolio_store import (
     add_entry_bullet,
+    delete_entry,
+    delete_entry_bullet,
     delete_star_story,
     set_entry_highlight,
     set_grill_frontier,
@@ -128,6 +130,64 @@ async def edit_bullet(
         entry_id=entry_id,
         bullet_id=body.bullet_id,
         new_text=body.new_text,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="No active session.")
+    return Response(status_code=204)
+
+
+@router.delete("/api/experience/{entry_id}/bullet/{bullet_id}", status_code=204)
+async def remove_bullet(
+    entry_id: str,
+    bullet_id: str,
+    session_service: FirestoreSessionService = Depends(get_session_service),
+    user_id: str = Depends(get_current_user_id),
+) -> Response:
+    """Delete one bullet from an experience (CQ-3).
+
+    The store could replace a bullet and append one, but never remove one — edit-only is
+    half a tool, and it matters more now that a résumé re-upload can merge in lines the
+    user does not want. Idempotent: an unknown entry or bullet is a no-op (204). The 404
+    fires only when the user has no discovery session at all.
+    """
+    app_name = get_settings().app_name
+    result = await run_in_threadpool(
+        delete_entry_bullet,
+        session_service,
+        app_name=app_name,
+        user_id=user_id,
+        entry_id=entry_id,
+        bullet_id=bullet_id,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="No active session.")
+    return Response(status_code=204)
+
+
+@router.delete("/api/experience/{entry_id}", status_code=204)
+async def remove_entry(
+    entry_id: str,
+    session_service: FirestoreSessionService = Depends(get_session_service),
+    user_id: str = Depends(get_current_user_id),
+) -> Response:
+    """Delete an experience AND every STAR story linked to it (CQ-3).
+
+    The cascade is deliberate: leaving the stories behind would orphan them against an
+    ``entry_id`` that no longer exists — they would still count toward the portfolio
+    meter and could still be selected onto a résumé under a role the user just removed.
+    If the deleted entry was the grill frontier, the frontier is cleared so the next turn
+    is not aimed at an experience that is gone.
+
+    Idempotent: an unknown entry is a no-op (204). The 404 fires only when there is no
+    session at all.
+    """
+    app_name = get_settings().app_name
+    result = await run_in_threadpool(
+        delete_entry,
+        session_service,
+        app_name=app_name,
+        user_id=user_id,
+        entry_id=entry_id,
     )
     if result is None:
         raise HTTPException(status_code=404, detail="No active session.")

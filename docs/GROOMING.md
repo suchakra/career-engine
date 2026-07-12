@@ -151,3 +151,29 @@ a bullet but cannot tell you what happened to it.
 **Acceptance:** an edit marked "this résumé only" never changes `work_timeline`; an edit marked "overwrite"
 sets `supersedes` and the superseded line disappears from the master résumé; an edit marked "new variant"
 leaves the original in place and both are available to the tailor.
+
+## Cleanups (non-blocking, do when convenient)
+
+### ⬜ CLEAN-1 — Rename the async store functions: `a<name>` → `<name>_async`
+The store's async functions are named by **prepending `a`**: `aadd_manual_entry`,
+`aset_grill_frontier`, `aset_entry_highlight`, `adelete_star_story`, `aupdate_entry_bullet`,
+`aadd_entry_bullet`, `amerge_parsed_entries`, `adelete_entry`, `adelete_entry_bullet`, plus
+`atry_load_latest_discovery_state` in `web/session_loader.py` and the private `_a…` cores.
+
+**Why it's a problem:** the prefix reads as part of the word. `amerge` looks like a verb in its
+own right, and Sumanta had to ask what it meant — which is the tell. `aset`, `adelete` and
+`aupdate` are equally opaque to anyone who hasn't been told the convention.
+
+**Change:** rename to a **`_async` suffix** — `merge_parsed_entries_async`, `set_grill_frontier_async`,
+`delete_star_story_async`, etc. Rename the private cores to match (`_merge_parsed_entries_async`).
+Mechanical, no behaviour change, no contract change.
+
+**Care required:**
+- The sync bridges share the base name (`set_grill_frontier` sync vs `aset_grill_frontier` async).
+  After the rename the pair becomes `set_grill_frontier` / `set_grill_frontier_async` — check no
+  collision is introduced.
+- `api/routes_portfolio.py` monkeypatches these by name in tests (`monkeypatch.setattr(routes_portfolio,
+  "delete_star_story", ...)`) — the tests patch the SYNC names, so they should be unaffected, but verify.
+- Run the full gate: `make check` (ruff + mypy --strict + pytest) **and** `make frontend-check`. Do not
+  trust a find-and-replace; ruff's import sorting and unused-import rules will flag stragglers, and
+  mypy --strict will catch a missed call site.
