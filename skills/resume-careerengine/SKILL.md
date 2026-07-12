@@ -34,7 +34,8 @@ anything new.**
     `gh api graphql -f query='{ repository(owner:"{owner}", name:"{repo}") { pullRequest(number:{N}) { reviewThreads(first:30) { nodes { id isResolved path } } } } }'`
   - Resolve: `gh api graphql -f query='mutation { resolveReviewThread(input:{threadId:"{thread_id}"}) { thread { isResolved } } }'`
 - **Merging + deploying qa is authorized** without asking, *provided* Copilot reviewed first.
-  `gh pr edit N --add-reviewer copilot-pull-request-reviewer`, then wait.
+  `gh pr edit {N} --add-reviewer copilot-pull-request-reviewer`, then wait. (`{N}` = the PR number;
+  `{owner}`/`{repo}` = the repo you are in — substitute them, don't run them literally.)
 - **`dev` is BLOCKADED.** Never deploy there without an explicit go-ahead
   (`-f confirm_dev_cutover=true`). It is Kaggle-visible and holds real user data.
 - **Any deploy that migrates persisted state** requires the backup + read-only dry-run in
