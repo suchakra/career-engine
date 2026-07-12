@@ -114,6 +114,37 @@ class TestMasterStructuredResume:
 
         assert resume.experience == []
 
+    def test_a_grilled_line_is_not_listed_twice_when_reworded(self) -> None:
+        """Containment dedup: the grilled result subsumes the original résumé line.
+
+        Regression: dedup was an EXACT compare, but a story bullet is the grilled
+        `story.result` while an entry bullet is the user's original wording — they are
+        almost never byte-identical, so the same achievement was emitted twice and the
+        master résumé got MORE repetitive the more the user grilled.
+        """
+        job = _job()
+        job = job.model_copy(update={"bullets": ["Rebuilt CI", "Mentored four engineers"]})
+        state = CareerEngineState(
+            work_timeline=[job],
+            # The grilled result quotes the original line and adds the metric.
+            extracted_star_stories=[_story(job, "Rebuilt CI, cutting failures 40%")],
+        )
+
+        bullets = master_structured_resume(state).experience[0].bullets
+
+        assert bullets == ["Rebuilt CI, cutting failures 40%", "Mentored four engineers"]
+
+    def test_education_keeps_a_clean_degree_line(self) -> None:
+        """Raw entry bullets must NOT spill into the education section."""
+        edu = _edu()
+        edu = edu.model_copy(update={"bullets": ["Coursework: compilers", "Dean's list"]})
+        state = CareerEngineState(work_timeline=[edu])
+
+        resume = master_structured_resume(state)
+
+        assert len(resume.education) == 1
+        assert resume.education[0].bullets == []
+
     def test_empty_when_no_validated_stories(self) -> None:
         assert master_structured_resume(CareerEngineState()).is_empty
 

@@ -128,7 +128,14 @@ async def _aset_grill_frontier(
     user_id: str,
     entry_id: str,
 ) -> str | None:
-    """Pin grill_frontier to entry_id on the canonical session; None if no session."""
+    """Pin grill_frontier to entry_id on the canonical session; None if no session.
+
+    Also CLEARS ``current_question``. The frontier only takes effect on the next turn, so
+    leaving the previous question persisted meant "Grill me about this" pinned entry B
+    and then re-asked the user the pending question about entry A — the feature looked
+    broken. An empty ``current_question`` is the client's signal to run a fresh turn,
+    which the router then aims at the pinned entry.
+    """
     session_id = web_session_id(user_id)
     existing = await session_helpers.get_session_state_if_exists(
         session_service=session_service,
@@ -143,7 +150,7 @@ async def _aset_grill_frontier(
         app_name=app_name,
         user_id=user_id,
         session_id=session_id,
-        state_delta={"grill_frontier": entry_id},
+        state_delta={"grill_frontier": entry_id, "current_question": ""},
     )
     return session_id
 

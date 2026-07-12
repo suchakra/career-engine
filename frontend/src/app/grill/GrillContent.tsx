@@ -23,6 +23,15 @@ export function GrillContent(): JSX.Element {
   // user clicked "Grill me about this" in the Portfolio.
   const notStarted = grill.hasSession === false;
 
+  // A failed status read must NOT fall through to the start card: starting a grill
+  // creates the session (last-write-wins), so offering it here would let a transient
+  // read error destroy a portfolio we merely failed to load.
+  if (grill.statusFailed) {
+    return (
+      <InlineError message="Couldn't load your grill — reload the page to try again. Your work is safe." />
+    );
+  }
+
   if (grill.hasSession === null) {
     return <p className="text-sm text-muted">Loading your grill…</p>;
   }

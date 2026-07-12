@@ -136,6 +136,33 @@ class TestSetGrillFrontier:
         assert sid is not None
         assert _read_latest(service).grill_frontier == str(entry.entry_id)
 
+    def test_clears_the_stale_pending_question(self) -> None:
+        """Pinning a NEW entry must drop the question still pending about the old one.
+
+        Regression: the frontier only takes effect on the next turn, so leaving
+        ``current_question`` in place meant "Grill me about this" pinned entry B and then
+        re-asked the user the pending question about entry A. An empty
+        ``current_question`` is the client's signal to run a fresh turn.
+        """
+        service = _service()
+        entry = Entry(type=ExperienceType.PROJECT, title="Billing rewrite")
+        _seed(
+            service,
+            CareerEngineState(
+                reference_date=_REF,
+                work_timeline=[entry],
+                current_question="What did the OTHER entry save you?",
+            ),
+        )
+
+        set_grill_frontier(
+            service, app_name=_APP, user_id=_UID, entry_id=str(entry.entry_id)
+        )
+
+        state = _read_latest(service)
+        assert state.grill_frontier == str(entry.entry_id)
+        assert state.current_question == ""
+
     def test_returns_none_when_no_session(self) -> None:
         service = _service()
         result = set_grill_frontier(
