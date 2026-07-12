@@ -907,14 +907,21 @@ Without bullet identity (AD-18.3) only option 1 is even expressible — which is
 edit a bullet but cannot tell the user what became of it.
 
 ### 18.5 Decision — AD-18.3: bullets need IDENTITY (contract v2.9.0, the prerequisite)
-`Entry.bullets` is a `list[str]`. Everything above is blocked on that:
-- Edits are addressed by **array index** (`PATCH /api/experience/{id}/bullet` takes `bullet_index`), which
-  shifts under any concurrent insert/delete.
-- There is no way to say *"this reworded line supersedes that original one"*, so the user cannot be offered
-  the overwrite-vs-keep-both choice — and "keep both" would silently reproduce the duplicate-content bug
-  fixed in `_merge_entry_bullets` (PR #86).
-- The résumé **merge/dedup** work (a second upload currently clobbers the first — see HANDOFF) must union
-  bullets on a matched entry, and has nothing stable to dedup *by*.
+> **SHIPPED** in CQ-1 (PR #87). The problem statement below is kept in the past tense as the rationale
+> for the decision; the current shape is `Entry.bullets: list[Bullet]`.
+
+`Entry.bullets` **was** a `list[str]`, and everything above was blocked on that:
+- Edits **were** addressed by **array index**, which shifts under any concurrent insert/delete — so a slow
+  client could edit the wrong line. (`PATCH /api/experience/{id}/bullet` now takes a `bullet_id`.)
+- There **was** no way to say *"this reworded line supersedes that original one"*, so the user could not be
+  offered the overwrite-vs-keep-both choice — and "keep both" would silently reproduce the duplicate-content
+  bug fixed in `_merge_entry_bullets` (PR #86).
+- The résumé **merge/dedup** work (a second upload still clobbers the first — see HANDOFF, CQ-2) must union
+  bullets on a matched entry, and had nothing stable to dedup *by*.
+
+**Shape as shipped:** `Bullet(bullet_id: UUID, text: str, source: parsed|user|grilled, supersedes: UUID|None)`.
+The migration is **read-time** — a `field_validator(mode="before")` coerces a legacy `list[str]`, so existing
+sessions load transparently and re-persist in the new shape on their next write. No batch rewrite.
 
 So `list[str]` → `list[Bullet]` with a stable `bullet_id`, `text`, `source` (`parsed` | `user` | `grilled`)
 and `supersedes`. This is a **breaking shape change to persisted state**: version-gate to **contract

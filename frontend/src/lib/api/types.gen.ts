@@ -499,11 +499,13 @@ export interface paths {
         head?: never;
         /**
          * Edit Bullet
-         * @description Edit one existing bullet on an experience in place (parity P5).
+         * @description Edit one existing bullet on an experience in place.
          *
-         *     The bridge treats a missing entry or an out-of-range ``bullet_index`` as a logged
-         *     no-op (it never raises), so those still return 204. The 404 fires only when the user
-         *     has no discovery session at all (bridge returns ``None``).
+         *     The bullet is addressed by its stable ``bullet_id`` (v2.9.0), never by array index —
+         *     an index shifts under any concurrent insert or delete, so a slow client could edit
+         *     the wrong line. The bridge treats a missing entry or an UNKNOWN ``bullet_id`` as a
+         *     logged no-op (it never raises), so those still return 204. The 404 fires only when
+         *     the user has no discovery session at all (bridge returns ``None``).
          */
         patch: operations["edit_bullet_api_experience__entry_id__bullet_patch"];
         trace?: never;

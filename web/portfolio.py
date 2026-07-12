@@ -1,20 +1,20 @@
-"""Portfolio view-model + injectable renderer (Phase 4B).
+"""Portfolio view-model builders (Phase 4B; the Streamlit renderers went with the cutover).
 
 A read-only mirror of what the discovery loop has recorded about the user: the
 ``work_timeline`` as an experience list, each entry showing its status and the
 STAR stories grilled out of it (linked by ``StarStory.entry_id``). Reads the
 persisted ``CareerEngineState`` only — no workflow logic, no contract change.
 
-Same two-layer, UI-logic-only pattern as :mod:`web.dashboard`:
-- :func:`stories_by_entry` / :func:`build_portfolio_view` — PURE, testable
-  without a Streamlit runtime.
+Pure view-model builders only (:func:`stories_by_entry` / :func:`build_portfolio_view` /
+:func:`build_profile_view`): they read state and return display-ready dataclasses. There is
+no rendering layer left in this module — the Streamlit renderers that used to pair with them
+went out with the rest of Streamlit, and the Next.js client consumes these view models over
+the API instead.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
 
 from schema import CareerEngineState, Entry, StarStory, UserProfile
 
@@ -159,89 +159,6 @@ def build_profile_view(profile: UserProfile) -> ProfileView:
     )
 
 
-def render_profile_section(
-    view: ProfileView,
-    *,
-    on_save: Callable[[UserProfile], None],
-    st: Any,
-) -> None:
-    """Render an editable Profile section inside a collapsed expander.
-
-    Args:
-        view: Display-ready profile data from :func:`build_profile_view`.
-        on_save: Callback invoked with the updated :class:`~schema.UserProfile`
-            whenever the user saves, adds a link, or removes a link.
-        st: A Streamlit-like module (real ``streamlit`` or a test double).
-    """
-    with st.expander("Profile", expanded=False):
-        st.subheader("Profile")
-
-        # Row 1: name + email
-        col1, col2 = st.columns(2)
-        name_val = col1.text_input("Name", value=view.name, key="profile_name")
-        email_val = col2.text_input("Email", value=view.email, key="profile_email")
-
-        # Row 2: phone + location
-        col3, col4 = st.columns(2)
-        phone_val = col3.text_input("Phone", value=view.phone, key="profile_phone")
-        location_val = col4.text_input("Location", value=view.location, key="profile_location")
-
-        # Links list
-        current_links: list[str] = list(view.links)
-        if current_links:
-            st.caption("Links")
-        for i, link_url in enumerate(current_links):
-            lc1, lc2 = st.columns([4, 1])
-            lc1.write(link_url)
-
-            def _remove(idx: int = i) -> None:
-                updated = [lnk for j, lnk in enumerate(current_links) if j != idx]
-                on_save(
-                    UserProfile(
-                        name=name_val,
-                        email=email_val,
-                        phone=phone_val,
-                        location=location_val,
-                        links=updated,
-                    )
-                )
-
-            lc2.button("\u00d7 Remove", key=f"profile_remove_link_{i}", on_click=_remove)
-
-        # Add-link row
-        nc1, nc2 = st.columns([4, 1])
-        new_link_val = nc1.text_input("New link", value="", key="profile_new_link")
-
-        def _add() -> None:
-            stripped = new_link_val.strip()
-            if stripped:
-                on_save(
-                    UserProfile(
-                        name=name_val,
-                        email=email_val,
-                        phone=phone_val,
-                        location=location_val,
-                        links=[*current_links, stripped],
-                    )
-                )
-
-        nc2.button("Add link", key="profile_add_link", on_click=_add)
-
-        # Save all fields
-        def _save() -> None:
-            on_save(
-                UserProfile(
-                    name=name_val,
-                    email=email_val,
-                    phone=phone_val,
-                    location=location_val,
-                    links=current_links,
-                )
-            )
-
-        st.button("Save changes", key="profile_save", on_click=_save)
-
-
 def build_portfolio_view(state: CareerEngineState) -> PortfolioView:
     """Build the portfolio view-model from the discovery session state (pure).
 
@@ -260,6 +177,5 @@ __all__ = [
     "StoryCard",
     "build_portfolio_view",
     "build_profile_view",
-    "render_profile_section",
     "stories_by_entry",
 ]

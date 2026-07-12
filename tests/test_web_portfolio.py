@@ -19,10 +19,8 @@ from schema import (
     UserProfile,
 )
 from web.portfolio import (
-    ProfileView,
     build_portfolio_view,
     build_profile_view,
-    render_profile_section,
     stories_by_entry,
 )
 
@@ -291,73 +289,3 @@ class TestBuildProfileView:
         assert profile.links == ["https://a.com"]
 
 
-class TestRenderProfileSection:
-    """render_profile_section renders widgets and fires on_save correctly."""
-
-    def test_render_profile_section_calls_on_save(self) -> None:
-        """'Save changes' on_click fires on_save with a UserProfile whose name == 'Alice'."""
-        saved: list[UserProfile] = []
-        fake_st = _FakeStProfile({"Name": "Alice"})
-        view = ProfileView(name="", email="", phone="", location="", links=[])
-        render_profile_section(view, on_save=saved.append, st=fake_st)
-
-        save_btns = [
-            (label, kw) for label, kw in fake_st.all_buttons() if label == "Save changes"
-        ]
-        assert len(save_btns) == 1, "Expected exactly one 'Save changes' button"
-        save_btns[0][1]["on_click"]()  # simulate click
-        assert len(saved) == 1
-        assert saved[0].name == "Alice"
-
-    def test_render_profile_section_empty_profile(self) -> None:
-        """A ProfileView with all empty fields and links=[] renders without error."""
-        fake_st = _FakeStProfile()
-        view = ProfileView(name="", email="", phone="", location="", links=[])
-        render_profile_section(view, on_save=lambda p: None, st=fake_st)
-        assert "Profile" in fake_st.subheaders
-
-    def test_remove_link_calls_on_save_without_removed_link(self) -> None:
-        """Clicking the Remove button for a link fires on_save with that link absent."""
-        saved: list[UserProfile] = []
-        fake_st = _FakeStProfile()
-        view = ProfileView(
-            name="Bob", email="b@c.com", phone="", location="", links=["https://x.com", "https://y.com"]
-        )
-        render_profile_section(view, on_save=saved.append, st=fake_st)
-        remove_btns = [
-            (label, kw) for label, kw in fake_st.all_buttons() if label == "\u00d7 Remove"
-        ]
-        assert len(remove_btns) == 2
-        remove_btns[0][1]["on_click"]()  # remove first link
-        assert len(saved) == 1
-        assert "https://x.com" not in saved[0].links
-        assert "https://y.com" in saved[0].links
-
-    def test_add_link_appends_stripped_link(self) -> None:
-        """'Add link' fires on_save with new link appended (whitespace stripped)."""
-        saved: list[UserProfile] = []
-        fake_st = _FakeStProfile({"New link": "  https://z.com  "})
-        view = ProfileView(name="", email="", phone="", location="", links=["https://a.com"])
-        render_profile_section(view, on_save=saved.append, st=fake_st)
-
-        add_btns = [
-            (label, kw) for label, kw in fake_st.all_buttons() if label == "Add link"
-        ]
-        assert len(add_btns) == 1
-        add_btns[0][1]["on_click"]()
-        assert len(saved) == 1
-        assert saved[0].links == ["https://a.com", "https://z.com"]
-
-    def test_add_link_no_op_on_empty_input(self) -> None:
-        """'Add link' with empty/whitespace-only input does not fire on_save."""
-        saved: list[UserProfile] = []
-        fake_st = _FakeStProfile({"New link": "   "})
-        view = ProfileView(name="", email="", phone="", location="", links=[])
-        render_profile_section(view, on_save=saved.append, st=fake_st)
-
-        add_btns = [
-            (label, kw) for label, kw in fake_st.all_buttons() if label == "Add link"
-        ]
-        assert len(add_btns) == 1
-        add_btns[0][1]["on_click"]()
-        assert len(saved) == 0, "on_save should not fire for empty/whitespace link"
