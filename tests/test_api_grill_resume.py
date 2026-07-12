@@ -49,8 +49,26 @@ class _FakeSession:
         return CareerEngineState()
 
 
+class _NoSessionService:
+    """A session service holding NOTHING — so the merge finds no session to merge into
+    and the route falls through to create(), which is the first-upload path."""
+
+    async def get_session(
+        self, *, app_name: str, user_id: str, session_id: str
+    ) -> None:
+        return None
+
+
 @pytest.fixture
 def client() -> Iterator[TestClient]:
+    """Yield a TestClient with EVERY Firestore-backed dep faked.
+
+    ``get_session_service`` is overridden here, not per-test: FastAPI resolves it eagerly,
+    so a route that merely *declares* it would construct a real ``FirestoreSessionService``
+    and reach for credentials. That passes locally (ADC) and fails in CI — which is
+    exactly how this fixture broke when the résumé route gained the merge dependency.
+    """
+    app.dependency_overrides[get_session_service] = lambda: _NoSessionService()
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
@@ -127,7 +145,6 @@ def test_reupload_merges_into_the_existing_session_and_never_creates(
 
     session = _FakeSession()
     app.dependency_overrides[get_discovery_session] = lambda: session
-    app.dependency_overrides[get_session_service] = lambda: object()
 
     resp = client.post(
         "/api/grill/resume",
@@ -157,7 +174,6 @@ def test_first_upload_still_creates_the_session(
 
     session = _FakeSession()
     app.dependency_overrides[get_discovery_session] = lambda: session
-    app.dependency_overrides[get_session_service] = lambda: object()
 
     resp = client.post(
         "/api/grill/resume",

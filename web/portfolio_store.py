@@ -597,9 +597,16 @@ def merge_work_timeline(
             continue
         current = merged[idx]
         seen = {_norm(b.text) for b in current.bullets}
-        fresh = [
-            b for b in candidate.bullets if b.text.strip() and _norm(b.text) not in seen
-        ]
+        fresh: list[Bullet] = []
+        for b in candidate.bullets:
+            key = _norm(b.text)
+            # `seen` must grow as we go: a noisy parse can emit the SAME line twice within
+            # one résumé, and checking only against the existing entry would let both
+            # copies through.
+            if not b.text.strip() or key in seen:
+                continue
+            seen.add(key)
+            fresh.append(b)
         if fresh:
             merged[idx] = current.model_copy(
                 update={"bullets": [*current.bullets, *fresh]}
@@ -649,7 +656,7 @@ async def _amerge_parsed_entries(
         state_delta=delta,
     )
     logger.info(
-        "merge_parsed_entries: %d parsed → %d added, %d total (no entry or story removed)",
+        "amerge_parsed_entries: %d parsed -> %d added, %d total (no entry or story removed)",
         len(entries),
         len(added),
         len(merged),

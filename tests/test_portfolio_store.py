@@ -506,6 +506,24 @@ class TestMergeWorkTimeline:
 
         assert keep.entry_id in {e.entry_id for e in merged}
 
+    def test_a_noisy_parse_repeating_a_line_does_not_duplicate_it(self) -> None:
+        """Duplicates WITHIN one parsed résumé must also collapse.
+
+        Regression (Copilot): the filter compared each candidate bullet only against the
+        EXISTING entry's lines, so if a noisy parse emitted the same line twice in one
+        résumé, both copies were appended.
+        """
+        existing = self._role("Staff Engineer", "Texada", bullets=[], status=EntryStatus.GRILLED)
+        noisy = self._role(
+            "Staff Engineer", "Texada",
+            bullets=["Cut cloud spend 30%", "  cut cloud spend 30%  ", "Hired six engineers"],
+            status=EntryStatus.NEEDS_QUANTIFYING,
+        )
+
+        merged, _ = merge_work_timeline([existing], [noisy])
+
+        assert merged[0].bullet_texts == ["Cut cloud spend 30%", "Hired six engineers"]
+
     def test_bullets_are_not_duplicated_on_re_upload(self) -> None:
         """Re-uploading the SAME résumé must be a no-op, not a doubling."""
         existing = self._role(
