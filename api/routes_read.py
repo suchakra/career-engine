@@ -38,7 +38,7 @@ from config import get_settings
 from database.firestore_session import ContractVersionError, FirestoreSessionService
 from database.workspace_store import FirestoreWorkspaceStore
 from discovery.store import FirestoreLedgerStore
-from schema import JobOpportunity, UserWorkspace
+from schema import JobOpportunity, SessionPreferences, UserProfile, UserWorkspace
 from web.dashboard import build_dashboard_view
 from web.jobs import build_jobs_view
 from web.portfolio import build_portfolio_view
@@ -145,3 +145,41 @@ async def jobs(
     prior, hidden_companies = await run_in_threadpool(_safe_load_jobs, ledger_store, user_id)
     view = build_jobs_view(None, prior=prior, hidden_companies=hidden_companies)
     return JobsResponse.from_view(view)
+
+
+# ── Profile + preferences reads ───────────────────────────────────────────────
+#
+# The 10.3 write endpoints (``POST /api/profile`` / ``PUT /api/preferences``) shipped
+# without their read twins, so the client had no way to hydrate the forms: they mounted
+# empty, and a saved profile looked like it had never persisted. These are the missing
+# reads over the SAME store seams the write endpoints already re-read through.
+
+
+@router.get("/api/profile")
+async def profile(
+    user_id: str = Depends(get_current_user_id),
+    workspace_store: FirestoreWorkspaceStore = Depends(get_workspace_store),
+) -> UserProfile:
+    """Return the caller's persisted résumé-header profile (empty for a new user).
+
+    Reads through :func:`_safe_load_workspace`, so it obeys this module's contract:
+    a transient store fault degrades to an empty profile (never a 500) while a
+    ``ContractVersionError`` still propagates. The defensive copy matches
+    :func:`web.profile_store.load_profile` — a caller mutating the result must not
+    write through to a cached workspace instance.
+    """
+    workspace = await run_in_threadpool(_safe_load_workspace, workspace_store, user_id)
+    return workspace.profile.model_copy(deep=True)
+
+
+@router.get("/api/preferences")
+async def preferences(
+    user_id: str = Depends(get_current_user_id),
+    workspace_store: FirestoreWorkspaceStore = Depends(get_workspace_store),
+) -> SessionPreferences:
+    """Return the caller's persisted discovery rubric (empty for a new user).
+
+    Same degrade-to-empty contract as :func:`profile` above.
+    """
+    workspace = await run_in_threadpool(_safe_load_workspace, workspace_store, user_id)
+    return workspace.discovery_preferences.model_copy(deep=True)

@@ -52,6 +52,25 @@ export function useJobs(): UseQueryResult<JobsResponse> {
   });
 }
 
+/**
+ * The persisted profile. Without this the Profile form had nothing to hydrate from:
+ * it mounted empty on every visit, so a saved profile looked like it never persisted.
+ */
+export function useProfile(): UseQueryResult<UserProfile> {
+  return useQuery({
+    queryKey: queryKeys.profile,
+    queryFn: () => apiFetch<UserProfile>("/api/profile"),
+  });
+}
+
+/** The persisted discovery rubric (same hydration story as {@link useProfile}). */
+export function usePreferences(): UseQueryResult<SessionPreferences> {
+  return useQuery({
+    queryKey: queryKeys.preferences,
+    queryFn: () => apiFetch<SessionPreferences>("/api/preferences"),
+  });
+}
+
 // ── Mutation hooks (optimistic write → rollback → invalidate) ─────────────────
 
 /**
@@ -81,7 +100,7 @@ export function useSaveProfile(): UseMutationResult<
 > {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
-  const key = ["profile"] as const;
+  const key = queryKeys.profile;
 
   return useMutation({
     mutationFn: (profile: SaveProfileInput) =>
@@ -120,7 +139,7 @@ export function useSavePreferences(): UseMutationResult<
 > {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
-  const key = ["preferences"] as const;
+  const key = queryKeys.preferences;
 
   return useMutation({
     mutationFn: (prefs: SavePreferencesInput) =>

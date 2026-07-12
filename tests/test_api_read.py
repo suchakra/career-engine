@@ -44,7 +44,9 @@ from schema import (
     JobOpportunity,
     MatchStatus,
     PendingAction,
+    SessionPreferences,
     StarStory,
+    UserProfile,
     UserWorkspace,
     WorkModel,
 )
@@ -389,3 +391,99 @@ def test_jobs_requires_auth(client: TestClient) -> None:
     app.dependency_overrides[get_ledger_store] = lambda: _FakeLedgerStore([])
     resp = client.get("/api/jobs")
     assert resp.status_code == 401
+
+
+# ── GET /api/profile + GET /api/preferences ───────────────────────────────────
+#
+# The 10.3 writes shipped without these reads, so the client's Profile/Preferences
+# forms had nothing to hydrate from — a saved profile looked like it never persisted.
+
+
+def test_profile_returns_the_persisted_profile(client: TestClient) -> None:
+    """/api/profile returns EVERY persisted field, not just the ones a form edits."""
+    profile = UserProfile(
+        name="Ada", email="ada@x.com", phone="+1", location="Remote", links=["https://gh/ada"]
+    )
+    app.dependency_overrides[get_workspace_store] = lambda: _FakeWorkspaceStore(
+        UserWorkspace(profile=profile)
+    )
+    resp = client.get("/api/profile", headers=_auth_headers())
+    assert resp.status_code == 200
+    body = resp.json()
+    # Every field round-trips — the client needs email/phone/links too, or a save that
+    # only edits name+location would blank them (the store does a full-document write).
+    assert body["name"] == "Ada"
+    assert body["email"] == "ada@x.com"
+    assert body["phone"] == "+1"
+    assert body["location"] == "Remote"
+    assert body["links"] == ["https://gh/ada"]
+
+
+def test_profile_empty_for_a_new_user(client: TestClient) -> None:
+    """A user with no saved profile gets an empty one (never a 404/500)."""
+    app.dependency_overrides[get_workspace_store] = lambda: _FakeWorkspaceStore(UserWorkspace())
+    resp = client.get("/api/profile", headers=_auth_headers())
+    assert resp.status_code == 200
+    assert resp.json()["name"] == ""
+
+
+def test_profile_requires_auth(client: TestClient) -> None:
+    assert client.get("/api/profile").status_code == 401
+
+
+def test_preferences_returns_the_persisted_rubric(client: TestClient) -> None:
+    """/api/preferences returns every rubric field (incl. ones no form edits yet)."""
+    prefs = SessionPreferences(
+        target_roles=["Staff Engineer"],
+        dealbreakers=["on-site"],
+        nice_to_haves=["remote-first"],
+    )
+    app.dependency_overrides[get_workspace_store] = lambda: _FakeWorkspaceStore(
+        UserWorkspace(discovery_preferences=prefs)
+    )
+    resp = client.get("/api/preferences", headers=_auth_headers())
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["target_roles"] == ["Staff Engineer"]
+    assert body["dealbreakers"] == ["on-site"]
+    assert body["nice_to_haves"] == ["remote-first"]
+
+
+def test_preferences_empty_for_a_new_user(client: TestClient) -> None:
+    app.dependency_overrides[get_workspace_store] = lambda: _FakeWorkspaceStore(UserWorkspace())
+    resp = client.get("/api/preferences", headers=_auth_headers())
+    assert resp.status_code == 200
+    assert resp.json()["target_roles"] == []
+
+
+def test_preferences_requires_auth(client: TestClient) -> None:
+    assert client.get("/api/preferences").status_code == 401
+
+
+def test_profile_degrades_to_empty_on_store_fault(client: TestClient) -> None:
+    """A transient store fault yields an EMPTY profile, never a 500 (module contract)."""
+    app.dependency_overrides[get_workspace_store] = lambda: _FakeWorkspaceStore(
+        UserWorkspace(), error=RuntimeError("firestore down")
+    )
+    resp = client.get("/api/profile", headers=_auth_headers())
+    assert resp.status_code == 200
+    assert resp.json()["name"] == ""
+
+
+def test_profile_propagates_contract_version_error(client: TestClient) -> None:
+    """A schema mismatch must NOT masquerade as an empty (lost) profile."""
+    app.dependency_overrides[get_workspace_store] = lambda: _FakeWorkspaceStore(
+        UserWorkspace(), error=ContractVersionError("bad major")
+    )
+    with pytest.raises(ContractVersionError):
+        client.get("/api/profile", headers=_auth_headers())
+
+
+def test_preferences_degrades_to_empty_on_store_fault(client: TestClient) -> None:
+    """A transient store fault yields an EMPTY rubric, never a 500."""
+    app.dependency_overrides[get_workspace_store] = lambda: _FakeWorkspaceStore(
+        UserWorkspace(), error=RuntimeError("firestore down")
+    )
+    resp = client.get("/api/preferences", headers=_auth_headers())
+    assert resp.status_code == 200
+    assert resp.json()["target_roles"] == []

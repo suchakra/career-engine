@@ -106,12 +106,32 @@ const mockTurn = {
   frontier_label: "Senior Engineer — Acme",
 };
 
+/** A persisted profile — note it carries fields no form edits (email/phone/links). */
+export const mockProfile: UserProfile = {
+  name: "Ada Lovelace",
+  email: "ada@example.com",
+  phone: "+1 555 0100",
+  location: "Remote · UK",
+  links: ["https://github.com/ada"],
+  contract_version: "2.8.0",
+};
+
+/** A persisted rubric — `nice_to_haves` is edited by no form, so it must survive a save. */
+export const mockPreferences: SessionPreferences = {
+  target_roles: ["Staff Engineer"],
+  dealbreakers: ["on-site"],
+  nice_to_haves: ["remote-first"],
+  contract_version: "2.8.0",
+};
+
 /** Default happy-path handlers. Tests override individual routes as needed. */
 export const handlers = [
   http.get(`${BASE}/api/me`, () => HttpResponse.json(mockMe)),
   http.get(`${BASE}/api/dashboard`, () => HttpResponse.json(mockDashboard)),
   http.get(`${BASE}/api/portfolio`, () => HttpResponse.json(mockPortfolio)),
   http.get(`${BASE}/api/jobs`, () => HttpResponse.json(mockJobs)),
+  http.get(`${BASE}/api/profile`, () => HttpResponse.json(mockProfile)),
+  http.get(`${BASE}/api/preferences`, () => HttpResponse.json(mockPreferences)),
   http.post(`${BASE}/api/profile`, async ({ request }) => {
     const body = (await request.json()) as Partial<UserProfile>;
     const saved: UserProfile = {
