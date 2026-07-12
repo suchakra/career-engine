@@ -15,14 +15,8 @@ import {
   usePortfolio,
 } from "@/lib/query/hooks";
 import { useMasterResume } from "@/lib/tailor/useMasterResume";
-import type { ExportFormat } from "@/lib/tailor/resumeExport";
+import { EXPORT_FORMATS } from "@/lib/tailor/resumeExport";
 import type { EntryCardResponse } from "@/lib/api/models";
-
-const FORMATS: { fmt: ExportFormat; label: string }[] = [
-  { fmt: "pdf", label: "PDF" },
-  { fmt: "docx", label: "Word" },
-  { fmt: "md", label: "Markdown" },
-];
 
 /** Map the entry's display status label onto a StatusBadge kind. */
 function statusKind(label: string): StatusKind {
@@ -130,7 +124,7 @@ function MasterResumeCard(): JSX.Element {
         {master.resume && (
           <>
             <span className="text-sm text-muted">Export:</span>
-            {FORMATS.map(({ fmt, label }) => (
+            {EXPORT_FORMATS.map(({ fmt, label }) => (
               <PrimaryButton
                 key={fmt}
                 variant="secondary"
