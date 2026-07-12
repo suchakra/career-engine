@@ -28,7 +28,7 @@
 > - ⬜ **CLEAN-1** (non-blocking): rename the store's async fns from the prepended-`a` (`amerge`, `aset`,
 >   `adelete`) to a `_async` suffix — the prefix reads as part of the word.
 >
-> 🤖 **Cold-starting? Invoke the `resume-careerengine` skill** (`.claude/skills/resume-careerengine/SKILL.md`).
+> 🤖 **Cold-starting? Invoke the `resume-careerengine` skill** ([skills/resume-careerengine](../skills/resume-careerengine/SKILL.md)).
 > It carries the orientation order, the merge rules, and the build loop.
 >
 > ⚠️ **MERGE RULES (learned the hard way — do not relax):**
