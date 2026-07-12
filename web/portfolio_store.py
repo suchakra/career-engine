@@ -225,6 +225,58 @@ async def _adelete_star_story(
     return session_id
 
 
+async def _aadd_entry_bullet(
+    session_service: BaseSessionService,
+    *,
+    app_name: str,
+    user_id: str,
+    entry_id: str,
+    text: str,
+) -> str | None:
+    """Append a new bullet to an entry on the canonical session.
+
+    The twin of :func:`_aupdate_entry_bullet` (which only REPLACES an existing bullet):
+    lets the user add a line to an experience they already have, without re-grilling it.
+    An empty/whitespace-only ``text`` is a no-op so we never persist a blank bullet, and
+    a missing entry logs a warning rather than raising. Returns the session_id, or
+    ``None`` if the user has no session.
+    """
+    clean_text = text.strip()
+    if not clean_text:
+        logger.warning("add_entry_bullet: empty bullet for entry %s ignored", entry_id)
+        return web_session_id(user_id)  # no-op: refuse to persist a blank bullet
+    session_id = web_session_id(user_id)
+    existing = await session_helpers.get_session_state_if_exists(
+        session_service=session_service,
+        app_name=app_name,
+        user_id=user_id,
+        session_id=session_id,
+    )
+    if existing is None:
+        return None
+    found = False
+    new_timeline: list[Entry] = []
+    for entry in existing.work_timeline:
+        if str(entry.entry_id) == entry_id:
+            entry = entry.model_copy(update={"bullets": [*entry.bullets, clean_text]})
+            found = True
+        new_timeline.append(entry)
+    if not found:
+        logger.warning("add_entry_bullet: entry %s not found", entry_id)
+        return session_id  # no-op: entry not found
+    await _patch_session(
+        session_service,
+        app_name=app_name,
+        user_id=user_id,
+        session_id=session_id,
+        state_delta={
+            "work_timeline": [e.model_dump(mode="json") for e in new_timeline],
+            "contract_version": CONTRACT_VERSION,
+        },
+    )
+    return session_id
+
+
 async def _aupdate_entry_bullet(
     session_service: BaseSessionService,
     *,
@@ -399,6 +451,31 @@ def delete_star_story(
     return run_async(
         _adelete_star_story(
             session_service, app_name=app_name, user_id=user_id, story_id=story_id
+        )
+    )
+
+
+def add_entry_bullet(
+    session_service: BaseSessionService,
+    *,
+    app_name: str,
+    user_id: str,
+    entry_id: str,
+    text: str,
+) -> str | None:
+    """Append a new bullet to an experience (sync bridge).
+
+    The twin of :func:`update_entry_bullet`, which can only replace an existing one. An
+    empty/whitespace-only ``text`` or a missing entry is a logged no-op (never raises).
+    Returns the session_id, or ``None`` if the user has no session.
+    """
+    return run_async(
+        _aadd_entry_bullet(
+            session_service,
+            app_name=app_name,
+            user_id=user_id,
+            entry_id=entry_id,
+            text=text,
         )
     )
 

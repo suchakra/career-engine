@@ -160,6 +160,53 @@ def test_highlight_entry_401_without_token(client: TestClient) -> None:
     assert resp.status_code == 401
 
 
+# ── POST /api/experience/{id}/bullet — append a bullet ────────────────────────
+
+
+def test_add_bullet_204(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Happy path: forwards user_id, entry_id and the new bullet text to the bridge."""
+    calls: dict[str, Any] = {}
+
+    def _fake(
+        session_service: Any, *, app_name: str, user_id: str, entry_id: str, text: str
+    ) -> str:
+        calls.update(user_id=user_id, entry_id=entry_id, text=text)
+        return entry_id
+
+    monkeypatch.setattr(routes_portfolio, "add_entry_bullet", _fake)
+    resp = client.post(
+        "/api/experience/e4/bullet",
+        json={"text": "Shipped billing v2"},
+        headers=_auth_headers(),
+    )
+    assert resp.status_code == 204
+    assert calls == {"user_id": _USER_ID, "entry_id": "e4", "text": "Shipped billing v2"}
+
+
+def test_add_bullet_404_when_no_session(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A ``None`` bridge return (no session) maps to 404."""
+    monkeypatch.setattr(routes_portfolio, "add_entry_bullet", lambda *a, **k: None)
+    resp = client.post(
+        "/api/experience/e4/bullet", json={"text": "x"}, headers=_auth_headers()
+    )
+    assert resp.status_code == 404
+
+
+def test_add_bullet_422_on_blank_text(client: TestClient) -> None:
+    """Empty / whitespace-only text is rejected (the store would drop it silently)."""
+    for text in ("", "   "):
+        resp = client.post(
+            "/api/experience/e4/bullet", json={"text": text}, headers=_auth_headers()
+        )
+        assert resp.status_code == 422, text
+
+
+def test_add_bullet_401_without_token(client: TestClient) -> None:
+    assert client.post("/api/experience/e4/bullet", json={"text": "x"}).status_code == 401
+
+
 # ── PATCH /api/experience/{id}/bullet (parity P5) ─────────────────────────────
 
 

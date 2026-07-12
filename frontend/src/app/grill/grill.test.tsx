@@ -44,6 +44,43 @@ describe("Grill streaming", () => {
     expect(screen.getByText(/uploaded résumé: resume.pdf/i)).toBeInTheDocument();
   });
 
+  it("shows progress WHILE the résumé is being parsed, not just after", async () => {
+    // The parse is a slow vision call. Previously `streaming` only flipped inside
+    // runStream(), so for its whole duration the user stared at a dead screen showing
+    // just the upload bubble — with no sign anything was happening.
+    let release!: () => void;
+    const parsed = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.post(`${BASE}/api/grill/resume`, async () => {
+        await parsed;
+        return HttpResponse.json({
+          phase: "grilling",
+          frontier_label: "Senior Engineer — Acme",
+          awaiting: "question",
+        });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderWithProviders(<GrillContent />);
+
+    const file = new File([new Uint8Array([1, 2, 3])], "resume.pdf", {
+      type: "application/pdf",
+    });
+    await user.upload(screen.getByLabelText("Résumé file"), file);
+
+    // Still parsing (the handler hasn't returned) — the progress indicator is up.
+    expect(await screen.findByRole("status")).toHaveTextContent(/typing/i);
+
+    release();
+    // …and the stream still lands the opening question afterwards.
+    expect(
+      await screen.findByText(/put a number on that improvement/i),
+    ).toBeInTheDocument();
+  });
+
   it("surfaces a mid-stream error frame without crashing", async () => {
     server.use(
       http.get(`${BASE}/api/grill/stream`, () => {

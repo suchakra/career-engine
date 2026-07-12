@@ -121,14 +121,22 @@ export function useGrill(): GrillController {
   const startFromResume = useCallback(
     async (file: File) => {
       setTranscript([{ role: "user", text: `📎 Uploaded résumé: ${file.name}` }]);
+      setError(null);
+      // Parsing is a slow VISION call on the user's key (many seconds). `streaming` is
+      // what drives the transcript's progress caret, and it was only being set inside
+      // runStream() — so for the whole parse the screen sat dead on the upload bubble
+      // with no indication anything was happening. Flip it now, before the request.
+      setStreaming(true);
       const form = new FormData();
       form.append("file", file);
       try {
         const snap = await apiFetchForm<GrillSnapshot>("/api/grill/resume", form);
         setBanner(snap.frontier_label);
         setAwaiting(snap.awaiting);
+        // runStream owns `streaming` from here (it sets it true, then false when done).
         await runStream();
       } catch {
+        setStreaming(false);
         setError({
           message: "Couldn't read that résumé — try another file or paste your history.",
           rate_limited: false,

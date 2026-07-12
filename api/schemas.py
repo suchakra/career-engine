@@ -356,6 +356,19 @@ class HighlightRequest(_StrictModel):
     highlighted: bool
 
 
+class BulletAddRequest(_StrictModel):
+    """Request body for ``POST /api/experience/{entry_id}/bullet`` — append a bullet.
+
+    ``text`` is stripped before the length check for the same reason as
+    ``BulletEditRequest.new_text`` below: the store strips it too, so a blank line would
+    be a silently-dropped write reported to the UI as a success.
+    """
+
+    text: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)
+    ]
+
+
 class BulletEditRequest(_StrictModel):
     """Request body for ``PATCH /api/experience/{entry_id}/bullet`` (parity P5).
 

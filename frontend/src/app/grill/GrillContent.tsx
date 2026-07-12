@@ -39,7 +39,9 @@ export function GrillContent(): JSX.Element {
               type="file"
               accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/*"
               aria-label="Résumé file"
-              className="mt-1 block w-full text-sm text-muted file:mr-3 file:min-h-tap file:rounded-card file:border file:border-border file:bg-surface file:px-3 file:text-sm"
+              // The file:* button needs its OWN text colour — without file:text-text it
+              // falls back to the UA default (near-black) and vanishes on the dark surface.
+              className="mt-1 block w-full text-sm text-muted file:mr-3 file:min-h-tap file:cursor-pointer file:rounded-card file:border file:border-border file:bg-surface file:px-3 file:text-sm file:font-medium file:text-text hover:file:bg-card"
               onChange={(e) => {
                 const f = e.target.files?.[0];
                 if (f) void grill.startFromResume(f);

@@ -293,6 +293,28 @@ export function useHighlightEntry(): UseMutationResult<
   });
 }
 
+/** Append a new bullet to an experience — add a line without re-grilling the entry. */
+export function useAddBullet(): UseMutationResult<
+  void,
+  unknown,
+  { entryId: string; text: string }
+> {
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+  return useMutation({
+    mutationFn: ({ entryId, text }) =>
+      apiFetch<void>(`/api/experience/${entryId}/bullet`, {
+        method: "POST",
+        body: { text },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.portfolio });
+      showToast("Bullet added.", "success");
+    },
+    onError: () => showToast("Couldn't add that bullet — try again.", "error"),
+  });
+}
+
 /** Edit one bullet on an experience in place (parity P5). Refreshes the portfolio. */
 export function useEditBullet(): UseMutationResult<
   void,

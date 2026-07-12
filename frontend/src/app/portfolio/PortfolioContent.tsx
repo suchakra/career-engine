@@ -10,6 +10,7 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { ResumePreview } from "@/components/ResumePreview";
 import { StatusBadge, type StatusKind } from "@/components/StatusBadge";
 import {
+  useAddBullet,
   useDeleteStory,
   useEditBullet,
   useGrillEntry,
@@ -106,8 +107,72 @@ function EditableBullet({
 }
 
 /**
+ * Append a bullet to an experience the user already has, without re-grilling it.
+ * Collapsed to a "+ Add a bullet" affordance until clicked, so it doesn't compete
+ * with the entry's own content.
+ */
+function AddBullet({ entryId }: { entryId: string }): JSX.Element {
+  const add = useAddBullet();
+  const [adding, setAdding] = useState(false);
+  const [text, setText] = useState("");
+
+  if (!adding) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAdding(true)}
+        className="mb-3 text-xs font-medium text-muted hover:text-text"
+      >
+        + Add a bullet
+      </button>
+    );
+  }
+
+  const save = (): void => {
+    const next = text.trim();
+    if (!next) {
+      setAdding(false);
+      return;
+    }
+    add.mutate(
+      { entryId, text: next },
+      {
+        onSuccess: () => {
+          setText("");
+          setAdding(false);
+        },
+      },
+    );
+  };
+
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2">
+      <input
+        autoFocus
+        value={text}
+        maxLength={500}
+        aria-label="New bullet"
+        placeholder="Cut p95 latency 40%…"
+        onChange={(e) => setText(e.target.value)}
+        className="min-h-tap flex-1 rounded-card border border-border bg-surface px-2 text-sm text-text placeholder:text-muted"
+      />
+      <PrimaryButton variant="secondary" onClick={save} disabled={add.isPending}>
+        {add.isPending ? "Adding…" : "Add"}
+      </PrimaryButton>
+      <button
+        type="button"
+        onClick={() => setAdding(false)}
+        className="text-xs text-muted hover:text-text"
+      >
+        Cancel
+      </button>
+    </div>
+  );
+}
+
+/**
  * A single portfolio entry with its parity actions (§4.4): grill this entry,
- * pin/unpin it (always tailored), edit its bullets, and delete individual STAR
+ * pin/unpin it (always tailored), edit + add bullets, and delete individual STAR
  * stories. The action mutations live in this component so each card manages its
  * own pending state.
  */
@@ -128,12 +193,13 @@ function EntryCard({ entry }: { entry: EntryCardResponse }): JSX.Element {
         {entry.dates} · {entry.type_label}
       </p>
       {entry.bullets.length > 0 && (
-        <ul className="mb-3 list-disc space-y-1 pl-5 text-sm">
+        <ul className="mb-2 list-disc space-y-1 pl-5 text-sm">
           {entry.bullets.map((b, i) => (
             <EditableBullet key={`${i}-${b}`} entryId={entry.entry_id} index={i} text={b} />
           ))}
         </ul>
       )}
+      <AddBullet entryId={entry.entry_id} />
       {entry.stories.length > 0 && (
         <div className="rounded-card border border-border bg-surface p-3">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
