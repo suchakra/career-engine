@@ -34,16 +34,19 @@ anything new.**
     `gh api graphql -f query='{ repository(owner:"{owner}", name:"{repo}") { pullRequest(number:{N}) { reviewThreads(first:30) { nodes { id isResolved path } } } } }'`
   - Resolve: `gh api graphql -f query='mutation { resolveReviewThread(input:{threadId:"{thread_id}"}) { thread { isResolved } } }'`
 - **Merging + deploying qa is authorized** without asking, *provided* Copilot reviewed first.
-  `gh pr edit {N} --add-reviewer copilot-pull-request-reviewer`, then wait. (`{N}` = the PR number;
-  `{owner}`/`{repo}` = the repo you are in — substitute them, don't run them literally.)
+  `gh pr edit {N} --add-reviewer copilot-pull-request-reviewer`, then **wait**. If that errors
+  (the bot's login varies), fall back to:
+  `gh api repos/{owner}/{repo}/pulls/{N}/requested_reviewers -X POST -f "reviewers[]=copilot-pull-request-reviewer"`.
+  (`{N}` = the PR number; `{owner}`/`{repo}` = the repo you are in — substitute, don't run literally.)
 - **`dev` is BLOCKADED.** Never deploy there without an explicit go-ahead
   (`-f confirm_dev_cutover=true`). It is Kaggle-visible and holds real user data.
 - **Any deploy that migrates persisted state** requires the backup + read-only dry-run in
   `docs/QA_DEPLOY_RUNBOOK.md` first. Non-negotiable — real users' portfolios are in there.
 - **Never put secrets in code.** If a new GitHub secret is needed, stop and ask.
-- Gate everything: `make check` (ruff + mypy --strict + pytest) **and** the frontend lane
-  (`npx tsc --noEmit`, `npx vitest run`, `npx next lint`, `npm run build`). Docs-only changes
-  skip the local gate but still go through PR + Copilot.
+- Gate everything: **`make check`** (ruff + mypy --strict + pytest) **and** **`make frontend-check`**
+  (npm ci → lint → typecheck → vitest → build → bundle budget). Use the make targets, not ad-hoc
+  `npx` calls — the make lane is what CI runs, and it checks more (the bundle budget in particular).
+  Docs-only changes skip the local gate but still go through PR + Copilot.
 
 ## 3. Build loop (repeat until the ticket list is done)
 
