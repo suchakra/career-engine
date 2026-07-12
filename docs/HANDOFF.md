@@ -1,21 +1,30 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-10 — **PHASE 10 COMPLETE (10.0–10.7b)**; next = stand up `qa` env + groom Phase 11)
+## 👉 YOU ARE HERE (updated 2026-07-11 — **PHASE 10 COMPLETE**; **FEATURE PARITY: P1–P4c done, P5 = last slice**)
 > ✅ **qa LIVE + sign-in WORKS** (auth fix PR #75 merged; Firebase token verifier). URL:
 > https://career-engine-qa-app-ontyg6kaja-uc.a.run.app · redeploy: `gh workflow run deploy.yml --ref master -f environment=qa`.
 >
 > ▶ **ACTIVE WORK: FEATURE PARITY** (new Next.js UI vs old Streamlit). Autonomous, slice-by-slice
-> (each: backend endpoint + frontend + tests → PR → merge → deploy qa). **Do them in order:**
-> - **P1 🔴 BYOK key management** — `POST/DELETE/GET /api/key` (`auth/key_vault.py` store/fetch/delete) +
->   Settings key entry + key chip. **Critical: grill/tailor 409 without a key.**
-> - **P2 🟠 Jobs "Find jobs"** — `POST /api/jobs/discover` (run `discovery` `PrimaryAgent`/`jobs_runner`) +
->   run button; + HITL "Not interested"/"Keep" endpoints + card actions.
-> - **P3 🟠 Résumé upload** — `POST /api/resume/parse` (multipart → `cli.app.parse_resume_file` vision) +
->   Grill drag-drop seeding.
-> - **P4 smaller parity** — Dashboard pre-flight key card; Tailor "track as application" (wire existing
->   `POST /api/applications`); master résumé build (Portfolio); "Grill me about this" hand-off
->   (`portfolio_store.set_grill_frontier`); STAR-story delete / bullet edit; pin/highlight.
-> Update this list as each merges. Endpoints reuse `web/` builders + `auth/key_vault` + `discovery/`.
+> (each: backend endpoint + frontend + tests → PR → Copilot review → merge → deploy qa).
+> - ✅ **P1 BYOK key management** (PR #76) — `GET/POST/DELETE /api/key` + Settings key entry.
+> - ✅ **P2 Jobs "Find jobs"** (PR #77) — `POST /api/jobs/discover` (live two-agent discovery) + run button.
+> - ✅ **P3 Résumé upload** (PR #78) — `POST /api/grill/resume` (multipart → vision parse → seeds the grill).
+> - ✅ **P4a** (PR #79) — Dashboard first-run key card + Tailor "track as application".
+> - ✅ **P4b** (PR #80) — Portfolio entry actions: "Grill me about this" (`set_grill_frontier`),
+>   pin/highlight (`set_entry_highlight`), delete STAR story (`delete_star_story`).
+> - ✅ **P4c** (PR #81, stacked on #80) — Master résumé: `POST /api/master-resume` (deterministic
+>   `master_structured_resume` — **no model call ⇒ no BYOK key**) + Portfolio build/preview/export card.
+>   Export path shared with Tailor via `lib/tailor/resumeExport.ts`.
+> - ⬜ **P5 (LAST SLICE)** — the two remaining Streamlit affordances, both with store seams already in place:
+>   1. **Jobs "Not interested"** → `POST /api/jobs/dismiss` over `discovery.store.add_rejected_company`
+>      (reads already subtract `hidden_companies`; only the *write* is missing) + a Jobs card button.
+>   2. **STAR bullet edit** → `PATCH /api/experience/{entry_id}/bullet` over
+>      `web.portfolio_store.update_entry_bullet(entry_id, bullet_index, new_text)` + inline edit on the
+>      Portfolio entry card.
+> Then: **final qa redeploy + parity walkthrough**, and parity is closed.
+>
+> ⚠️ **Merging is gated on you.** The agent may open + green PRs but cannot self-merge without your
+> explicit go-ahead (auto-mode classifier blocks agent-authored merges lacking human approval).
 
 **`master` clean (10.7 + qa-env merged; PR #72/#73/#74). contract v2.8.0 · no contract change. `qa` DEPLOYED & healthy → https://career-engine-qa-app-ontyg6kaja-uc.a.run.app (same-project 2nd Cloud Run service, scale-to-zero; dev untouched). Deploy again anytime: `gh workflow run deploy.yml --ref master -f environment=qa`. Promote to dev only once validated (needs `-f confirm_dev_cutover=true`; dev is Kaggle-visible).**
 **Phases 1–7 + 8A–8G + all of Phase 9 + BUG-1 + BUG-2 + ALL of Phase 10 COMPLETE. Streamlit is GONE — the product runs on Next.js (App Router) + FastAPI, deployed as ONE container (static export served by FastAPI, AD-16.10). Open-core seam (ARCHITECTURE §17) in place. Nothing deployed yet.**
