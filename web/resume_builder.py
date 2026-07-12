@@ -102,17 +102,41 @@ def _extract_json_object(text: str) -> dict[str, Any]:
     return parsed if isinstance(parsed, dict) else {}
 
 
+def _covers(story_bullet: str, entry_bullet: str) -> bool:
+    """Is ``entry_bullet`` already said by ``story_bullet`` (or vice versa)?
+
+    A story bullet is ``story.result`` — the grilled, quantified restatement of an
+    achievement — while an entry bullet is the user's original résumé line. The two are
+    almost never byte-identical, so an exact compare would call them distinct and list
+    the same achievement twice: the more the user grills, the more repetitive their
+    master résumé gets. Containment (either direction, whitespace/case normalised) is
+    what actually fires in practice, because the grilled result typically quotes or
+    subsumes the original line.
+
+    This is still textual, not semantic: genuinely reworded overlap slips through. That
+    is the deliberate trade — a false MATCH deletes the user's own words, which is worse
+    than a duplicate they can see and remove. Real semantic consolidation belongs to a
+    copywriter pass over the assembled résumé, not to this deterministic assembler.
+    """
+    a = " ".join(story_bullet.split()).casefold()
+    b = " ".join(entry_bullet.split()).casefold()
+    if not a or not b:
+        return False
+    return a == b or b in a or a in b
+
+
 def _merge_entry_bullets(story_bullets: list[str], entry_bullets: list[str]) -> list[str]:
     """Story bullets first (quantified — the strongest), then the entry's own lines.
 
     An entry's ``bullets`` are what the user actually wrote (or what the vision parser
-    read off their uploaded résumé). A bullet already covered by a validated story is
-    skipped so the same achievement isn't listed twice; the match is a case/space-
-    insensitive exact compare — deliberately conservative, since a near-miss here would
-    silently DROP the user's own line, which is the failure we are fixing.
+    read off their uploaded résumé). A line already covered by a validated story is
+    skipped (see :func:`_covers`) so one achievement isn't listed twice.
     """
-    seen = {b.strip().casefold() for b in story_bullets}
-    extra = [b for b in entry_bullets if b.strip() and b.strip().casefold() not in seen]
+    extra = [
+        b
+        for b in entry_bullets
+        if b.strip() and not any(_covers(s, b) for s in story_bullets)
+    ]
     return [*story_bullets, *extra]
 
 
@@ -154,10 +178,15 @@ def assemble_resume(
     for entry in state.work_timeline:
         stories = by_entry.get(str(entry.entry_id), [])
         bullets = [b for b in (_bullet_for(s) for s in stories) if b]
-        if include_entry_bullets:
+        is_education = entry.type is ExperienceType.EDUCATION
+        # Education stays a clean degree/school/dates line. Carrying its raw entry bullets
+        # would spill parsed coursework, honours and thesis blurbs into the résumé's
+        # education section — that content belongs to the experience narrative, and the
+        # renderer has never had to lay it out.
+        if include_entry_bullets and not is_education:
             bullets = _merge_entry_bullets(bullets, list(entry.bullets))
         block = RoleBlock(title=entry.title, org=entry.org, dates=_dates(entry), bullets=bullets)
-        if entry.type is ExperienceType.EDUCATION:
+        if is_education:
             education.append(block)
         elif bullets:  # a work role earns a spot only if it has something to show
             experience.append(block)

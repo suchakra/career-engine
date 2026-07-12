@@ -28,6 +28,13 @@ export interface GrillController {
    * fresh page load shows the "start a grill" card on top of a live session.
    */
   hasSession: boolean | null;
+  /**
+   * The session-status read itself failed. The page MUST NOT fall back to the start
+   * card in this case: "Start grilling" creates the session, and create_session is
+   * last-write-wins — a transient read error would let the user destroy a portfolio we
+   * simply failed to load. Show a retry instead.
+   */
+  statusFailed: boolean;
   /** The "📌 Currently grilling" banner — always the server's effective label. */
   banner: string;
   awaiting: Awaiting;
@@ -58,6 +65,7 @@ function awaitingFromTurn(t: GrillTurnEvent): Awaiting {
 export function useGrill(): GrillController {
   const [transcript, setTranscript] = useState<Transcript[]>([]);
   const [hasSession, setHasSession] = useState<boolean | null>(null);
+  const [statusFailed, setStatusFailed] = useState(false);
   const [banner, setBanner] = useState("");
   const [awaiting, setAwaiting] = useState<Awaiting>("idle");
   const [streaming, setStreaming] = useState(false);
@@ -177,28 +185,43 @@ export function useGrill(): GrillController {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
+      let status: GrillStatus;
       try {
-        const status = await apiFetch<GrillStatus>("/api/grill");
-        if (cancelled) return;
-        setHasSession(status.has_session);
-        if (!status.has_session) return;
-        setBanner(status.frontier_label);
-        setAwaiting(status.awaiting);
-        const pending = status.checkpoint_summary || status.current_question;
-        if (pending) setTranscript([{ role: "assistant", text: pending }]);
+        status = await apiFetch<GrillStatus>("/api/grill");
       } catch {
-        // Can't tell → fall back to the start card rather than blocking the page.
-        if (!cancelled) setHasSession(false);
+        // NEVER fall back to the start card here: it offers "Start grilling", which
+        // creates the session, and create_session is last-write-wins — a transient read
+        // error would let the user wipe a portfolio we merely failed to load.
+        if (!cancelled) setStatusFailed(true);
+        return;
       }
+      if (cancelled) return;
+      setHasSession(status.has_session);
+      if (!status.has_session) return;
+      setBanner(status.frontier_label);
+      setAwaiting(status.awaiting);
+
+      const pending = status.checkpoint_summary || status.current_question;
+      if (pending) {
+        setTranscript([{ role: "assistant", text: pending }]);
+        return;
+      }
+      // A session with NOTHING pending means the turn that should have produced the
+      // question never landed — the résumé parse's stream dropped, the tab was closed
+      // mid-turn, or "Grill me about this" just cleared the stale question to re-aim the
+      // frontier. Run the turn now; otherwise the user stares at an empty transcript
+      // with a composer and no question, which is the stuck state we set out to fix.
+      if (status.awaiting === "question") await runStream();
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [runStream]);
 
   return {
     transcript,
     hasSession,
+    statusFailed,
     banner,
     awaiting,
     streaming,

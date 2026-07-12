@@ -1,6 +1,37 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-12 — **PHASE 10 COMPLETE · FEATURE PARITY COMPLETE, MERGED & DEPLOYED TO qa**)
+## 👉 YOU ARE HERE (updated 2026-07-12 — **PARITY COMPLETE & DEPLOYED; now fixing bugs found in live qa use**)
+> ▶ **ACTIVE WORK: qa hardening.** Sumanta is using the qa deploy for real and finding bugs.
+> Status of each is canonical in [PROGRESS.md](PROGRESS.md) ("qa hardening" row). Shipped so far:
+> profile/preferences read+hydrate (#84), grill resume + master-résumé bullets + parse feedback +
+> dark-mode file input + add-a-bullet (#85), and the #85 follow-up review fixes (#86).
+>
+> 🔴 **NEXT, IN ORDER — the first is a DATA-LOSS bug, do it first:**
+> 1. **Résumé merge/dedup.** A second résumé upload CLOBBERS the first: `POST /api/grill/resume`
+>    calls `session.create` → `cli.session.create_session`, which is **last-write-wins**, so the
+>    whole `CareerEngineState` (every entry, every STAR story, every hour of grilling) is destroyed.
+>    **Decision taken (Sumanta, 2026-07-12): MERGE + DEDUP** — match entries on (title, org,
+>    date-range), keep the existing entry (preserving its `entry_id`, stories and GRILLED status),
+>    append genuinely-new entries as ungrilled, union the bullets on matched entries. Never destroy.
+> 2. **Delete a bullet / delete an entry** — the store can replace and append a bullet but not
+>    remove one; edit-only is half a tool, and it matters more once a merge can bring in a role the
+>    user doesn't want.
+> 3. **Copywriter agent** (Sumanta's idea, worth taking seriously). Master-résumé bullets are a
+>    deterministic concatenation of `story.result`, so they read flat. Tailoring currently does
+>    extraction AND copywriting in one model call; master does neither. A dedicated copywriter pass
+>    over the already-extracted STAR stories is a clean seam and is probably the single biggest
+>    quality jump available in the output.
+>
+> ⚠️ **MERGE RULE (Sumanta, 2026-07-12):** you may merge + deploy qa bugfix PRs without asking,
+> **on the condition that Copilot has reviewed the PR first**. If you push more commits after
+> Copilot's review, request a RE-review and wait — a stale review does not count. This rule exists
+> because it was broken once: #85's last two commits were merged on green CI alone, and a follow-up
+> review then found the grill bug was not actually fixed (stale question re-asked; a session with no
+> pending question still stranded the user; a failed status read offered a *destructive* start card).
+> Green CI is not a substitute for review.
+>
+> `dev` still requires an explicit go-ahead + `-f confirm_dev_cutover=true` (Kaggle-visible).
+
 > ✅ **All parity slices are on `master` and LIVE on qa** (deploy run 29194226615, green). Verified on qa:
 > `/api/health` ok; `/api/master-resume`, `/api/jobs/dismiss`, `/api/experience/{id}/bullet|grill|highlight`,
 > `/api/story/{id}`, `/api/key`, `/api/jobs/discover`, `/api/grill/resume` all present in the served OpenAPI

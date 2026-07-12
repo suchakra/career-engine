@@ -135,4 +135,47 @@ describe("Grill streaming", () => {
     expect(screen.getByLabelText("Your answer")).toBeInTheDocument();
     expect(screen.queryByLabelText("Résumé file")).not.toBeInTheDocument();
   });
+
+  it("RUNS a turn when a session has no pending question (dropped stream / re-aimed frontier)", async () => {
+    // The stuck state the resume fix originally missed: the session exists (résumé
+    // parsed, entries seeded) but the turn that should have produced the question never
+    // landed — the stream dropped, the tab closed, or "Grill me about this" just cleared
+    // the stale question. Rendering nothing leaves an empty transcript + a composer and
+    // no question. We must run the turn.
+    server.use(
+      http.get(`${BASE}/api/grill`, () =>
+        HttpResponse.json({
+          has_session: true,
+          phase: "grilling",
+          frontier_label: "Senior Engineer — Acme",
+          awaiting: "question",
+          current_question: "",
+          checkpoint_summary: "",
+        }),
+      ),
+    );
+
+    renderWithProviders(<GrillContent />);
+
+    // The stream is opened on mount and lands the question.
+    expect(
+      await screen.findByText(/put a number on that improvement/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Résumé file")).not.toBeInTheDocument();
+  });
+
+  it("does NOT offer the destructive start card when the status read fails", async () => {
+    // "Start grilling" creates the session, and create_session is last-write-wins — so
+    // falling back to the start card on a read error would let a transient Firestore
+    // hiccup wipe the user's entire portfolio.
+    server.use(
+      http.get(`${BASE}/api/grill`, () => new HttpResponse(null, { status: 500 })),
+    );
+
+    renderWithProviders(<GrillContent />);
+
+    expect(await screen.findByText(/couldn't load your grill/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Career history")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /start grilling/i })).not.toBeInTheDocument();
+  });
 });
