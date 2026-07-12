@@ -81,7 +81,38 @@ Google `tokeninfo` verifier may not accept Firebase `securetoken` JWTs. The issu
 wired correctly (from `FIREBASE_PROJECT_ID`); the fix is a ~15-line swap of the verifier in
 `auth/firebase_auth.py` to `firebase-admin`'s `verify_id_token`. Ping me and I'll do it.
 
+## 🔴 BACK UP FIRESTORE BEFORE ANY DEPLOY THAT MIGRATES STATE
+
+**Do this BEFORE lifting the dev blockade.** The shared Firestore holds **real user data, and not only
+the operator's** — at least one live session belongs to someone else. A bad migration there destroys a
+real person's career history, not a test fixture. Treat every session document as production personal
+data: back it up, and never copy it out of the database.
+
+Any deploy that changes the SHAPE of persisted state (a `CONTRACT_VERSION` bump — e.g. v2.8.0 → v2.9.0,
+`Entry.bullets: list[str]` → `list[Bullet]`) must follow this order:
+
+1. **Back up, in-database.** Copy every `sessions/{app}/users/{uid}/sessions/{sid}` document to
+   `session_backups/{UTC timestamp}/docs/{app}__{uid}__{sid}`. Keep it *inside* Firestore — do **not**
+   dump personal data to a local file or a bucket. Assert each copy is byte-identical to its source.
+2. **Dry-run the migration READ-ONLY against the real documents.** Load each live `session_state` blob
+   through the new `CareerEngineState.model_validate` and assert the result is **lossless** (same
+   entries, same bullets, same order) *before anything is written*. This is the actual production code
+   path — a synthetic fixture does not prove it.
+3. Only then deploy.
+
+This is exactly what was done for v2.9.0: the backup was verified byte-identical, a read-only dry-run over
+the live documents proved every bullet survived in order with an id, and only then did the deploy go out.
+
+**Gotcha that nearly fooled us:** the live state is under the document's **`session_state`** key. There is
+also a `career_engine_state` key — a *stale empty snapshot* written at creation and never updated. Read
+that one and you will conclude a portfolio is empty when it is not. (Duplicate-truth smell; fix separately.)
+
+The v2.9.0 migration itself is **read-time** (a Pydantic `field_validator(mode="before")` coerces legacy
+`list[str]` bullets on load), so there was no batch rewrite and nothing to roll back — but the backup +
+dry-run still apply to every future contract bump, which will not necessarily be so forgiving.
+
 ## Promote to dev (only when validated)
 Same image, deliberately: `gh workflow run deploy.yml --ref master -f environment=dev -f confirm_dev_cutover=true`.
+**Take the backup + read-only dry-run above first** — dev carries real user data, not only the operator's.
 Note dev's Terraform (`envs/dev`) still carries the Streamlit `CE_AUTH_*` config; reconcile it to the new
 stack (Firebase env, drop `auth_secrets`) before promoting. Validate on qa first.
