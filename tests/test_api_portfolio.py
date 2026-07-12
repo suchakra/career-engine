@@ -211,7 +211,7 @@ def test_add_bullet_401_without_token(client: TestClient) -> None:
 
 
 def test_edit_bullet_204(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Happy path: forwards user_id, entry_id, bullet_index and new_text to the bridge."""
+    """Happy path: forwards user_id, entry_id, bullet_id and new_text to the bridge."""
     calls: dict[str, Any] = {}
 
     def _fake(
@@ -248,8 +248,8 @@ def test_edit_bullet_404_when_no_session(
 ) -> None:
     """A ``None`` bridge return (no session) maps to 404.
 
-    (A missing entry or an out-of-range index is a logged no-op in the bridge that still
-    returns the session id → 204.)
+    (A missing entry or an unknown ``bullet_id`` is a logged no-op in the bridge that
+    still returns the session id → 204.)
     """
     monkeypatch.setattr(routes_portfolio, "update_entry_bullet", lambda *a, **k: None)
     resp = client.patch(
@@ -261,10 +261,11 @@ def test_edit_bullet_404_when_no_session(
 
 
 def test_edit_bullet_422_on_bad_body(client: TestClient) -> None:
-    """Empty / whitespace-only ``new_text`` and a negative ``bullet_index`` are rejected.
+    """Empty / whitespace-only ``new_text``, and an empty ``bullet_id``, are rejected.
 
-    Whitespace-only matters: the store strips the text and would leave the bullet
-    untouched, so accepting it would report 204 for an edit that never happened.
+    Whitespace-only text matters: the store strips it and would leave the bullet
+    untouched, so accepting it would report 204 for an edit that never happened. An empty
+    ``bullet_id`` addresses no bullet at all.
     """
     headers = _auth_headers()
     for body in (

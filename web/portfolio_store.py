@@ -296,7 +296,7 @@ async def _aupdate_entry_bullet(
 ) -> str | None:
     """Replace one bullet on an entry with ``new_text`` on the canonical session.
 
-    Guards against a missing entry or an out-of-range ``bullet_index`` (logs a
+    Guards against a missing entry or an unknown ``bullet_id`` (logs a
     warning and leaves state untouched). An empty or whitespace-only ``new_text`` is
     treated as a no-op so we never persist a blank bullet (matching
     :func:`add_manual_entry`, which filters empties). Returns the session_id, or ``None``

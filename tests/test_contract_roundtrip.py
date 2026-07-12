@@ -654,7 +654,7 @@ class TestContractVersion:
     """Tests to ensure CONTRACT_VERSION is semver-formatted and consistent."""
 
     def test_contract_version_is_290(self) -> None:
-        """CONTRACT_VERSION must be exactly "2.9.0" (UserWorkspace.discovery_preferences additive bump)."""
+        """CONTRACT_VERSION must be exactly "2.9.0" (Entry.bullets list[str] → list[Bullet])."""
         assert CONTRACT_VERSION == "2.9.0"
 
     def test_contract_version_is_semver(self) -> None:

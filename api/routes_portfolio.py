@@ -111,11 +111,13 @@ async def edit_bullet(
     session_service: FirestoreSessionService = Depends(get_session_service),
     user_id: str = Depends(get_current_user_id),
 ) -> Response:
-    """Edit one existing bullet on an experience in place (parity P5).
+    """Edit one existing bullet on an experience in place.
 
-    The bridge treats a missing entry or an out-of-range ``bullet_index`` as a logged
-    no-op (it never raises), so those still return 204. The 404 fires only when the user
-    has no discovery session at all (bridge returns ``None``).
+    The bullet is addressed by its stable ``bullet_id`` (v2.9.0), never by array index —
+    an index shifts under any concurrent insert or delete, so a slow client could edit
+    the wrong line. The bridge treats a missing entry or an UNKNOWN ``bullet_id`` as a
+    logged no-op (it never raises), so those still return 204. The 404 fires only when
+    the user has no discovery session at all (bridge returns ``None``).
     """
     app_name = get_settings().app_name
     result = await run_in_threadpool(
