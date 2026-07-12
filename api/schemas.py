@@ -384,6 +384,41 @@ class HighlightRequest(_StrictModel):
     highlighted: bool
 
 
+class CopyProposalResponse(_StrictModel):
+    """One proposed rewrite from the copywriter (CQ-4), linked to what it came from."""
+
+    source_id: str
+    text: str
+    original: str
+
+
+class CopyProposalsResponse(_StrictModel):
+    """Response for ``POST /api/experience/{entry_id}/copywrite``."""
+
+    proposals: list[CopyProposalResponse]
+
+
+class AcceptedBullet(_StrictModel):
+    """One rewrite the user ACCEPTED (possibly after editing the proposed text)."""
+
+    source_id: str
+    text: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)
+    ]
+
+
+class AcceptBulletsRequest(_StrictModel):
+    """Request body for ``POST /api/experience/{entry_id}/bullets/accept`` (CQ-4).
+
+    Only the rewrites the user actually accepted are sent. A rewrite of an existing bullet
+    supersedes it (the original stops appearing on the résumé, resolved BY ID); a rewrite
+    derived from a STAR story adds a bullet the entry did not have. Rejected proposals are
+    simply absent, and the original stays untouched.
+    """
+
+    accepted: list[AcceptedBullet]
+
+
 class BulletAddRequest(_StrictModel):
     """Request body for ``POST /api/experience/{entry_id}/bullet`` — append a bullet.
 

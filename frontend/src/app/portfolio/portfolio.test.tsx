@@ -212,3 +212,77 @@ describe("Master résumé (parity P4c)", () => {
     expect(await screen.findByText(/couldn't build your master résumé/i)).toBeInTheDocument();
   });
 });
+
+describe("Copywriter (CQ-4)", () => {
+  it("drafts rewrites, lets the user reject one, and persists only what was accepted", async () => {
+    let posted: { id: string; body: Record<string, unknown> } | null = null;
+    server.use(
+      http.post(`${BASE}/api/experience/:id/copywrite`, () =>
+        HttpResponse.json({
+          proposals: [
+            { source_id: "bullet:b1", text: "Rewritten one", original: "Original one" },
+            { source_id: "bullet:b2", text: "Rewritten two", original: "Original two" },
+          ],
+        }),
+      ),
+      http.post(`${BASE}/api/experience/:id/bullets/accept`, async ({ params, request }) => {
+        posted = {
+          id: String(params.id),
+          body: (await request.json()) as Record<string, unknown>,
+        };
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderWithProviders(<PortfolioContent />);
+
+    await user.click(await screen.findByRole("button", { name: /polish these bullets/i }));
+
+    // Each proposal is shown against the original it would replace.
+    expect(await screen.findByText("Original one")).toBeInTheDocument();
+    expect(screen.getByText("Original two")).toBeInTheDocument();
+
+    // Rejecting the second one must keep it OUT of the payload — nothing the user
+    // rejected may ever reach their résumé.
+    await user.click(screen.getByRole("button", { name: /reject rewrite: rewritten two/i }));
+    await user.click(screen.getByRole("button", { name: /keep 1 rewrite/i }));
+
+    await waitFor(() =>
+      expect(posted).toEqual({
+        id: "entry-1",
+        body: { accepted: [{ source_id: "bullet:b1", text: "Rewritten one" }] },
+      }),
+    );
+  });
+
+  it("persists the user's EDIT of a proposal, not the model's draft", async () => {
+    let posted: Record<string, unknown> | null = null;
+    server.use(
+      http.post(`${BASE}/api/experience/:id/copywrite`, () =>
+        HttpResponse.json({
+          proposals: [{ source_id: "bullet:b1", text: "Model draft", original: "Original" }],
+        }),
+      ),
+      http.post(`${BASE}/api/experience/:id/bullets/accept`, async ({ request }) => {
+        posted = (await request.json()) as Record<string, unknown>;
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderWithProviders(<PortfolioContent />);
+    await user.click(await screen.findByRole("button", { name: /polish these bullets/i }));
+
+    const box = await screen.findByLabelText(/rewritten bullet for: original/i);
+    await user.clear(box);
+    await user.type(box, "My own wording");
+    await user.click(screen.getByRole("button", { name: /keep 1 rewrite/i }));
+
+    await waitFor(() =>
+      expect(posted).toEqual({
+        accepted: [{ source_id: "bullet:b1", text: "My own wording" }],
+      }),
+    );
+  });
+});

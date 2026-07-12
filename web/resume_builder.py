@@ -179,12 +179,21 @@ def assemble_resume(
         stories = by_entry.get(str(entry.entry_id), [])
         bullets = [b for b in (_bullet_for(s) for s in stories) if b]
         is_education = entry.type is ExperienceType.EDUCATION
+        # A bullet the user replaced during the copywriter pass must NOT also appear
+        # (CQ-4 / AD-18.3). Resolved BY ID — never by guessing at text similarity, which is
+        # the game bullet identity exists to end.
+        superseded = {
+            str(b.supersedes) for b in entry.bullets if b.supersedes is not None
+        }
+        live_bullets = [
+            b.text for b in entry.bullets if str(b.bullet_id) not in superseded
+        ]
         # Education stays a clean degree/school/dates line. Carrying its raw entry bullets
         # would spill parsed coursework, honours and thesis blurbs into the résumé's
         # education section — that content belongs to the experience narrative, and the
         # renderer has never had to lay it out.
         if include_entry_bullets and not is_education:
-            bullets = _merge_entry_bullets(bullets, entry.bullet_texts)
+            bullets = _merge_entry_bullets(bullets, live_bullets)
         block = RoleBlock(title=entry.title, org=entry.org, dates=_dates(entry), bullets=bullets)
         if is_education:
             education.append(block)

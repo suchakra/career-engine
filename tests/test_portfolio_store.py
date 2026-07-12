@@ -26,6 +26,7 @@ from schema import (
 )
 from web.async_runner import run_async
 from web.portfolio_store import (
+    accept_bullets,
     add_entry_bullet,
     add_manual_entry,
     amerge_parsed_entries,
@@ -732,3 +733,54 @@ class TestDeleteEntry:
     def test_returns_none_when_no_session(self) -> None:
         service = _service()
         assert delete_entry(service, app_name=_APP, user_id=_UID, entry_id="x") is None
+
+
+class TestAcceptBullets:
+    def test_an_accepted_rewrite_REPLACES_the_original(self) -> None:
+        """CQ-4: the résumé must never carry both the polished line and the one it replaced."""
+        service = _service()
+        original = Bullet(text="Ran CI")
+        keep = Bullet(text="Hired six engineers")
+        entry = Entry(type=ExperienceType.PROJECT, title="Platform", bullets=[original, keep])
+        _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
+
+        polished = Bullet(
+            text="Rebuilt CI, cutting deploy failures 40%",
+            source=BulletSource.GRILLED,
+            supersedes=original.bullet_id,
+        )
+        sid = accept_bullets(
+            service, app_name=_APP, user_id=_UID,
+            entry_id=str(entry.entry_id), bullets=[polished],
+        )
+
+        assert sid is not None
+        bullets = _read_latest(service).work_timeline[0].bullets
+        texts = [b.text for b in bullets]
+        assert "Ran CI" not in texts  # superseded → gone, resolved BY ID
+        assert texts == ["Hired six engineers", "Rebuilt CI, cutting deploy failures 40%"]
+        assert bullets[-1].source is BulletSource.GRILLED
+
+    def test_a_story_derived_bullet_is_ADDED_without_removing_anything(self) -> None:
+        service = _service()
+        entry = Entry(
+            type=ExperienceType.PROJECT, title="Platform", bullets=[Bullet(text="Ran CI")]
+        )
+        _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
+
+        accept_bullets(
+            service, app_name=_APP, user_id=_UID, entry_id=str(entry.entry_id),
+            bullets=[Bullet(text="Cut deploy failures 40%", source=BulletSource.GRILLED)],
+        )
+
+        assert _read_latest(service).work_timeline[0].bullet_texts == [
+            "Ran CI",
+            "Cut deploy failures 40%",
+        ]
+
+    def test_returns_none_when_no_session(self) -> None:
+        service = _service()
+        assert (
+            accept_bullets(service, app_name=_APP, user_id=_UID, entry_id="x", bullets=[])
+            is None
+        )
