@@ -51,6 +51,7 @@ from integration.model_client import ModelAPIError
 from schema import CareerEngineState, PhaseStatus
 from tools.resume_parser import ParseError, parse_resume
 from web.grill_labels import _effective_frontier_label
+from web.portfolio_store import amerge_parsed_entries
 from web.session_loader import web_session_id
 
 router = APIRouter()
@@ -170,14 +171,22 @@ async def seed_from_resume(
     file: UploadFile = File(...),
     user_id: str = Depends(get_current_user_id),
     session: DiscoverySession = Depends(get_discovery_session),
+    session_service: FirestoreSessionService = Depends(get_session_service),
 ) -> GrillSnapshot:
     """Vision-parse an uploaded résumé into a starting timeline and seed the grill.
 
     Requires a valid bearer token AND a BYOK key (``get_discovery_session`` → 409). The
     file (PDF/PNG/JPG/WEBP) is parsed by the multimodal model on the user's OWN key
     (``tools.resume_parser.parse_resume``) into ``Entry`` objects — the raw bytes are
-    never stored — and used to ``create`` the durable session (``work_timeline``). Returns
-    the post-record snapshot so the client can open the SSE stream, exactly like ``start``.
+    never stored. Returns the post-record snapshot so the client can open the SSE stream,
+    exactly like ``start``.
+
+    **A re-upload MERGES; it never clobbers (CQ-2).** Users legitimately keep several
+    overlapping résumés. A matched role (same title + org) keeps its ``entry_id``, its
+    STAR stories and its GRILLED status and only gains new bullets; a genuinely-new role
+    is appended ungrilled and the grill frontier moves to it; a role this résumé happens
+    to omit is KEPT (a résumé is a curated subset of a career, not a delete list). Only a
+    FIRST upload — no session yet — creates one.
     """
     data = await file.read()
     if not data:
@@ -194,9 +203,22 @@ async def seed_from_resume(
         # like the rest of the grill transport (rate-limit → 429, else 502).
         status = 429 if exc.is_rate_limited else 502
         raise HTTPException(status_code=status, detail=str(exc)) from exc
-    await session.create(
-        "", reference_date=date.today().isoformat(), work_timeline=entries
+    # MERGE, never clobber (CQ-2). session.create is last-write-wins: uploading a second
+    # résumé used to destroy the whole session — every entry, every STAR story, every hour
+    # of grilling. Users legitimately keep several overlapping résumés, so a re-upload
+    # must be additive: matched roles keep their entry_id, stories and GRILLED status and
+    # only gain new bullets; genuinely-new roles are appended ungrilled and the grill
+    # frontier moves to them. Only a FIRST upload (no session yet) creates.
+    merged = await amerge_parsed_entries(
+        session_service,
+        app_name=get_settings().app_name,
+        user_id=user_id,
+        entries=entries,
     )
+    if merged is None:
+        await session.create(
+            "", reference_date=date.today().isoformat(), work_timeline=entries
+        )
     state = await session.current_state()
     return GrillSnapshot(
         phase=state.current_phase.value,

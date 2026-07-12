@@ -20,13 +20,17 @@ from schema import (
     BulletSource,
     CareerEngineState,
     Entry,
+    EntryStatus,
     ExperienceType,
     StarStory,
 )
+from web.async_runner import run_async
 from web.portfolio_store import (
     add_entry_bullet,
     add_manual_entry,
+    amerge_parsed_entries,
     delete_star_story,
+    merge_work_timeline,
     set_entry_highlight,
     set_grill_frontier,
     update_entry_bullet,
@@ -437,6 +441,145 @@ class TestUpdateEntryBullet:
                 entry_id="x",
                 bullet_id=str(uuid4()),
                 new_text="y",
+            )
+            is None
+        )
+
+
+class TestMergeWorkTimeline:
+    """CQ-2: a résumé RE-upload must merge, never clobber.
+
+    Before this, ``POST /api/grill/resume`` called ``session.create`` — which is
+    last-write-wins — so a second upload silently destroyed every entry, every STAR
+    story, and every hour of grilling.
+    """
+
+    def _role(self, title: str, org: str, *, bullets: list[str], status: EntryStatus) -> Entry:
+        return Entry(
+            type=ExperienceType.FULL_TIME,
+            title=title,
+            org=org,
+            bullets=[Bullet(text=b) for b in bullets],
+            status=status,
+        )
+
+    def test_a_matched_role_keeps_its_id_stories_and_grilled_status(self) -> None:
+        """The whole point: re-uploading must not orphan grilled work."""
+        existing = self._role(
+            "Staff Engineer", "Texada", bullets=["Led the migration"], status=EntryStatus.GRILLED
+        )
+        # The same role as read off an updated résumé: new object, new ids, one new line.
+        parsed = self._role(
+            "  staff engineer  ",  # noisier case/spacing — must still match
+            "TEXADA",
+            bullets=["Led the migration", "Cut cloud spend 30%"],
+            status=EntryStatus.NEEDS_QUANTIFYING,
+        )
+
+        merged, added = merge_work_timeline([existing], [parsed])
+
+        assert added == []  # not a new role
+        assert len(merged) == 1
+        kept = merged[0]
+        assert kept.entry_id == existing.entry_id  # STAR stories stay linked
+        assert kept.status is EntryStatus.GRILLED  # never demoted back to ungrilled
+        assert kept.bullet_texts == ["Led the migration", "Cut cloud spend 30%"]  # unioned
+
+    def test_a_new_role_is_appended_ungrilled(self) -> None:
+        existing = self._role("Staff Engineer", "Texada", bullets=[], status=EntryStatus.GRILLED)
+        parsed = self._role(
+            "Senior SDE", "Oracle", bullets=["Ran the DevOps team"], status=EntryStatus.NEEDS_QUANTIFYING
+        )
+
+        merged, added = merge_work_timeline([existing], [parsed])
+
+        assert [e.title for e in merged] == ["Staff Engineer", "Senior SDE"]
+        assert [e.entry_id for e in added] == [parsed.entry_id]
+        assert merged[1].status is EntryStatus.NEEDS_QUANTIFYING
+
+    def test_a_role_this_resume_omits_is_KEPT(self) -> None:
+        """A résumé is a curated subset of a career, not a delete list."""
+        keep = self._role("Program Manager", "Oracle", bullets=["Shipped X"], status=EntryStatus.GRILLED)
+        parsed = self._role("Senior SDE", "Oracle", bullets=[], status=EntryStatus.NEEDS_QUANTIFYING)
+
+        merged, _ = merge_work_timeline([keep], [parsed])
+
+        assert keep.entry_id in {e.entry_id for e in merged}
+
+    def test_bullets_are_not_duplicated_on_re_upload(self) -> None:
+        """Re-uploading the SAME résumé must be a no-op, not a doubling."""
+        existing = self._role(
+            "Staff Engineer", "Texada",
+            bullets=["Led the migration", "Hired six engineers"],
+            status=EntryStatus.GRILLED,
+        )
+        same_again = self._role(
+            "Staff Engineer", "Texada",
+            bullets=["  led the migration  ", "Hired six engineers"],  # same lines, noisier
+            status=EntryStatus.NEEDS_QUANTIFYING,
+        )
+
+        merged, added = merge_work_timeline([existing], [same_again])
+
+        assert added == []
+        assert merged[0].bullet_texts == ["Led the migration", "Hired six engineers"]
+        assert merged[0].entry_id == existing.entry_id
+
+
+class TestMergeParsedEntriesIntoSession:
+    def test_merge_preserves_every_star_story_and_aims_the_grill_at_new_work(self) -> None:
+        """End-to-end over the session: NO story may be lost, and the frontier moves."""
+        service = _service()
+        job = Entry(
+            type=ExperienceType.FULL_TIME, title="Staff Engineer", org="Texada",
+            bullets=[Bullet(text="Led the migration")], status=EntryStatus.GRILLED,
+        )
+        story = StarStory(
+            entry_id=str(job.entry_id), pillar="delivery",
+            result="Cut deploy failures 40%", metrics_validated=True,
+        )
+        _seed(
+            service,
+            CareerEngineState(
+                reference_date=_REF,
+                work_timeline=[job],
+                extracted_star_stories=[story],
+                current_question="What did that migration save?",
+            ),
+        )
+
+        # Upload #2: the same role (updated) plus a role we have never seen.
+        parsed = [
+            Entry(type=ExperienceType.FULL_TIME, title="Staff Engineer", org="Texada",
+                  bullets=[Bullet(text="Cut cloud spend 30%")]),
+            Entry(type=ExperienceType.FULL_TIME, title="Senior SDE", org="Oracle",
+                  bullets=[Bullet(text="Ran the DevOps team")]),
+        ]
+        sid = run_async(
+            amerge_parsed_entries(
+                service, app_name=_APP, user_id=_UID, entries=parsed
+            )
+        )
+        assert sid is not None
+
+        state = _read_latest(service)
+        # Nothing destroyed: the story survives and still points at the kept entry.
+        assert len(state.extracted_star_stories) == 1
+        assert state.extracted_star_stories[0].entry_id == str(job.entry_id)
+        kept = next(e for e in state.work_timeline if e.entry_id == job.entry_id)
+        assert kept.status is EntryStatus.GRILLED
+        assert kept.bullet_texts == ["Led the migration", "Cut cloud spend 30%"]
+        # The new role is there, and the grill is aimed at it (stale question cleared).
+        new_role = next(e for e in state.work_timeline if e.title == "Senior SDE")
+        assert state.grill_frontier == str(new_role.entry_id)
+        assert state.current_question == ""
+
+    def test_returns_none_when_there_is_no_session_to_merge_into(self) -> None:
+        """A FIRST upload has nothing to merge into — the caller creates instead."""
+        service = _service()
+        assert (
+            run_async(
+                amerge_parsed_entries(service, app_name=_APP, user_id=_UID, entries=[])
             )
             is None
         )

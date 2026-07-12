@@ -537,3 +537,134 @@ __all__ = [
     "set_grill_frontier",
     "update_entry_bullet",
 ]
+
+# ── Résumé re-upload: MERGE, never clobber (CQ-2) ─────────────────────────────
+
+
+def _norm(text: str) -> str:
+    """Normalise a title/org/bullet for matching: case- and whitespace-insensitive."""
+    return " ".join(text.split()).casefold()
+
+
+def _entry_key(entry: Entry) -> tuple[str, str]:
+    """The identity of a role for re-upload matching: its (title, org).
+
+    Deliberately NOT including the dates. A user re-uploading an updated résumé very
+    often has the same role with a corrected or extended end date ("2017-09 to present"
+    vs "2017-09 to 2026-01"); keying on dates would treat that as a brand-new role and
+    duplicate it, stranding the STAR stories on the old copy. Two genuinely different
+    stints with the same title at the same org are rare, and merging them is a far less
+    damaging error than orphaning a user's grilled work.
+    """
+    return (_norm(entry.title), _norm(entry.org))
+
+
+def merge_work_timeline(
+    existing: list[Entry], parsed: list[Entry]
+) -> tuple[list[Entry], list[Entry]]:
+    """Merge freshly-parsed résumé entries INTO an existing timeline. Never destroys.
+
+    Returns ``(merged_timeline, newly_added)``.
+
+    Before this, a second résumé upload called ``session.create``, which is
+    last-write-wins: the whole ``CareerEngineState`` — every entry, every STAR story,
+    every hour of grilling — was silently destroyed. Users legitimately keep several
+    overlapping résumés, so a re-upload has to be additive.
+
+    Rules:
+    - A parsed entry matching an existing one (same normalised title + org) KEEPS the
+      existing entry: its ``entry_id`` (so its STAR stories stay linked), its ``status``
+      (a GRILLED role is not demoted back to ungrilled), and its ``highlighted`` pin.
+      Only its bullets are unioned — new lines from the résumé are appended, lines it
+      already has are not duplicated.
+    - A parsed entry matching nothing is APPENDED as a new, ungrilled entry.
+    - An existing entry the new résumé omits is KEPT. A résumé is a curated subset of a
+      career, not a delete list — dropping a role because this particular résumé left it
+      out would destroy grilled work the user never asked to remove.
+    """
+    by_key: dict[tuple[str, str], int] = {
+        _entry_key(e): i for i, e in enumerate(existing)
+    }
+    merged = list(existing)
+    added: list[Entry] = []
+
+    for candidate in parsed:
+        idx = by_key.get(_entry_key(candidate))
+        if idx is None:
+            merged.append(candidate)
+            added.append(candidate)
+            by_key[_entry_key(candidate)] = len(merged) - 1
+            continue
+        current = merged[idx]
+        seen = {_norm(b.text) for b in current.bullets}
+        fresh = [
+            b for b in candidate.bullets if b.text.strip() and _norm(b.text) not in seen
+        ]
+        if fresh:
+            merged[idx] = current.model_copy(
+                update={"bullets": [*current.bullets, *fresh]}
+            )
+    return merged, added
+
+
+async def _amerge_parsed_entries(
+    session_service: BaseSessionService,
+    *,
+    app_name: str,
+    user_id: str,
+    entries: list[Entry],
+) -> str | None:
+    """Merge parsed résumé entries into the caller's EXISTING session (never create).
+
+    Returns the session_id, or ``None`` if the user has no session (the caller should
+    then create one — a first upload has nothing to merge into).
+
+    Also aims the grill at the newly-added roles: the frontier moves to the first new
+    entry and ``current_question`` is cleared, so the next turn asks about work we have
+    not grilled yet rather than re-asking a pending question about an old one.
+    """
+    session_id = web_session_id(user_id)
+    existing = await session_helpers.get_session_state_if_exists(
+        session_service=session_service,
+        app_name=app_name,
+        user_id=user_id,
+        session_id=session_id,
+    )
+    if existing is None:
+        return None
+
+    merged, added = merge_work_timeline(existing.work_timeline, entries)
+    delta: dict[str, object] = {
+        "work_timeline": [e.model_dump(mode="json") for e in merged],
+        "contract_version": CONTRACT_VERSION,
+    }
+    if added:
+        delta["grill_frontier"] = str(added[0].entry_id)
+        delta["current_question"] = ""
+    await _patch_session(
+        session_service,
+        app_name=app_name,
+        user_id=user_id,
+        session_id=session_id,
+        state_delta=delta,
+    )
+    logger.info(
+        "merge_parsed_entries: %d parsed → %d added, %d total (no entry or story removed)",
+        len(entries),
+        len(added),
+        len(merged),
+    )
+    return session_id
+
+
+async def amerge_parsed_entries(
+    session_service: BaseSessionService,
+    *,
+    app_name: str,
+    user_id: str,
+    entries: list[Entry],
+) -> str | None:
+    """Public async wrapper over :func:`_amerge_parsed_entries` (for async callers)."""
+    return await _amerge_parsed_entries(
+        session_service, app_name=app_name, user_id=user_id, entries=entries
+    )

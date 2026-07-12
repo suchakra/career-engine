@@ -245,8 +245,15 @@ export interface paths {
          *     Requires a valid bearer token AND a BYOK key (``get_discovery_session`` → 409). The
          *     file (PDF/PNG/JPG/WEBP) is parsed by the multimodal model on the user's OWN key
          *     (``tools.resume_parser.parse_resume``) into ``Entry`` objects — the raw bytes are
-         *     never stored — and used to ``create`` the durable session (``work_timeline``). Returns
-         *     the post-record snapshot so the client can open the SSE stream, exactly like ``start``.
+         *     never stored. Returns the post-record snapshot so the client can open the SSE stream,
+         *     exactly like ``start``.
+         *
+         *     **A re-upload MERGES; it never clobbers (CQ-2).** Users legitimately keep several
+         *     overlapping résumés. A matched role (same title + org) keeps its ``entry_id``, its
+         *     STAR stories and its GRILLED status and only gains new bullets; a genuinely-new role
+         *     is appended ungrilled and the grill frontier moves to it; a role this résumé happens
+         *     to omit is KEPT (a résumé is a curated subset of a career, not a delete list). Only a
+         *     FIRST upload — no session yet — creates one.
          */
         post: operations["seed_from_resume_api_grill_resume_post"];
         delete?: never;

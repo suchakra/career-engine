@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from api.deps import get_auth_provider, get_discovery_session
+from api.deps import get_auth_provider, get_discovery_session, get_session_service
 from api.main import app
 from auth.firebase_auth import FirebaseAuthProvider
 from schema import CareerEngineState
@@ -98,3 +98,73 @@ def test_empty_file_rejected_422(client: TestClient) -> None:
         headers=_auth_headers(),
     )
     assert resp.status_code == 422
+
+
+# ── CQ-2: a RE-upload merges into the existing session; it never clobbers ──────
+
+
+def test_reupload_merges_into_the_existing_session_and_never_creates(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The data-loss fix: when a session exists, the upload MERGES — create is not called.
+
+    ``session.create`` is last-write-wins, so calling it on a second upload destroyed the
+    whole CareerEngineState. The route must merge instead, and must only create when
+    there is genuinely no session to merge into.
+    """
+    from schema import Entry, ExperienceType
+
+    parsed = [Entry(type=ExperienceType.FULL_TIME, title="Staff Engineer", org="Texada")]
+    monkeypatch.setattr("api.routes_grill.parse_resume", lambda *a, **k: parsed)
+
+    merged_with: dict[str, Any] = {}
+
+    async def _fake_merge(session_service: Any, *, app_name: str, user_id: str, entries: Any) -> str:
+        merged_with.update(user_id=user_id, entries=entries)
+        return "web-user-123"  # a session existed → merged
+
+    monkeypatch.setattr("api.routes_grill.amerge_parsed_entries", _fake_merge)
+
+    session = _FakeSession()
+    app.dependency_overrides[get_discovery_session] = lambda: session
+    app.dependency_overrides[get_session_service] = lambda: object()
+
+    resp = client.post(
+        "/api/grill/resume",
+        files={"file": ("cv.pdf", b"%PDF-1.4", "application/pdf")},
+        headers=_auth_headers(),
+    )
+
+    assert resp.status_code == 200
+    assert merged_with["user_id"] == _USER_ID
+    assert merged_with["entries"] == parsed
+    assert session.created is None, "create() must NOT run when a session already exists"
+
+
+def test_first_upload_still_creates_the_session(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No session to merge into (merge returns None) → the first upload creates one."""
+    from schema import Entry, ExperienceType
+
+    parsed = [Entry(type=ExperienceType.FULL_TIME, title="Staff Engineer", org="Texada")]
+    monkeypatch.setattr("api.routes_grill.parse_resume", lambda *a, **k: parsed)
+
+    async def _no_session(*a: Any, **k: Any) -> None:
+        return None
+
+    monkeypatch.setattr("api.routes_grill.amerge_parsed_entries", _no_session)
+
+    session = _FakeSession()
+    app.dependency_overrides[get_discovery_session] = lambda: session
+    app.dependency_overrides[get_session_service] = lambda: object()
+
+    resp = client.post(
+        "/api/grill/resume",
+        files={"file": ("cv.pdf", b"%PDF-1.4", "application/pdf")},
+        headers=_auth_headers(),
+    )
+
+    assert resp.status_code == 200
+    assert session.created is not None
+    assert session.created[1] == parsed
