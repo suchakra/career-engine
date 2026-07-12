@@ -102,6 +102,20 @@ def _extract_json_object(text: str) -> dict[str, Any]:
     return parsed if isinstance(parsed, dict) else {}
 
 
+def _merge_entry_bullets(story_bullets: list[str], entry_bullets: list[str]) -> list[str]:
+    """Story bullets first (quantified — the strongest), then the entry's own lines.
+
+    An entry's ``bullets`` are what the user actually wrote (or what the vision parser
+    read off their uploaded résumé). A bullet already covered by a validated story is
+    skipped so the same achievement isn't listed twice; the match is a case/space-
+    insensitive exact compare — deliberately conservative, since a near-miss here would
+    silently DROP the user's own line, which is the failure we are fixing.
+    """
+    seen = {b.strip().casefold() for b in story_bullets}
+    extra = [b for b in entry_bullets if b.strip() and b.strip().casefold() not in seen]
+    return [*story_bullets, *extra]
+
+
 def assemble_resume(
     state: CareerEngineState,
     *,
@@ -109,13 +123,22 @@ def assemble_resume(
     summary: str,
     skills: list[str],
     selected_story_ids: list[str] | None = None,
+    include_entry_bullets: bool = False,
 ) -> StructuredResume:
     """Deterministically build a StructuredResume from the session (grouped by role).
 
-    Only ``metrics_validated`` stories are used. If ``selected_story_ids`` is given,
-    experience bullets are limited to that selection (JD-tailored); otherwise all
-    validated stories are included (master résumé). Education entries are listed
-    regardless of stories. Experience order follows ``work_timeline`` (newest-first).
+    Only ``metrics_validated`` stories are used for the story bullets. If
+    ``selected_story_ids`` is given, those are limited to that selection (JD-tailored);
+    otherwise all validated stories are included (master résumé). Education entries are
+    listed regardless of stories. Experience order follows ``work_timeline``.
+
+    ``include_entry_bullets`` (master résumé only) also carries the entry's OWN bullets —
+    what the user wrote, or what the vision parser read off their uploaded résumé —
+    after the story bullets, and lets a role earn its place on the strength of those
+    alone. Without it, an uploaded-but-not-yet-grilled résumé assembles to an EMPTY
+    master résumé: every bullet the user actually supplied is silently discarded because
+    no STAR story has been extracted from it yet. The JD-tailored pass leaves this off:
+    there, achievement selection is the model's job.
     """
     selected = set(selected_story_ids) if selected_story_ids is not None else None
     by_entry: dict[str, list[StarStory]] = {}
@@ -131,10 +154,12 @@ def assemble_resume(
     for entry in state.work_timeline:
         stories = by_entry.get(str(entry.entry_id), [])
         bullets = [b for b in (_bullet_for(s) for s in stories) if b]
+        if include_entry_bullets:
+            bullets = _merge_entry_bullets(bullets, list(entry.bullets))
         block = RoleBlock(title=entry.title, org=entry.org, dates=_dates(entry), bullets=bullets)
         if entry.type is ExperienceType.EDUCATION:
             education.append(block)
-        elif bullets:  # a work role earns a spot only if it has quantified bullets
+        elif bullets:  # a work role earns a spot only if it has something to show
             experience.append(block)
 
     return StructuredResume(
@@ -154,6 +179,11 @@ def master_structured_resume(
     The same :class:`StructuredResume` schema and renderer as the tailored résumé (5C):
     all validated stories (no ``selected_story_ids``), grouped by role, with the
     profile summary. Skills are left to the tailored pass (they are JD-aligned there).
+
+    ``include_entry_bullets=True``: the master résumé is the user's COMPLETE record, so
+    it also carries the lines they wrote / uploaded, not only the achievements we have
+    grilled a metric out of. Without this, uploading a good résumé and asking for a
+    master résumé returned an empty document.
     """
     return assemble_resume(
         state,
@@ -161,6 +191,7 @@ def master_structured_resume(
         summary=state.professional_summary,
         skills=[],
         selected_story_ids=None,
+        include_entry_bullets=True,
     )
 
 

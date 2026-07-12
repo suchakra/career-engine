@@ -76,7 +76,9 @@ def me(identity: VerifiedIdentity = Depends(get_current_identity)) -> MeResponse
 
 
 @app.api_route(
-    "/api/{_rest:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"]
+    "/api/{_rest:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    include_in_schema=False,
 )
 def api_not_found(_rest: str) -> JSONResponse:
     """Return a JSON 404 for any unmatched ``/api`` path.
@@ -84,6 +86,11 @@ def api_not_found(_rest: str) -> JSONResponse:
     Registered after every real ``/api`` route but BEFORE the static frontend mount, so
     an unknown API path gets a JSON 404 (not the SPA's HTML ``404.html``) — API clients
     keep getting API-shaped errors.
+
+    ``include_in_schema=False``: this is an error handler, not part of the public API.
+    Left in the schema, FastAPI gave all five of its methods the SAME operationId, and
+    ``npm run gen:openapi`` emitted five colliding type aliases — so regenerating the
+    client types didn't compile.
     """
     return JSONResponse({"detail": "Not Found"}, status_code=404)
 

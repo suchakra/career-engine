@@ -66,6 +66,54 @@ class TestMasterStructuredResume:
         assert len(resume.education) == 1
         assert resume.skills == []  # skills are JD-aligned in the tailored pass only
 
+    def test_includes_the_users_own_bullets_from_an_ungrilled_resume(self) -> None:
+        """An UPLOADED-but-ungrilled résumé must still produce a real master résumé.
+
+        Regression: bullets were built ONLY from validated STAR stories, and a work role
+        "earned a spot" only if it had them — so a freshly-parsed résumé (entries with
+        bullets, no stories yet) assembled to an EMPTY document, silently discarding
+        every line the user actually supplied.
+        """
+        job = _job()
+        job = job.model_copy(update={"bullets": ["Ran the platform team", "Owned CI/CD"]})
+        state = CareerEngineState(work_timeline=[job], professional_summary="Staff engineer.")
+
+        resume = master_structured_resume(state)
+
+        assert len(resume.experience) == 1
+        assert resume.experience[0].bullets == ["Ran the platform team", "Owned CI/CD"]
+
+    def test_story_bullets_come_first_then_the_users_own(self) -> None:
+        """Quantified achievements lead; the user's remaining lines follow, deduped."""
+        job = _job()
+        job = job.model_copy(
+            update={"bullets": ["Cut p99 latency 40%", "Mentored four engineers"]}
+        )
+        state = CareerEngineState(
+            work_timeline=[job],
+            extracted_star_stories=[_story(job, "Cut p99 latency 40%")],
+        )
+
+        bullets = master_structured_resume(state).experience[0].bullets
+
+        # The story bullet leads. The identical entry bullet is NOT repeated, but the
+        # line the story doesn't cover survives.
+        assert bullets[0].startswith("Cut p99 latency 40%")
+        assert "Mentored four engineers" in bullets
+        assert sum(1 for b in bullets if "Cut p99 latency 40%" in b) == 1
+
+    def test_tailored_pass_still_ignores_entry_bullets(self) -> None:
+        """Only the MASTER résumé carries raw entry bullets — the JD pass selects."""
+        job = _job()
+        job = job.model_copy(update={"bullets": ["Ran the platform team"]})
+        state = CareerEngineState(work_timeline=[job])
+
+        resume = assemble_resume(
+            state, contact=Contact(), summary="", skills=[], selected_story_ids=[]
+        )
+
+        assert resume.experience == []
+
     def test_empty_when_no_validated_stories(self) -> None:
         assert master_structured_resume(CareerEngineState()).is_empty
 

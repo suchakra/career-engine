@@ -17,7 +17,15 @@ import { useGrill } from "@/lib/grill/useGrill";
 export function GrillContent(): JSX.Element {
   const grill = useGrill();
   const [history, setHistory] = useState("");
-  const notStarted = grill.awaiting === "idle" && grill.transcript.length === 0;
+  // Branch on the SERVER's answer, not on in-memory state. Deciding this client-side
+  // (`awaiting === "idle" && transcript.length === 0`) meant every fresh page load
+  // showed the start card — even on top of a live session, and even right after the
+  // user clicked "Grill me about this" in the Portfolio.
+  const notStarted = grill.hasSession === false;
+
+  if (grill.hasSession === null) {
+    return <p className="text-sm text-muted">Loading your grill…</p>;
+  }
 
   return (
     <div className="flex flex-col gap-4">

@@ -7,6 +7,7 @@ import type {
   GrillActionRequest,
   GrillErrorEvent,
   GrillSnapshot,
+  GrillStatus,
   GrillTurnEvent,
 } from "@/lib/api/grill";
 
@@ -21,6 +22,12 @@ export type Awaiting = "idle" | "question" | "checkpoint" | "complete";
 
 export interface GrillController {
   transcript: Transcript[];
+  /**
+   * Does a durable session already exist? `null` while we're still asking the server.
+   * The Grill page MUST branch on this rather than on in-memory state — otherwise every
+   * fresh page load shows the "start a grill" card on top of a live session.
+   */
+  hasSession: boolean | null;
   /** The "📌 Currently grilling" banner — always the server's effective label. */
   banner: string;
   awaiting: Awaiting;
@@ -50,6 +57,7 @@ function awaitingFromTurn(t: GrillTurnEvent): Awaiting {
  */
 export function useGrill(): GrillController {
   const [transcript, setTranscript] = useState<Transcript[]>([]);
+  const [hasSession, setHasSession] = useState<boolean | null>(null);
   const [banner, setBanner] = useState("");
   const [awaiting, setAwaiting] = useState<Awaiting>("idle");
   const [streaming, setStreaming] = useState(false);
@@ -112,6 +120,7 @@ export function useGrill(): GrillController {
 
   const start = useCallback(
     (history: string) => {
+      setHasSession(true);
       setTranscript([{ role: "user", text: history }]);
       return post({ action: "start", history, answer: "", reference_date: "" });
     },
@@ -120,6 +129,7 @@ export function useGrill(): GrillController {
 
   const startFromResume = useCallback(
     async (file: File) => {
+      setHasSession(true);
       setTranscript([{ role: "user", text: `📎 Uploaded résumé: ${file.name}` }]);
       setError(null);
       // Parsing is a slow VISION call on the user's key (many seconds). `streaming` is
@@ -159,5 +169,43 @@ export function useGrill(): GrillController {
     [post],
   );
 
-  return { transcript, banner, awaiting, streaming, error, start, startFromResume, answer, confirm };
+  // Resume an existing session on mount. GET /api/grill is read-only (no graph turn, no
+  // model call, no key), and `current_question` / `checkpoint_summary` are persisted —
+  // so we rehydrate the pending turn WITHOUT re-asking it. Before this, the page decided
+  // what to show from in-memory state alone and always rendered the "start" card, which
+  // stranded anyone with a live session (including "Grill me about this" from Portfolio).
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const status = await apiFetch<GrillStatus>("/api/grill");
+        if (cancelled) return;
+        setHasSession(status.has_session);
+        if (!status.has_session) return;
+        setBanner(status.frontier_label);
+        setAwaiting(status.awaiting);
+        const pending = status.checkpoint_summary || status.current_question;
+        if (pending) setTranscript([{ role: "assistant", text: pending }]);
+      } catch {
+        // Can't tell → fall back to the start card rather than blocking the page.
+        if (!cancelled) setHasSession(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return {
+    transcript,
+    hasSession,
+    banner,
+    awaiting,
+    streaming,
+    error,
+    start,
+    startFromResume,
+    answer,
+    confirm,
+  };
 }

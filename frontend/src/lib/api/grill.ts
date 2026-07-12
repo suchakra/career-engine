@@ -6,6 +6,7 @@ type Schemas = components["schemas"];
 export type GrillActionRequest = Schemas["GrillActionRequest"];
 /** Post-record status snapshot from `POST /api/grill` (OpenAPI-typed). */
 export type GrillSnapshot = Schemas["GrillSnapshot"];
+export type GrillStatus = Schemas["GrillStatus"];
 
 /**
  * SSE payloads for `GET /api/grill/stream`. These are hand-authored because the
