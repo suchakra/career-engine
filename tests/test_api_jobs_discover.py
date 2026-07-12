@@ -153,9 +153,13 @@ def test_dismiss_surfaces_a_ledger_fault_as_502(client: TestClient) -> None:
     assert resp.status_code == 502
 
 
-def test_dismiss_rejects_an_empty_company(client: TestClient) -> None:
-    resp = client.post("/api/jobs/dismiss", json={"company": ""}, headers=_auth_headers())
-    assert resp.status_code == 422
+def test_dismiss_rejects_an_empty_or_blank_company(client: TestClient) -> None:
+    """Whitespace-only is rejected too — the ledger strips it, so it would be a no-op."""
+    for company in ("", "   "):
+        resp = client.post(
+            "/api/jobs/dismiss", json={"company": company}, headers=_auth_headers()
+        )
+        assert resp.status_code == 422, company
 
 
 def test_dismiss_requires_auth(client: TestClient) -> None:

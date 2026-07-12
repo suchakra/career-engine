@@ -10,9 +10,9 @@ models explicitly so no dataclass type ever leaks onto the wire.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from web.dashboard import DashboardView
 from web.jobs import JobCard, JobsView
@@ -357,10 +357,17 @@ class HighlightRequest(_StrictModel):
 
 
 class BulletEditRequest(_StrictModel):
-    """Request body for ``PATCH /api/experience/{entry_id}/bullet`` (parity P5)."""
+    """Request body for ``PATCH /api/experience/{entry_id}/bullet`` (parity P5).
+
+    ``new_text`` is stripped BEFORE the length check, so a whitespace-only edit is a 422
+    rather than a silent no-op: the store strips it too, and would otherwise leave the
+    bullet untouched while the endpoint reported 204.
+    """
 
     bullet_index: int = Field(ge=0)
-    new_text: str = Field(min_length=1, max_length=500)
+    new_text: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)
+    ]
 
 
 class DismissCompanyRequest(_StrictModel):
@@ -369,6 +376,11 @@ class DismissCompanyRequest(_StrictModel):
     Dismissal is by COMPANY, not by job: the discovery ledger hard-rejects the company
     on future runs (``discovery.store.add_rejected_company``), which is what the old
     "Not interested" affordance did.
+
+    ``company`` is stripped before the length check (same reason as ``new_text`` above —
+    the ledger strips it, so a blank name would be a silently-dropped dismissal).
     """
 
-    company: str = Field(min_length=1, max_length=200)
+    company: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
+    ]

@@ -214,20 +214,19 @@ def test_edit_bullet_404_when_no_session(
 
 
 def test_edit_bullet_422_on_bad_body(client: TestClient) -> None:
-    """An empty ``new_text`` and a negative ``bullet_index`` are both rejected."""
+    """Empty / whitespace-only ``new_text`` and a negative ``bullet_index`` are rejected.
+
+    Whitespace-only matters: the store strips the text and would leave the bullet
+    untouched, so accepting it would report 204 for an edit that never happened.
+    """
     headers = _auth_headers()
-    empty = client.patch(
-        "/api/experience/e3/bullet",
-        json={"bullet_index": 0, "new_text": ""},
-        headers=headers,
-    )
-    negative = client.patch(
-        "/api/experience/e3/bullet",
-        json={"bullet_index": -1, "new_text": "x"},
-        headers=headers,
-    )
-    assert empty.status_code == 422
-    assert negative.status_code == 422
+    for body in (
+        {"bullet_index": 0, "new_text": ""},
+        {"bullet_index": 0, "new_text": "   "},
+        {"bullet_index": -1, "new_text": "x"},
+    ):
+        resp = client.patch("/api/experience/e3/bullet", json=body, headers=headers)
+        assert resp.status_code == 422, body
 
 
 def test_edit_bullet_401_without_token(client: TestClient) -> None:

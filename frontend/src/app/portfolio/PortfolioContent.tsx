@@ -45,21 +45,25 @@ function EditableBullet({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(text);
 
+  // The <li> must stay `display: list-item` or the list-disc marker disappears — so the
+  // flex row lives on an inner wrapper, not on the <li> itself.
   if (!editing) {
     return (
-      <li className="group flex items-start justify-between gap-2">
-        <span>{text}</span>
-        <button
-          type="button"
-          aria-label={`Edit bullet: ${text}`}
-          onClick={() => {
-            setDraft(text);
-            setEditing(true);
-          }}
-          className="shrink-0 text-xs text-muted hover:text-text"
-        >
-          Edit
-        </button>
+      <li>
+        <div className="flex items-start justify-between gap-2">
+          <span>{text}</span>
+          <button
+            type="button"
+            aria-label={`Edit bullet: ${text}`}
+            onClick={() => {
+              setDraft(text);
+              setEditing(true);
+            }}
+            className="shrink-0 text-xs text-muted hover:text-text"
+          >
+            Edit
+          </button>
+        </div>
       </li>
     );
   }
@@ -77,24 +81,26 @@ function EditableBullet({
   };
 
   return (
-    <li className="flex flex-wrap items-center gap-2">
-      <input
-        value={draft}
-        aria-label={`Bullet ${index + 1}`}
-        maxLength={500}
-        onChange={(e) => setDraft(e.target.value)}
-        className="min-h-tap flex-1 rounded-card border border-border bg-surface px-2 text-sm text-text"
-      />
-      <PrimaryButton variant="secondary" onClick={save} disabled={edit.isPending}>
-        {edit.isPending ? "Saving…" : "Save"}
-      </PrimaryButton>
-      <button
-        type="button"
-        onClick={() => setEditing(false)}
-        className="text-xs text-muted hover:text-text"
-      >
-        Cancel
-      </button>
+    <li>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={draft}
+          aria-label={`Bullet ${index + 1}`}
+          maxLength={500}
+          onChange={(e) => setDraft(e.target.value)}
+          className="min-h-tap flex-1 rounded-card border border-border bg-surface px-2 text-sm text-text"
+        />
+        <PrimaryButton variant="secondary" onClick={save} disabled={edit.isPending}>
+          {edit.isPending ? "Saving…" : "Save"}
+        </PrimaryButton>
+        <button
+          type="button"
+          onClick={() => setEditing(false)}
+          className="text-xs text-muted hover:text-text"
+        >
+          Cancel
+        </button>
+      </div>
     </li>
   );
 }
@@ -122,7 +128,7 @@ function EntryCard({ entry }: { entry: EntryCardResponse }): JSX.Element {
         {entry.dates} · {entry.type_label}
       </p>
       {entry.bullets.length > 0 && (
-        <ul className="mb-3 flex list-disc flex-col gap-1 pl-5 text-sm">
+        <ul className="mb-3 list-disc space-y-1 pl-5 text-sm">
           {entry.bullets.map((b, i) => (
             <EditableBullet key={`${i}-${b}`} entryId={entry.entry_id} index={i} text={b} />
           ))}
