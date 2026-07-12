@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { CollapsibleSection } from "@/components/CollapsibleSection";
 import { Field } from "@/components/Field";
 import { PrimaryButton } from "@/components/PrimaryButton";
-import { useSavePreferences } from "@/lib/query/hooks";
+import { usePreferences, useSavePreferences } from "@/lib/query/hooks";
 
 /** Split a comma-separated field into a trimmed, non-empty list. */
 function toList(value: string): string[] {
@@ -16,21 +16,43 @@ function toList(value: string): string[] {
 }
 
 /**
- * Minimal discovery-preferences (rubric) form. Subset of SessionPreferences for
- * 10.5; submit posts a schema-valid body through the optimistic data layer.
+ * Minimal discovery-preferences (rubric) form — a subset of SessionPreferences,
+ * submitted through the optimistic data layer.
+ *
+ * Same two rules as {@link ProfileForm}, for the same reason (the workspace store does
+ * a FULL-DOCUMENT write): it HYDRATES from `GET /api/preferences` (otherwise a saved
+ * rubric looked like it never persisted), and it SPREADS the loaded rubric into the
+ * body so the fields this form doesn't edit — `nice_to_haves` — aren't reset to empty
+ * on every save.
  */
 export function PreferencesForm({ disabled = false }: { disabled?: boolean }): JSX.Element {
+  const { data: preferences } = usePreferences();
+  const save = useSavePreferences();
+
   const [targetRoles, setTargetRoles] = useState("");
   const [dealbreakers, setDealbreakers] = useState("");
   const [dirty, setDirty] = useState(false);
-  const save = useSavePreferences();
+
+  // Hydrate once the persisted rubric arrives — but never clobber edits in flight.
+  useEffect(() => {
+    if (!preferences || dirty) return;
+    setTargetRoles((preferences.target_roles ?? []).join(", "));
+    setDealbreakers((preferences.dealbreakers ?? []).join(", "));
+    // `dirty` is intentionally read-but-not-tracked: re-running on a dirty flip would
+    // overwrite what the user just typed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preferences]);
 
   const onSubmit = (e: React.FormEvent): void => {
     e.preventDefault();
-    // Clear dirty only on success so a failed save stays retryable (rollback via
-    // the hook keeps the cache consistent; the form keeps the user's input).
+    // Clear dirty only on success so a failed save stays retryable (rollback via the
+    // hook keeps the cache consistent; the form keeps the user's input).
     save.mutate(
-      { target_roles: toList(targetRoles), dealbreakers: toList(dealbreakers) },
+      {
+        ...preferences,
+        target_roles: toList(targetRoles),
+        dealbreakers: toList(dealbreakers),
+      },
       { onSuccess: () => setDirty(false) },
     );
   };

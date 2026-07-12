@@ -8,4 +8,6 @@ export const queryKeys = {
   portfolio: ["portfolio"] as const,
   jobs: ["jobs"] as const,
   key: ["key"] as const,
+  profile: ["profile"] as const,
+  preferences: ["preferences"] as const,
 } as const;
