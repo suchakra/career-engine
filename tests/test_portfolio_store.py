@@ -680,26 +680,44 @@ class TestDeleteEntry:
         assert [s.result for s in state.extracted_star_stories] == ["B"]
         assert all(s.entry_id != str(doomed.entry_id) for s in state.extracted_star_stories)
 
-    def test_deleting_the_frontier_entry_clears_the_frontier(self) -> None:
-        """The next grill turn must not be aimed at an experience that no longer exists."""
+    def test_deleting_the_frontier_entry_clears_every_trace_of_its_grill(self) -> None:
+        """No stale grill state may survive the entry it belonged to.
+
+        The dangerous one is ``pending_user_answer``: it was typed ABOUT the deleted
+        entry. Left in place, the next turn would consume it as the answer for whatever
+        entry becomes the new frontier and attach a STAR story to the WRONG role.
+        ``grill_attempts`` / ``grill_answers`` are keyed by entry_id and would otherwise
+        linger forever against an id that no longer exists.
+        """
         service = _service()
-        entry = Entry(type=ExperienceType.PROJECT, title="Doomed")
+        doomed = Entry(type=ExperienceType.PROJECT, title="Doomed")
+        other = Entry(type=ExperienceType.PROJECT, title="Other")
         _seed(
             service,
             CareerEngineState(
                 reference_date=_REF,
-                work_timeline=[entry],
-                grill_frontier=str(entry.entry_id),
+                work_timeline=[doomed, other],
+                grill_frontier=str(doomed.entry_id),
                 current_question="Tell me about the doomed project?",
+                pending_user_answer="We cut latency by 40%",
+                grill_attempts={str(doomed.entry_id): 2, str(other.entry_id): 1},
+                grill_answers={
+                    str(doomed.entry_id): ["about the doomed one"],
+                    str(other.entry_id): ["about the other one"],
+                },
             ),
         )
 
-        delete_entry(service, app_name=_APP, user_id=_UID, entry_id=str(entry.entry_id))
+        delete_entry(service, app_name=_APP, user_id=_UID, entry_id=str(doomed.entry_id))
 
         state = _read_latest(service)
-        assert state.work_timeline == []
+        assert [e.title for e in state.work_timeline] == ["Other"]
         assert state.grill_frontier == ""
         assert state.current_question == ""
+        assert state.pending_user_answer == ""  # must not land on the surviving entry
+        # The deleted entry's buffers are pruned; the survivor's are untouched.
+        assert state.grill_attempts == {str(other.entry_id): 1}
+        assert state.grill_answers == {str(other.entry_id): ["about the other one"]}
 
     def test_unknown_entry_is_a_no_op(self) -> None:
         service = _service()

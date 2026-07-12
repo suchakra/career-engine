@@ -768,11 +768,23 @@ async def _adelete_entry(
     delta: dict[str, object] = {
         "work_timeline": [e.model_dump(mode="json") for e in remaining],
         "extracted_star_stories": [s.model_dump(mode="json") for s in kept_stories],
+        # Per-entry grill buffers are keyed by entry_id, so they must be pruned with the
+        # entry or they linger forever against an id that no longer exists.
+        "grill_attempts": {
+            k: v for k, v in existing.grill_attempts.items() if k != entry_id
+        },
+        "grill_answers": {
+            k: v for k, v in existing.grill_answers.items() if k != entry_id
+        },
         "contract_version": CONTRACT_VERSION,
     }
     if existing.grill_frontier == entry_id:
         delta["grill_frontier"] = ""
         delta["current_question"] = ""
+        # CRITICAL: a pending answer was typed about the entry we are deleting. Left in
+        # place, the next turn would consume it as the answer to whatever entry becomes
+        # the new frontier — attaching a story to the WRONG role.
+        delta["pending_user_answer"] = ""
     await _patch_session(
         session_service,
         app_name=app_name,
