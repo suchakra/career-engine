@@ -355,6 +355,31 @@ export function useAcceptBullets(): UseMutationResult<
   });
 }
 
+/**
+ * Mark a bullet as explicitly skipped, or un-skip it (CQ-5). "Skipped" is one of the three
+ * terminal coverage states — it's the escape hatch that lets the grill insist on covering
+ * every supplied bullet without trapping the user on a line they never cared about.
+ */
+export function useSkipBullet(): UseMutationResult<
+  void,
+  unknown,
+  { entryId: string; bulletId: string; skipped: boolean }
+> {
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+  return useMutation({
+    mutationFn: ({ entryId, bulletId, skipped }) =>
+      apiFetch<void>(`/api/experience/${entryId}/bullet/${bulletId}/skip`, {
+        method: "POST",
+        body: { skipped },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.portfolio });
+    },
+    onError: () => showToast("Couldn't update that bullet — try again.", "error"),
+  });
+}
+
 /** Delete one bullet from an experience (CQ-3). Refreshes the portfolio. */
 export function useDeleteBullet(): UseMutationResult<
   void,

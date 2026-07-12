@@ -286,3 +286,38 @@ describe("Copywriter (CQ-4)", () => {
     );
   });
 });
+
+describe("Coverage (CQ-5)", () => {
+  it("shows what is still outstanding, and lets the user skip a line", async () => {
+    let skipped: { id: string; bid: string; body: Record<string, unknown> } | null = null;
+    server.use(
+      http.post(`${BASE}/api/experience/:id/bullet/:bid/skip`, async ({ params, request }) => {
+        skipped = {
+          id: String(params.id),
+          bid: String(params.bid),
+          body: (await request.json()) as Record<string, unknown>,
+        };
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderWithProviders(<PortfolioContent />);
+
+    // The user must SEE what is left rather than guess — this is the whole point of CQ-5.
+    expect(await screen.findByText("0 of 1 covered")).toBeInTheDocument();
+    expect(screen.getByText(/not covered yet/i)).toBeInTheDocument();
+
+    // Skip is the escape hatch: it moves a line to a terminal state so the grill can
+    // insist on coverage without trapping the user on something they never cared about.
+    await user.click(screen.getByRole("button", { name: /skip bullet: cut p95/i }));
+
+    await waitFor(() =>
+      expect(skipped).toEqual({
+        id: "entry-1",
+        bid: "bullet-1",
+        body: { skipped: true },
+      }),
+    );
+  });
+});

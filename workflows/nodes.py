@@ -49,6 +49,7 @@ from schema import (
     StarStory,
     UpgradeRequired,
 )
+from web.coverage import entry_needs_work
 from workflows.prompts import (
     CHECKPOINT_SUMMARY_PROMPT,
     DISCOVERY_SYSTEM_PROMPT,
@@ -316,19 +317,40 @@ def _frontier_sort_key(entry: Entry) -> tuple[int, int, int]:
     return (end_year, _TYPE_WEIGHT.get(entry.type, 1), start_year)
 
 
-def _next_frontier(timeline: list[Entry], current_frontier_id: str) -> str:
+def _next_frontier(
+    timeline: list[Entry],
+    current_frontier_id: str,
+    stories: list[StarStory] | None = None,
+) -> str:
     """Return the next entry_id to grill (most-recent + most-substantive first).
 
-    Strategy: among entries that still need work (NEEDS_QUANTIFYING or DOCUMENTED),
-    skipping the currently-grilled one, pick the highest-ranked by
-    :func:`_frontier_sort_key` — current/recent substantive roles before older or
-    trivial ones. Returns "" if no more entries need grilling.
+    Strategy: among entries that still need work, skipping the currently-grilled one, pick
+    the highest-ranked by :func:`_frontier_sort_key` — current/recent substantive roles
+    before older or trivial ones. Returns "" if nothing is left to grill.
+
+    **COVERAGE (CQ-5 / AD-18.5).** An entry used to stop needing work the moment its status
+    became GRILLED — which happens after ONE validated story. So a user who uploaded a résumé
+    with a dozen strong bullets got one of them interrogated and the other eleven silently
+    ignored, while the grill moved on to drill something else. Coverage is the product: an
+    entry still needs work while ANY of its bullets is in none of the three terminal states
+    (quantified / strengthened / explicitly skipped) — see :mod:`web.coverage`. ``skipped`` is
+    the escape hatch that keeps this demanding without being able to trap the user.
+
+    ``stories`` is optional so existing callers keep working; without it, coverage cannot be
+    computed and the old status-only rule applies.
     """
-    needs_work = [
-        e for e in timeline
-        if e.status in (EntryStatus.NEEDS_QUANTIFYING, EntryStatus.DOCUMENTED)
-        and str(e.entry_id) != current_frontier_id
-    ]
+    def _needs_work(entry: Entry) -> bool:
+        if str(entry.entry_id) == current_frontier_id:
+            return False
+        if entry.status in (EntryStatus.NEEDS_QUANTIFYING, EntryStatus.DOCUMENTED):
+            return True
+        if entry.status is EntryStatus.SKIPPED or stories is None:
+            return False
+        # GRILLED (or SUMMARIZED) but still carrying uncovered lines → not actually done.
+        mine = [s for s in stories if s.entry_id == str(entry.entry_id)]
+        return entry_needs_work(entry, mine)
+
+    needs_work = [e for e in timeline if _needs_work(e)]
     if not needs_work:
         return ""
     needs_work.sort(key=_frontier_sort_key, reverse=True)
@@ -763,8 +785,18 @@ def execute_grill_turn_node(
             )
             new_timeline = _update_entry_in_timeline(state.work_timeline, grilled_entry)
 
-            # Advance frontier to next entry needing work (backward-chronological)
-            next_fid = _next_frontier(new_timeline, frontier_id)
+            # Advance the frontier to the next entry needing work. `new_stories` is passed
+            # so COVERAGE is honoured (CQ-5): the entry we just grilled is only left behind
+            # if every one of its bullets is now quantified, strengthened, or explicitly
+            # skipped. One validated story used to be enough to abandon an entry carrying a
+            # dozen untouched lines.
+            next_fid = _next_frontier(new_timeline, frontier_id, new_stories)
+            if not next_fid:
+                # Nothing else needs work — but this entry may STILL have uncovered lines,
+                # in which case we stay on it rather than declaring the grill complete.
+                mine = [s for s in new_stories if s.entry_id == frontier_id]
+                if entry_needs_work(grilled_entry, mine):
+                    next_fid = frontier_id
 
             # Clear this entry's failed-attempt counter + answer memory on success.
             cleared_attempts = {

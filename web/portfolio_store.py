@@ -912,3 +912,86 @@ def accept_bullets(
             bullets=bullets,
         )
     )
+
+
+async def _aset_bullet_skipped(
+    session_service: BaseSessionService,
+    *,
+    app_name: str,
+    user_id: str,
+    entry_id: str,
+    bullet_id: str,
+    skipped: bool,
+) -> str | None:
+    """Mark a bullet as explicitly skipped, or un-skip it (CQ-5).
+
+    ``skipped`` is one of the three TERMINAL coverage states, and it is the escape hatch that
+    lets the grill insist on covering every supplied bullet without being able to trap the
+    user in an endless loop over a line they never cared about.
+
+    Idempotent: an unknown entry or bullet is a logged no-op. Returns the session_id, or
+    ``None`` if the user has no session.
+    """
+    session_id = web_session_id(user_id)
+    existing = await session_helpers.get_session_state_if_exists(
+        session_service=session_service,
+        app_name=app_name,
+        user_id=user_id,
+        session_id=session_id,
+    )
+    if existing is None:
+        return None
+    found = False
+    new_timeline: list[Entry] = []
+    for entry in existing.work_timeline:
+        if str(entry.entry_id) == entry_id:
+            updated = [
+                b.model_copy(update={"skipped": skipped})
+                if str(b.bullet_id) == bullet_id
+                else b
+                for b in entry.bullets
+            ]
+            if updated == list(entry.bullets):
+                logger.warning(
+                    "set_bullet_skipped: bullet %s not found on entry %s", bullet_id, entry_id
+                )
+                return session_id
+            entry = entry.model_copy(update={"bullets": updated})
+            found = True
+        new_timeline.append(entry)
+    if not found:
+        logger.warning("set_bullet_skipped: entry %s not found", entry_id)
+        return session_id
+    await _patch_session(
+        session_service,
+        app_name=app_name,
+        user_id=user_id,
+        session_id=session_id,
+        state_delta={
+            "work_timeline": [e.model_dump(mode="json") for e in new_timeline],
+            "contract_version": CONTRACT_VERSION,
+        },
+    )
+    return session_id
+
+
+def set_bullet_skipped(
+    session_service: BaseSessionService,
+    *,
+    app_name: str,
+    user_id: str,
+    entry_id: str,
+    bullet_id: str,
+    skipped: bool,
+) -> str | None:
+    """Sync bridge over :func:`_aset_bullet_skipped`."""
+    return run_async(
+        _aset_bullet_skipped(
+            session_service,
+            app_name=app_name,
+            user_id=user_id,
+            entry_id=entry_id,
+            bullet_id=bullet_id,
+            skipped=skipped,
+        )
+    )

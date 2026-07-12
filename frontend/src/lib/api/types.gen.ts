@@ -650,6 +650,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/experience/{entry_id}/bullet/{bullet_id}/skip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Skip Bullet
+         * @description Mark a bullet as explicitly skipped, or un-skip it (CQ-5).
+         *
+         *     ``skipped`` is one of the three TERMINAL coverage states (quantified / strengthened /
+         *     skipped). It is the escape hatch: it lets the grill insist on covering every bullet the
+         *     user supplied without being able to trap them in an endless loop over a line they never
+         *     cared about.
+         *
+         *     Idempotent: an unknown entry or bullet is a no-op (204). The 404 fires only when there is
+         *     no session at all.
+         */
+        post: operations["skip_bullet_api_experience__entry_id__bullet__bullet_id__skip_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -843,6 +871,12 @@ export interface components {
              * @description The bullet_id this one REPLACES (a reworded/strengthened version of it). A superseded bullet is dropped from the résumé by id — never by guessing at text similarity.
              */
             supersedes?: string | null;
+            /**
+             * Skipped
+             * @description The user explicitly said this line does not matter (v2.10.0, CQ-5). It is one of the three TERMINAL coverage states — quantified, strengthened, or skipped — and it is the escape hatch that lets the grill insist on covering every supplied bullet without being able to trap the user in an endless loop.
+             * @default false
+             */
+            skipped: boolean;
         };
         /**
          * BulletAddRequest
@@ -858,13 +892,15 @@ export interface components {
         };
         /**
          * BulletCardResponse
-         * @description Mirror of :class:`web.portfolio.BulletCard` — a bullet WITH its id (v2.9.0).
+         * @description Mirror of :class:`web.portfolio.BulletCard` — a bullet with its id + coverage state.
          */
         BulletCardResponse: {
             /** Bullet Id */
             bullet_id: string;
             /** Text */
             text: string;
+            /** State */
+            state: string;
         };
         /**
          * BulletEditRequest
@@ -882,6 +918,14 @@ export interface components {
             bullet_id: string;
             /** New Text */
             new_text: string;
+        };
+        /**
+         * BulletSkipRequest
+         * @description Request body for ``POST /api/experience/{entry_id}/bullet/{bullet_id}/skip`` (CQ-5).
+         */
+        BulletSkipRequest: {
+            /** Skipped */
+            skipped: boolean;
         };
         /**
          * BulletSource
@@ -1063,6 +1107,10 @@ export interface components {
             status_label: string;
             /** Bullets */
             bullets: components["schemas"]["BulletCardResponse"][];
+            /** Coverage Label */
+            coverage_label: string;
+            /** Is Covered */
+            is_covered: boolean;
             /** Stories */
             stories: components["schemas"]["StoryCardResponse"][];
             /** Highlighted */
@@ -1332,7 +1380,7 @@ export interface components {
             nice_to_haves?: string[];
             /**
              * Contract Version
-             * @default 2.9.0
+             * @default 2.10.0
              */
             contract_version: string;
         };
@@ -1429,7 +1477,7 @@ export interface components {
             links?: string[];
             /**
              * Contract Version
-             * @default 2.9.0
+             * @default 2.10.0
              */
             contract_version: string;
         };
@@ -2422,6 +2470,42 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["AcceptBulletsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    skip_bullet_api_experience__entry_id__bullet__bullet_id__skip_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                entry_id: string;
+                bullet_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulletSkipRequest"];
             };
         };
         responses: {
