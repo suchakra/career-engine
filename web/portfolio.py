@@ -1,13 +1,14 @@
-"""Portfolio view-model + injectable renderer (Phase 4B).
+"""Portfolio view-model builders (Phase 4B; renderer removed in the Streamlit cutover).
 
 A read-only mirror of what the discovery loop has recorded about the user: the
 ``work_timeline`` as an experience list, each entry showing its status and the
 STAR stories grilled out of it (linked by ``StarStory.entry_id``). Reads the
 persisted ``CareerEngineState`` only — no workflow logic, no contract change.
 
-Same two-layer, UI-logic-only pattern as :mod:`web.dashboard`:
-- :func:`stories_by_entry` / :func:`build_portfolio_view` — PURE, testable
-  without a Streamlit runtime.
+Pure view-model builders only (:func:`stories_by_entry` / :func:`build_portfolio_view`):
+they read state and return display-ready dataclasses, with no rendering layer. The
+Streamlit renderer that used to pair with them was removed with the rest of Streamlit —
+the Next.js client consumes these view models over the API instead.
 """
 
 from __future__ import annotations
