@@ -8,13 +8,8 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { ResumePreview } from "@/components/ResumePreview";
 import type { StructuredResume } from "@/lib/api/models";
 import { useTrackApplication } from "@/lib/query/hooks";
-import { useTailor, type ExportFormat } from "@/lib/tailor/useTailor";
-
-const FORMATS: { fmt: ExportFormat; label: string }[] = [
-  { fmt: "pdf", label: "PDF" },
-  { fmt: "docx", label: "Word" },
-  { fmt: "md", label: "Markdown" },
-];
+import { EXPORT_FORMATS } from "@/lib/tailor/resumeExport";
+import { useTailor } from "@/lib/tailor/useTailor";
 
 const INPUT_CLASS =
   "min-h-tap w-40 max-w-full rounded-card border border-border bg-surface px-3 text-sm text-text placeholder:text-muted";
@@ -122,7 +117,7 @@ export function TailorContent(): JSX.Element {
             <ResumePreview resume={tailor.resume} />
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm text-muted">Export:</span>
-              {FORMATS.map(({ fmt, label }) => (
+              {EXPORT_FORMATS.map(({ fmt, label }) => (
                 <PrimaryButton
                   key={fmt}
                   variant="secondary"
