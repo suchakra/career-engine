@@ -1,7 +1,7 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PortfolioContent } from "@/app/portfolio/PortfolioContent";
 import { server } from "@/test/msw/server";
@@ -68,5 +68,54 @@ describe("Portfolio actions (parity P4b)", () => {
     );
 
     await waitFor(() => expect(deleted).toBe("story-1"));
+  });
+});
+
+describe("Master résumé (parity P4c)", () => {
+  // jsdom implements neither URL.createObjectURL nor anchor downloads — assign mocks
+  // directly (spyOn needs an existing property) and restore them afterwards.
+  const origUrl = { createObjectURL: URL.createObjectURL, revokeObjectURL: URL.revokeObjectURL };
+  afterEach(() => {
+    Object.assign(URL, origUrl);
+    vi.restoreAllMocks();
+  });
+
+  it("builds the master résumé, previews it, then exports it", async () => {
+    const createObjectURL = vi.fn(() => "blob:x");
+    Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    const exported: string[] = [];
+    server.use(
+      http.post(`${BASE}/api/resume/:fmt`, ({ params }) => {
+        exported.push(String(params.fmt));
+        return HttpResponse.text("md", { headers: { "Content-Type": "text/markdown" } });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderWithProviders(<PortfolioContent />);
+
+    await user.click(await screen.findByRole("button", { name: /build master résumé/i }));
+
+    // The preview renders every validated achievement the server assembled.
+    expect(await screen.findByText(/Shipped billing v2/i)).toBeInTheDocument();
+    expect(screen.getByText(/BSc Computer Science/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "PDF" }));
+    await waitFor(() => expect(exported).toContain("pdf"));
+    expect(createObjectURL).toHaveBeenCalled();
+  });
+
+  it("surfaces an error when the build fails", async () => {
+    server.use(
+      http.post(`${BASE}/api/master-resume`, () => new HttpResponse(null, { status: 500 })),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<PortfolioContent />);
+
+    await user.click(await screen.findByRole("button", { name: /build master résumé/i }));
+
+    expect(await screen.findByText(/couldn't build your master résumé/i)).toBeInTheDocument();
   });
 });

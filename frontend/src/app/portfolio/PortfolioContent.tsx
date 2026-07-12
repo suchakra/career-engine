@@ -4,7 +4,9 @@ import { useRouter } from "next/navigation";
 
 import { ActionCard } from "@/components/ActionCard";
 import { EmptyState } from "@/components/EmptyState";
+import { InlineError } from "@/components/InlineError";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { ResumePreview } from "@/components/ResumePreview";
 import { StatusBadge, type StatusKind } from "@/components/StatusBadge";
 import {
   useDeleteStory,
@@ -12,7 +14,15 @@ import {
   useHighlightEntry,
   usePortfolio,
 } from "@/lib/query/hooks";
+import { useMasterResume } from "@/lib/tailor/useMasterResume";
+import type { ExportFormat } from "@/lib/tailor/resumeExport";
 import type { EntryCardResponse } from "@/lib/api/models";
+
+const FORMATS: { fmt: ExportFormat; label: string }[] = [
+  { fmt: "pdf", label: "PDF" },
+  { fmt: "docx", label: "Word" },
+  { fmt: "md", label: "Markdown" },
+];
 
 /** Map the entry's display status label onto a StatusBadge kind. */
 function statusKind(label: string): StatusKind {
@@ -102,6 +112,48 @@ function EntryCard({ entry }: { entry: EntryCardResponse }): JSX.Element {
 }
 
 /**
+ * Master résumé (§4.4): assemble every validated achievement — no JD, no model call,
+ * no BYOK key — then preview and export it through the same renderer as the Tailor.
+ */
+function MasterResumeCard(): JSX.Element {
+  const master = useMasterResume();
+  return (
+    <ActionCard title="Master résumé">
+      <p className="mb-3 text-sm text-muted">
+        Every quantified achievement you&apos;ve documented, in one résumé — no job
+        description needed. Tailor it to a specific role over on Tailor.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <PrimaryButton onClick={() => void master.build()} disabled={master.building}>
+          {master.building ? "Building…" : "Build master résumé"}
+        </PrimaryButton>
+        {master.resume && (
+          <>
+            <span className="text-sm text-muted">Export:</span>
+            {FORMATS.map(({ fmt, label }) => (
+              <PrimaryButton
+                key={fmt}
+                variant="secondary"
+                onClick={() => void master.exportResume(fmt)}
+                disabled={master.exporting !== null}
+              >
+                {master.exporting === fmt ? "…" : label}
+              </PrimaryButton>
+            ))}
+          </>
+        )}
+      </div>
+      {master.error && <InlineError message={master.error} />}
+      {master.resume && (
+        <div className="mt-3">
+          <ResumePreview resume={master.resume} />
+        </div>
+      )}
+    </ActionCard>
+  );
+}
+
+/**
  * The portfolio read view + entry actions (§4.4). Extracted from `page.tsx` so it
  * is directly testable (a Next.js `page.tsx` may only export the route component).
  */
@@ -136,6 +188,7 @@ export function PortfolioContent(): JSX.Element {
 
   return (
     <div className="flex flex-col gap-4">
+      <MasterResumeCard />
       {data.entries.map((entry) => (
         <EntryCard key={entry.entry_id} entry={entry} />
       ))}
