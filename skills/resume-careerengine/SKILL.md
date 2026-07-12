@@ -36,7 +36,8 @@ anything new.**
 - **Merging + deploying qa is authorized** without asking, *provided* Copilot reviewed first.
   `gh pr edit {N} --add-reviewer copilot-pull-request-reviewer`, then **wait**. If that errors
   (the bot's login varies), fall back to:
-  `gh api repos/{owner}/{repo}/pulls/{N}/requested_reviewers -X POST -f "reviewers[]=copilot-pull-request-reviewer"`.
+  `gh api repos/{owner}/{repo}/pulls/{N}/requested_reviewers -X POST -f 'reviewers[]=copilot-pull-request-reviewer[bot]'`
+  (the `[bot]` suffix — this is the form `skills/wait-for-pr-review` documents for the API call).
   (`{N}` = the PR number; `{owner}`/`{repo}` = the repo you are in — substitute, don't run literally.)
 - **`dev` is BLOCKADED.** Never deploy there without an explicit go-ahead
   (`-f confirm_dev_cutover=true`). It is Kaggle-visible and holds real user data.
