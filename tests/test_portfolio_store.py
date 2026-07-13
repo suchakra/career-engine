@@ -629,6 +629,42 @@ class TestMergeParsedEntriesIntoSession:
         assert state.grill_frontier == str(new_role.entry_id)
         assert state.current_question == ""
 
+    def test_a_re_upload_that_moves_the_frontier_clears_the_stale_grill_state(self) -> None:
+        """The sibling of the pin corruption (adversarial review).
+
+        A user mid-grill on entry A, with an answer typed but not yet streamed, who uploads a
+        second résumé would have that answer committed as a story on the NEWLY MERGED entry —
+        carrying answers_bullet_id of a bullet belonging to A. Achievement filed under the wrong
+        job; the wrong line marked covered.
+        """
+        service = _service()
+        a = Entry(
+            type=ExperienceType.FULL_TIME, title="A", org="Acme",
+            bullets=[Bullet(text="line")],
+        )
+        _seed(
+            service,
+            CareerEngineState(
+                reference_date=_REF,
+                work_timeline=[a],
+                grill_frontier=str(a.entry_id),
+                grill_bullet_frontier=str(a.bullets[0].bullet_id),
+                pending_user_answer="We cut latency 40%",
+                current_question="What did that save?",
+            ),
+        )
+
+        run_async(
+            amerge_parsed_entries(
+                service, app_name=_APP, user_id=_UID,
+                entries=[Entry(type=ExperienceType.FULL_TIME, title="B", org="Globex")],
+            )
+        )
+
+        state = _read_latest(service)
+        assert state.pending_user_answer == ""
+        assert state.grill_bullet_frontier == ""
+
     def test_returns_none_when_there_is_no_session_to_merge_into(self) -> None:
         """A FIRST upload has nothing to merge into — the caller creates instead."""
         service = _service()

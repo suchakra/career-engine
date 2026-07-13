@@ -668,8 +668,17 @@ async def _amerge_parsed_entries(
         "contract_version": CONTRACT_VERSION,
     }
     if added:
+        # Moving the frontier must clear EVERY scrap of the previous entry's in-flight grill
+        # state — exactly as _aset_grill_frontier does. This path was missed: a user mid-grill
+        # on entry A, with an answer typed but not yet streamed, who uploads a second résumé
+        # would have that answer committed as a story on the NEWLY MERGED entry, carrying
+        # answers_bullet_id of a bullet belonging to A. Their achievement filed under the wrong
+        # job, and the wrong line marked covered. (Adversarial review — the sibling of the bug
+        # fixed in _aset_grill_frontier.)
         delta["grill_frontier"] = str(added[0].entry_id)
         delta["current_question"] = ""
+        delta["pending_user_answer"] = ""
+        delta["grill_bullet_frontier"] = ""
     await _patch_session(
         session_service,
         app_name=app_name,

@@ -269,19 +269,44 @@ def _has_metric_bullet(entry: Entry) -> bool:
     return any(_contains_real_metric(b) for b in entry.bullet_texts)
 
 
-def entry_still_needs_grilling(entry: Entry, stories: list[StarStory]) -> bool:
+def _grilled_before_the_link_existed(entry: Entry, stories: list[StarStory]) -> bool:
+    """Was this entry grilled BEFORE the story→bullet link existed (pre-v2.11.0)?
+
+    Every story written before CQ-5b has an empty ``answers_bullet_id``, because per-bullet
+    targeting did not exist. Coverage therefore reads such an entry as 0-of-N covered — and
+    once coverage steers the grill, that would silently RE-OPEN the finished portfolio of every
+    returning user and march them back through work they already did. (Found by adversarial
+    review against a real legacy-shaped state; it is not hypothetical — every story in the live
+    qa data looks like this.)
+
+    We cannot know which line those stories answered, so we do not pretend to: such an entry is
+    left alone by the AUTOMATIC gates. The user can still aim the grill at it explicitly with
+    "Grill me about this" — see ``entry_still_needs_grilling(..., explicit=True)``.
+    """
+    return entry.status is EntryStatus.GRILLED and any(
+        s.metrics_validated and not s.answers_bullet_id for s in stories
+    )
+
+
+def entry_still_needs_grilling(
+    entry: Entry, stories: list[StarStory], *, explicit: bool = False
+) -> bool:
     """THE single definition of "this entry is not done" (CQ-5b).
 
     Every gate in the grill must ask this same question, or they diverge and the grill either
     abandons work (the router says finalize while the frontier holds an entry) or spins (the
     frontier holds an entry the question-targeter has nothing to ask about). Both happened.
 
-    ``stories`` must be THIS ENTRY'S stories.
+    ``stories`` must be THIS ENTRY'S stories. ``explicit=True`` means the USER pointed the grill
+    at this entry, which overrides the pre-v2.11.0 grandfather above — if they ask to be grilled
+    on it, they get grilled on it.
     """
     if entry.status is EntryStatus.SKIPPED:
         return False
     if entry.status in (EntryStatus.NEEDS_QUANTIFYING, EntryStatus.DOCUMENTED):
         return True
+    if not explicit and _grilled_before_the_link_existed(entry, stories):
+        return False
     # GRILLED / SUMMARIZED, but still carrying lines nobody has dealt with.
     return entry_needs_work(entry, stories)
 
@@ -404,7 +429,9 @@ def _get_frontier_entry(state: CareerEngineState) -> Entry | None:
     if state.grill_frontier:
         entry = _find_entry_by_id(state.work_timeline, state.grill_frontier)
         if entry is not None and entry_still_needs_grilling(
-            entry, stories_for(entry, state.extracted_star_stories)
+            entry,
+            stories_for(entry, state.extracted_star_stories),
+            explicit=True,  # the user pinned it — honour that over the legacy grandfather
         ):
             return entry
 

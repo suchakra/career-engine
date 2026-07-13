@@ -1525,3 +1525,54 @@ class TestCoverageSteersTheGrill:
         assert bullet_state(target, [story]) is CoverageState.QUANTIFIED
         # …and the grill stays on this entry, because a second line is still outstanding.
         assert result.grill_frontier == str(entry.entry_id)
+
+    def test_a_LEGACY_portfolio_is_not_mass_reopened(self) -> None:
+        """The regression that would have hit every returning user (adversarial review).
+
+        Every story written before v2.11.0 has an empty `answers_bullet_id` — per-bullet
+        targeting did not exist. Coverage reads such an entry as 0-of-N covered, so once
+        coverage steers the grill it would march the user back through work they already
+        finished. We cannot know which line those stories answered, so we do not pretend to.
+        """
+        from workflows.discovery_graph import _has_pending_work
+
+        entry = Entry(
+            title="Staff Engineer",
+            status=EntryStatus.GRILLED,
+            bullets=[Bullet(text=f"line {i}") for i in range(3)],
+        )
+        legacy_story = StarStory(
+            entry_id=str(entry.entry_id),
+            pillar="delivery",
+            result="Cut costs 30%",
+            metrics_validated=True,
+            answers_bullet_id="",  # pre-v2.11.0: no link
+        )
+        state = CareerEngineState(
+            work_timeline=[entry], extracted_star_stories=[legacy_story]
+        )
+
+        assert _has_pending_work(state) is False  # left alone, not re-grilled
+
+    def test_but_the_user_can_still_PIN_a_legacy_entry_and_be_grilled_on_it(self) -> None:
+        """The grandfather must not take the choice away from them."""
+        from workflows.nodes import _get_frontier_entry
+
+        entry = Entry(
+            title="Staff Engineer",
+            status=EntryStatus.GRILLED,
+            bullets=[Bullet(text="line")],
+        )
+        legacy_story = StarStory(
+            entry_id=str(entry.entry_id), pillar="delivery", result="Cut costs 30%",
+            metrics_validated=True, answers_bullet_id="",
+        )
+        state = CareerEngineState(
+            work_timeline=[entry],
+            extracted_star_stories=[legacy_story],
+            grill_frontier=str(entry.entry_id),  # "Grill me about this"
+        )
+
+        picked = _get_frontier_entry(state)
+
+        assert picked is not None and picked.entry_id == entry.entry_id
