@@ -159,8 +159,76 @@ describe("Tailor", () => {
       derived_from_story_id: "story-1",
     });
 
-    await user.click(await screen.findByRole("button", { name: "Undo" }));
+    await user.click(await screen.findByRole("button", { name: "undo" }));
     await waitFor(() => expect(deleted).toBe(true));
+    // The preview must go BACK — not merely report that it did. (The undo used to roll back
+    // by a key that the overwrite itself had changed, so it silently matched no line: the
+    // toast said "put that line back" while the screen still showed the overwritten text.)
+    expect(
+      await screen.findByRole("button", { name: /^Cut p95 latency 40%$/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("UNDO restores what the PORTFOLIO said — never a 'this résumé only' edit", async () => {
+    // THE undo bug (adversarial review). `previous` used to be read off the preview line, which
+    // a résumé-only edit has already changed. So: reword for the JD (résumé-only) → later
+    // overwrite → undo, and the JD-specific wording the user explicitly chose NOT to persist
+    // gets written into their portfolio, with the true original gone for good. Undo left them
+    // WORSE off than not undoing.
+    const patched: Record<string, unknown>[] = [];
+    server.use(
+      // A bullet-backed line, so overwrite takes the in-place PATCH path.
+      http.post(`${BASE}/api/tailor`, () =>
+        HttpResponse.json({
+          contact: { name: "Jane Doe", email: "", phone: "", location: "", links: [] },
+          summary: "Staff engineer, distributed systems.",
+          skills: [],
+          experience: [
+            {
+              title: "Senior Engineer",
+              org: "Acme",
+              dates: "2022–now",
+              entry_id: "entry-1",
+              bullets: [{ text: "Managed CI for 40 services", bullet_id: "b-7", story_id: "" }],
+            },
+          ],
+          education: [],
+        }),
+      ),
+      http.patch(`${BASE}/api/experience/:id/bullet`, async ({ request }) => {
+        patched.push((await request.json()) as Record<string, unknown>);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderWithProviders(<TailorContent />);
+    await user.type(screen.getByLabelText("Job description"), "JD");
+    await user.click(screen.getByRole("button", { name: /tailor my résumé/i }));
+    await screen.findByRole("button", { name: /Managed CI for 40 services/i });
+
+    // 1. A JD-specific rewording, kept OUT of the portfolio.
+    await user.click(screen.getByRole("button", { name: /Managed CI for 40 services/i }));
+    let box = screen.getByLabelText("Edit this line");
+    await user.clear(box);
+    await user.type(box, "Managed CI for Acme's 40 services");
+    await user.click(screen.getByRole("button", { name: "Save" })); // resume-only (default)
+    expect(patched).toHaveLength(0);
+
+    // 2. Now genuinely overwrite the line.
+    await user.click(screen.getByRole("button", { name: /Managed CI for Acme's 40 services/i }));
+    box = screen.getByLabelText("Edit this line");
+    await user.clear(box);
+    await user.type(box, "Ran CI at scale, cutting build time 35%");
+    await user.click(screen.getByRole("radio", { name: /replace this line in my portfolio/i }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(patched).toHaveLength(1));
+
+    // 3. Undo → must restore the PORTFOLIO's text, not the JD-flavoured intermediate.
+    await user.click(await screen.findByRole("button", { name: "undo" }));
+    await waitFor(() => expect(patched).toHaveLength(2));
+    expect(patched[1]).toMatchObject({ new_text: "Managed CI for 40 services" });
+    expect(patched[1]).not.toMatchObject({ new_text: "Managed CI for Acme's 40 services" });
   });
 
   it("surfaces an error when tailoring fails", async () => {

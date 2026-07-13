@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { apiFetch } from "@/lib/api/client";
 import type { ResumeLine, RoleBlock, StructuredResume, TailorRequest } from "@/lib/api/models";
@@ -8,9 +8,19 @@ import { downloadResume, FORMAT_LABEL, type ExportFormat } from "@/lib/tailor/re
 
 export type { ExportFormat };
 
-/** Address one line: a bullet-backed line by its bullet, else the story it speaks for. */
-export function lineKey(line: ResumeLine): string {
-  return line.bullet_id || line.story_id;
+/**
+ * A line's address, stable for the life of one tailored preview.
+ *
+ * **Deliberately positional, not identity-based.** The obvious key — `bullet_id || story_id` —
+ * CHANGES the moment a story-backed line is overwritten and adopts the new bullet's id. Every
+ * map keyed on it (the undo record, the "which line is saving" flag) would then silently stop
+ * matching that line: undo would fail to roll the preview back, the line would keep pointing at
+ * a bullet that had just been deleted, and every later overwrite of it would be a no-op that
+ * still reported success. Tailoring never inserts or removes lines, so position is stable where
+ * identity is not.
+ */
+export function lineKey(entryId: string, index: number): string {
+  return `${entryId}#${index}`;
 }
 
 export interface TailorController {
@@ -21,29 +31,43 @@ export interface TailorController {
   tailor: (input: TailorRequest) => Promise<void>;
   exportResume: (fmt: ExportFormat) => Promise<void>;
   /** Rewrite one line's text in the previewed résumé. */
-  editLine: (entryId: string, key: string, text: string) => void;
-  /** Re-identify a line as the bullet that now backs it (after a story-line overwrite). */
-  identifyLine: (entryId: string, key: string, bulletId: string) => void;
+  editLine: (key: string, text: string) => void;
+  /** Adopt (or, on undo, give back) the bullet that backs a line. */
+  identifyLine: (key: string, bulletId: string) => void;
   editSummary: (text: string) => void;
-  editSkills: (skills: string[]) => void;
+  /**
+   * The text a line had when the server tailored it — i.e. what the PORTFOLIO says.
+   *
+   * Undoing a destructive overwrite must restore THIS, never the current preview text: the
+   * preview is mutated by "this résumé only" edits, which the user explicitly chose NOT to
+   * persist. Undoing to the preview would write a JD-specific wording into the master résumé
+   * that they never agreed to — an undo that leaves things worse than not undoing at all.
+   */
+  originalText: (key: string) => string;
 }
 
-function mapBlocks(
+function mapLines(
   blocks: RoleBlock[] | undefined,
-  entryId: string,
   key: string,
   fn: (line: ResumeLine) => ResumeLine,
 ): RoleBlock[] {
-  return (blocks ?? []).map((block) =>
-    block.entry_id !== entryId
-      ? block
-      : {
-          ...block,
-          bullets: (block.bullets ?? []).map((line) =>
-            lineKey(line) === key ? fn(line) : line,
-          ),
-        },
-  );
+  return (blocks ?? []).map((block) => ({
+    ...block,
+    bullets: (block.bullets ?? []).map((line, i) =>
+      lineKey(block.entry_id ?? "", i) === key ? fn(line) : line,
+    ),
+  }));
+}
+
+/** Snapshot every line's server-truth text, keyed by its stable address. */
+function snapshot(resume: StructuredResume): Map<string, string> {
+  const originals = new Map<string, string>();
+  for (const block of [...(resume.experience ?? []), ...(resume.education ?? [])]) {
+    (block.bullets ?? []).forEach((line, i) => {
+      originals.set(lineKey(block.entry_id ?? "", i), line.text);
+    });
+  }
+  return originals;
 }
 
 /**
@@ -62,6 +86,9 @@ export function useTailor(): TailorController {
   const [tailoring, setTailoring] = useState(false);
   const [exporting, setExporting] = useState<ExportFormat | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A ref, not state: nothing renders from it, and undo must read the CURRENT snapshot rather
+  // than one captured in a stale closure.
+  const originals = useRef<Map<string, string>>(new Map());
 
   const tailor = useCallback(async (input: TailorRequest) => {
     setTailoring(true);
@@ -71,6 +98,7 @@ export function useTailor(): TailorController {
         method: "POST",
         body: input,
       });
+      originals.current = snapshot(result);
       setResume(result);
     } catch {
       setError("Couldn't tailor your résumé — check your key and try again.");
@@ -95,36 +123,30 @@ export function useTailor(): TailorController {
     [resume],
   );
 
-  const editLine = useCallback((entryId: string, key: string, text: string) => {
+  const editLine = useCallback((key: string, text: string) => {
     setResume((prev) =>
       !prev
         ? prev
         : {
             ...prev,
-            experience: mapBlocks(prev.experience, entryId, key, (l) => ({ ...l, text })),
-            education: mapBlocks(prev.education, entryId, key, (l) => ({ ...l, text })),
+            experience: mapLines(prev.experience, key, (l) => ({ ...l, text })),
+            education: mapLines(prev.education, key, (l) => ({ ...l, text })),
           },
     );
   }, []);
 
-  const identifyLine = useCallback((entryId: string, key: string, bulletId: string) => {
-    // After overwriting a story-backed line, the server has created a bullet that now IS that
-    // line. Without adopting its id the client still thinks the line is story-backed, so the
-    // user's NEXT edit tries to create a second bullet for the same story and is rejected —
-    // locking them out of fixing a typo they just made.
+  const identifyLine = useCallback((key: string, bulletId: string) => {
+    // After overwriting a story-backed line, the server created a bullet that now IS that line;
+    // the client must adopt its id, or the next edit would try to create a SECOND bullet for
+    // the same story and be refused. Undo passes "" to hand the id back, so the line stops
+    // claiming a bullet that no longer exists.
     setResume((prev) =>
       !prev
         ? prev
         : {
             ...prev,
-            experience: mapBlocks(prev.experience, entryId, key, (l) => ({
-              ...l,
-              bullet_id: bulletId,
-            })),
-            education: mapBlocks(prev.education, entryId, key, (l) => ({
-              ...l,
-              bullet_id: bulletId,
-            })),
+            experience: mapLines(prev.experience, key, (l) => ({ ...l, bullet_id: bulletId })),
+            education: mapLines(prev.education, key, (l) => ({ ...l, bullet_id: bulletId })),
           },
     );
   }, []);
@@ -133,9 +155,7 @@ export function useTailor(): TailorController {
     setResume((prev) => (prev ? { ...prev, summary } : prev));
   }, []);
 
-  const editSkills = useCallback((skills: string[]) => {
-    setResume((prev) => (prev ? { ...prev, skills } : prev));
-  }, []);
+  const originalText = useCallback((key: string) => originals.current.get(key) ?? "", []);
 
   return {
     resume,
@@ -147,6 +167,6 @@ export function useTailor(): TailorController {
     editLine,
     identifyLine,
     editSummary,
-    editSkills,
+    originalText,
   };
 }

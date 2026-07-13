@@ -867,6 +867,47 @@ class TestAcceptBullets:
         assert texts == ["Hired six engineers", "Rebuilt CI, cutting deploy failures 40%"]
         assert bullets[-1].source is BulletSource.GRILLED
 
+    def test_a_stored_derived_bullet_actually_REPLACES_the_story_line_on_the_resume(
+        self,
+    ) -> None:
+        """CQ-6b end to end, through the REAL store: store → reload → ASSEMBLE.
+
+        (Adversarial review.) Every other test of this either monkeypatches the store (proving
+        the route passes the argument) or hand-constructs the Bullet (proving the assembler
+        honours a link a test author typed in). Neither would notice if
+        ``_aadd_entry_bullet`` quietly dropped ``derived_from_story_id`` — the destination
+        would be inert, the résumé would show the raw grill text *plus* an orphan duplicate,
+        and the suite would stay green. That is precisely how CQ-5b shipped.
+        """
+        from web.resume_builder import master_structured_resume
+
+        service = _service()
+        entry = Entry(type=ExperienceType.PROJECT, title="Platform")
+        story = StarStory(
+            entry_id=str(entry.entry_id), pillar="delivery",
+            result="Cut deploy failures 40%", metrics_validated=True,
+        )
+        _seed(
+            service,
+            CareerEngineState(
+                reference_date=_REF, work_timeline=[entry], extracted_star_stories=[story]
+            ),
+        )
+        before = master_structured_resume(_read_latest(service))
+        assert [b.text for b in before.experience[0].bullets] == ["Cut deploy failures 40%"]
+
+        added = add_entry_bullet(
+            service, app_name=_APP, user_id=_UID, entry_id=str(entry.entry_id),
+            text="Rebuilt CI end to end, cutting deploy failures 40%",
+            derived_from_story_id=str(story.story_id),
+        )
+        assert added is not None and added.bullet_id
+
+        after = master_structured_resume(_read_latest(service))
+        assert [b.text for b in after.experience[0].bullets] == [
+            "Rebuilt CI end to end, cutting deploy failures 40%"
+        ]  # REPLACED the story's line — not listed beside it
+
     def test_POLISHING_TWICE_keeps_the_line_speaking_for_its_story(self) -> None:
         """A rewrite of a story's line must INHERIT the link to that story (CQ-6).
 

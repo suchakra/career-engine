@@ -350,13 +350,17 @@ class TestOverwritingALineActuallyChangesTheResume:
         story = _story(entry, "Managed CI for 40 services, cutting build time 35%",
                        answers=str(bullet.bullet_id))
         before = entry_coverage(entry, [story])
+        assert before.is_complete
 
-        bullet.text = "Managed CI for 40 services"  # in-place edit (same bullet_id)
-        bullet.source = BulletSource.USER
+        # A REAL edit — different text (an earlier version of this test re-assigned the same
+        # string, so it asserted that a no-op changed nothing).
+        bullet.text = "Ran CI for 40 services on Acme's stack, cutting build time 35%"
+        bullet.source = BulletSource.USER  # what update_entry_bullet stamps on a user edit
 
         after = entry_coverage(entry, [story])
-        assert after.is_complete is before.is_complete
         assert after.label == before.label  # coverage did NOT regress
+        assert after.is_complete
+        # The story still answers THIS bullet_id, because an in-place edit never changed it.
         assert bullet_state(bullet, [story]) is CoverageState.QUANTIFIED
 
 

@@ -10,6 +10,7 @@ export type EditDestination = "resume-only" | "overwrite";
 
 export interface LineEdit {
   entryId: string;
+  /** The line's stable, POSITIONAL address — see {@link lineKey}. */
   key: string;
   line: ResumeLine;
   text: string;
@@ -26,6 +27,10 @@ export interface ResumePreviewProps {
    */
   onEditLine?: (edit: LineEdit) => Promise<void> | void;
   onEditSummary?: (text: string) => void;
+  /** Put the portfolio back for a line whose edit was persisted. */
+  onUndo?: (key: string) => Promise<void> | void;
+  /** Lines whose edit WAS persisted, and can still be undone. */
+  persistedKeys?: ReadonlySet<string>;
   busyKey?: string | null;
 }
 
@@ -38,20 +43,22 @@ function contactLine(r: StructuredResume): string {
 function LineEditor({
   line,
   entryId,
+  lineId,
   onSave,
   onCancel,
   busy,
 }: {
   line: ResumeLine;
   entryId: string;
+  lineId: string;
   onSave: (edit: LineEdit) => void;
   onCancel: () => void;
   busy: boolean;
 }): JSX.Element {
   const [text, setText] = useState(line.text);
-  // Defaults to the SAFE destination. Overwrite rewrites the user's portfolio — the thing
-  // every future résumé is built from — so it is never preselected and never what the Enter
-  // key does. A JD-specific rewording is the common case; permanently changing the master is not.
+  // Defaults to the SAFE destination. Overwrite rewrites the user's portfolio — the thing every
+  // future résumé is built from — so it is never preselected. A JD-specific rewording is the
+  // common case; permanently changing the master is not.
   const [destination, setDestination] = useState<EditDestination>("resume-only");
   const canPersist = Boolean(line.bullet_id || line.story_id);
   const dirty = text.trim() !== line.text.trim() && text.trim().length > 0;
@@ -72,7 +79,7 @@ function LineEditor({
           <label className="mt-1 flex items-start gap-2 text-sm">
             <input
               type="radio"
-              name={`dest-${lineKey(line)}`}
+              name={`dest-${lineId}`}
               checked={destination === "resume-only"}
               onChange={() => setDestination("resume-only")}
               className="mt-1"
@@ -87,7 +94,7 @@ function LineEditor({
           <label className="mt-1 flex items-start gap-2 text-sm">
             <input
               type="radio"
-              name={`dest-${lineKey(line)}`}
+              name={`dest-${lineId}`}
               checked={destination === "overwrite"}
               onChange={() => setDestination("overwrite")}
               className="mt-1"
@@ -106,7 +113,7 @@ function LineEditor({
         <button
           type="button"
           disabled={!dirty || busy}
-          onClick={() => onSave({ entryId, key: lineKey(line), line, text: text.trim(), destination })}
+          onClick={() => onSave({ entryId, key: lineId, line, text: text.trim(), destination })}
           className="min-h-tap rounded-card border border-border bg-card px-3 text-sm disabled:opacity-50"
         >
           {busy ? "Saving…" : "Save"}
@@ -127,10 +134,14 @@ function LineEditor({
 function Roles({
   roles,
   onEditLine,
+  onUndo,
+  persistedKeys,
   busyKey,
 }: {
   roles: RoleBlock[];
   onEditLine?: (edit: LineEdit) => Promise<void> | void;
+  onUndo?: (key: string) => Promise<void> | void;
+  persistedKeys?: ReadonlySet<string>;
   busyKey?: string | null;
 }): JSX.Element {
   const [editing, setEditing] = useState<string | null>(null);
@@ -146,12 +157,15 @@ function Roles({
           </p>
           <ul className="ml-4 list-disc text-sm text-muted">
             {(role.bullets ?? []).map((line, j) => {
-              const key = lineKey(line) || `new-${j}`;
+              // POSITIONAL, so the key survives the line adopting a bullet id (and handing it
+              // back on undo). An identity-derived key changes underneath every map using it.
+              const key = lineKey(role.entry_id ?? "", j);
               if (onEditLine && editing === key) {
                 return (
                   <LineEditor
                     key={key}
                     line={line}
+                    lineId={key}
                     entryId={role.entry_id ?? ""}
                     busy={busyKey === key}
                     onCancel={() => setEditing(null)}
@@ -162,6 +176,7 @@ function Roles({
                   />
                 );
               }
+              const persisted = persistedKeys?.has(key) ?? false;
               return (
                 <li key={key}>
                   {onEditLine ? (
@@ -175,6 +190,21 @@ function Roles({
                     </button>
                   ) : (
                     line.text
+                  )}
+                  {persisted && onUndo && (
+                    // Per LINE, not one page-level slot: overwriting a second line must not
+                    // quietly strand the first one's original while the UI still offers undo.
+                    <span className="ml-2 whitespace-nowrap text-xs">
+                      <span className="text-muted">saved to portfolio</span>{" "}
+                      <button
+                        type="button"
+                        onClick={() => void onUndo(key)}
+                        disabled={busyKey === key}
+                        className="underline hover:text-text"
+                      >
+                        {busyKey === key ? "undoing…" : "undo"}
+                      </button>
+                    </span>
                   )}
                 </li>
               );
@@ -197,6 +227,8 @@ export function ResumePreview({
   resume,
   onEditLine,
   onEditSummary,
+  onUndo,
+  persistedKeys,
   busyKey,
 }: ResumePreviewProps): JSX.Element {
   // The generated types mark list fields optional (server defaults them to []).
@@ -209,10 +241,8 @@ export function ResumePreview({
   return (
     <div className="rounded-card border border-border bg-card p-5 text-text">
       <h2 className="text-lg font-semibold">{resume.contact.name || "Your résumé"}</h2>
-      {contactLine(resume) && (
-        <p className="mb-3 text-xs text-muted">{contactLine(resume)}</p>
-      )}
-      {(resume.summary || editingSummary) && (
+      {contactLine(resume) && <p className="mb-3 text-xs text-muted">{contactLine(resume)}</p>}
+      {resume.summary && (
         <section className="mb-3">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">Summary</h3>
           {onEditSummary && editingSummary ? (
@@ -247,7 +277,7 @@ export function ResumePreview({
                 </button>
               </div>
               {/* The summary is written by the model for THIS job and is not part of the
-                  portfolio, so an edit here can only ever live in this document. There is no
+                  portfolio, so an edit to it can only ever live in this document. There is no
                   destination to choose. */}
               <p className="mt-1 text-xs text-muted">Applies to this résumé only.</p>
             </div>
@@ -279,7 +309,13 @@ export function ResumePreview({
           <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-muted">
             Experience
           </h3>
-          <Roles roles={experience} onEditLine={onEditLine} busyKey={busyKey} />
+          <Roles
+            roles={experience}
+            onEditLine={onEditLine}
+            onUndo={onUndo}
+            persistedKeys={persistedKeys}
+            busyKey={busyKey}
+          />
         </section>
       )}
       {education.length > 0 && (
@@ -287,6 +323,8 @@ export function ResumePreview({
           <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-muted">
             Education
           </h3>
+          {/* Read-only on purpose: the assembler renders a clean degree/school line there, with
+              no bullets to persist back to. */}
           <Roles roles={education} />
         </section>
       )}

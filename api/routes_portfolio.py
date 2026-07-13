@@ -163,6 +163,12 @@ async def add_bullet(
     )
     if result is None:
         raise HTTPException(status_code=404, detail="No active session.")
+    if not result.bullet_id:
+        # The store treats an unknown entry as a logged no-op. Reporting that as 201-with-an-
+        # empty-id would tell the client its overwrite succeeded: it would show "saved to
+        # portfolio", offer an Undo that deletes nothing, and hide the fact that the entry had
+        # been removed in another tab — exactly the stale-preview case the 409 exists for.
+        raise HTTPException(status_code=404, detail="No such experience.")
     return BulletAddResponse(bullet_id=result.bullet_id)
 
 

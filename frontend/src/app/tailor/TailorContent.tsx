@@ -23,12 +23,13 @@ const INPUT_CLASS =
 /** Enough to put the portfolio back exactly as it was. */
 interface UndoableOverwrite {
   entryId: string;
-  key: string;
   /** `edited` → PATCH the old text back. `created` → DELETE the bullet we made, and the
    *  assembler falls back to the story's own line, which is what was there before. */
   kind: "edited" | "created";
   bulletId: string;
-  previous: string;
+  /** The text the PORTFOLIO had, snapshotted when the server tailored this résumé — never
+   *  the preview's current text, which a "this résumé only" edit may already have changed. */
+  original: string;
 }
 
 function TrackApplicationCard({ resume, jd }: { resume: StructuredResume; jd: string }): JSX.Element {
@@ -97,17 +98,26 @@ export function TailorContent(): JSX.Element {
   const [jd, setJd] = useState("");
   const [instructions, setInstructions] = useState("");
   const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [undo, setUndo] = useState<UndoableOverwrite | null>(null);
-  const [undoing, setUndoing] = useState(false);
+  // One undo per LINE, not one slot for the whole page: overwriting a second line must not
+  // quietly make the first one unrecoverable while the UI still offers to undo it.
+  const [undos, setUndos] = useState<Map<string, UndoableOverwrite>>(new Map());
+
+  const remember = (key: string, u: UndoableOverwrite): void =>
+    setUndos((prev) => new Map(prev).set(key, u));
 
   /** Persist (or don't) one edited line, per the destination the user picked. */
   const saveLine = async (edit: LineEdit): Promise<void> => {
     const { entryId, key, line, text, destination } = edit;
+    // What the PORTFOLIO says, captured when the server tailored this résumé — NOT the current
+    // preview text, which a "this résumé only" edit may already have changed. Undoing to the
+    // preview would write a JD-specific wording into the master that the user explicitly chose
+    // not to persist: an undo that makes things worse than not undoing.
+    const original = tailor.originalText(key);
 
     // "This résumé only" — the export and the tracked application both serialize the résumé
     // held in `useTailor`, so updating it there IS the whole implementation. Deliberately
     // zero API calls: the portfolio must not learn about a JD-specific rewording.
-    tailor.editLine(entryId, key, text);
+    tailor.editLine(key, text);
     if (destination === "resume-only") return;
 
     setBusyKey(key);
@@ -118,7 +128,7 @@ export function TailorContent(): JSX.Element {
         // new bullet which coverage reads as uncovered, and the grill would re-open a
         // finished entry to demand a number for the line the user just polished.)
         await editBullet.mutateAsync({ entryId, bulletId: line.bullet_id, newText: text });
-        setUndo({ entryId, key, kind: "edited", bulletId: line.bullet_id, previous: line.text });
+        remember(key, { entryId, kind: "edited", bulletId: line.bullet_id, original });
       } else if (line.story_id) {
         // The grill wrote this line and the copywriter never polished it, so there is no
         // bullet yet. Create one that SPEAKS FOR the story; the assembler then renders it in
@@ -130,11 +140,11 @@ export function TailorContent(): JSX.Element {
         });
         // Adopt the id, or the user's next edit would try to create a SECOND bullet for this
         // story and be refused — locking them out of fixing a typo they just introduced.
-        tailor.identifyLine(entryId, key, bullet_id);
-        setUndo({ entryId, key, kind: "created", bulletId: bullet_id, previous: line.text });
+        tailor.identifyLine(key, bullet_id);
+        remember(key, { entryId, kind: "created", bulletId: bullet_id, original });
       }
     } catch {
-      tailor.editLine(entryId, key, line.text); // roll the preview back to what was saved
+      tailor.editLine(key, line.text); // roll the preview back
     } finally {
       setBusyKey(null);
     }
@@ -142,28 +152,37 @@ export function TailorContent(): JSX.Element {
 
   /** Put the portfolio back. Overwrite is destructive — the old wording is GONE from the
    *  store — so a user who rewords a line for one job and regrets it has no other way back. */
-  const undoOverwrite = async (): Promise<void> => {
-    if (!undo) return;
-    setUndoing(true);
+  const undoOverwrite = async (key: string): Promise<void> => {
+    const u = undos.get(key);
+    if (!u) return;
+    setBusyKey(key);
     try {
-      if (undo.kind === "edited") {
+      if (u.kind === "edited") {
         await editBullet.mutateAsync({
-          entryId: undo.entryId,
-          bulletId: undo.bulletId,
-          newText: undo.previous,
+          entryId: u.entryId,
+          bulletId: u.bulletId,
+          newText: u.original,
         });
       } else {
         // Deleting the bullet we created makes the assembler fall back to the story's own
         // text — which is exactly the line that was there before.
-        await deleteBullet.mutateAsync({ entryId: undo.entryId, bulletId: undo.bulletId });
+        await deleteBullet.mutateAsync({ entryId: u.entryId, bulletId: u.bulletId });
+        // …and the line must STOP claiming that bullet, which no longer exists. Otherwise its
+        // next overwrite would PATCH a dead id: the store logs "not found", the route still
+        // answers 204, and the UI reports success while nothing is written — forever.
+        tailor.identifyLine(key, "");
       }
-      tailor.editLine(undo.entryId, undo.key, undo.previous);
-      setUndo(null);
+      tailor.editLine(key, u.original);
+      setUndos((prev) => {
+        const next = new Map(prev);
+        next.delete(key);
+        return next;
+      });
       showToast("Put that line back.", "success");
     } catch {
       showToast("Couldn't undo that — try again.", "error");
     } finally {
-      setUndoing(false);
+      setBusyKey(null);
     }
   };
 
@@ -205,25 +224,16 @@ export function TailorContent(): JSX.Element {
       <div className="flex flex-1 flex-col gap-3">
         {tailor.resume ? (
           <>
+            {/* Undo is offered PER LINE (see ResumePreview), not as one page-level slot: a
+                second overwrite must not quietly strand the first one's original text. */}
             <ResumePreview
               resume={tailor.resume}
               onEditLine={saveLine}
               onEditSummary={tailor.editSummary}
+              onUndo={undoOverwrite}
+              persistedKeys={new Set(undos.keys())}
               busyKey={busyKey}
             />
-            {undo && (
-              <div className="flex items-center justify-between gap-2 rounded-card border border-border bg-surface px-3 py-2 text-sm">
-                <span className="text-muted">Replaced a line in your portfolio.</span>
-                <button
-                  type="button"
-                  onClick={() => void undoOverwrite()}
-                  disabled={undoing}
-                  className="min-h-tap rounded-card border border-border px-3 text-sm hover:bg-card"
-                >
-                  {undoing ? "Undoing…" : "Undo"}
-                </button>
-              </div>
-            )}
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm text-muted">Export:</span>
               {EXPORT_FORMATS.map(({ fmt, label }) => (
