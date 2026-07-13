@@ -881,7 +881,7 @@ The polished bullet is proposed **during grilling** and the user accepts / edits
 Batching is a hard requirement: propose rewordings for **all of an entry's bullets in one turn**. One turn
 per bullet would make the grill interminable and is the obvious failure mode of this design.
 
-### 18.5 Decision — AD-18.5: coverage is the product, not a side effect
+### 18.4 Decision — AD-18.5: coverage is the product, not a side effect
 The grill currently selects a frontier entry and drills it for a metric. It will happily interrogate a
 "favourite project" while a dozen strong bullets from the user's uploaded résumé are never touched. When a
 user hands us rich source material, **covering it is the job**.
@@ -891,22 +891,41 @@ Every supplied bullet must reach one of three terminal states: **quantified** (a
 grill may not declare an entry done while any of its bullets is in none of them, and the user must be able
 to *see* the remaining coverage rather than guess at it.
 
-### 18.4 Decision — AD-18.4: an edit at render time has THREE destinations, and the user picks
+### 18.5 Decision — AD-18.4: an edit at render time has THREE destinations, and the user picks
 A tailored résumé is a **rendering** of the portfolio, not a copy of it. The place people actually notice
 bad wording is post-tailor / pre-render — the JD is in front of them. So an edit made there must be
 disambiguated rather than silently applied:
 
 1. **This résumé only** — a JD-specific rewording that must NOT pollute the master (echoing one company's
-   vocabulary). Lives in the exported document, nowhere else.
-2. **Persist as a new variant** — a genuinely better phrasing. Stored as a `Bullet` (`source="user"`),
-   available to every future résumé; the original is kept.
-3. **Overwrite the original** — the old line was simply worse. Stored with `supersedes` set, so the
-   superseded bullet stops appearing and dedup resolves it **by id**, not by guessing at text.
+   vocabulary). Lives in the exported document, nowhere else. Export already POSTs the résumé body, so this
+   costs no persistence at all. It is also the only meaningful destination for the model-written **summary**
+   and **skills**, which have no portfolio object behind them.
+2. **Overwrite the original** — the old line was simply worse.
+3. ~~**Persist as a new variant**~~ — **deferred to CQ-7; see the amendment below.**
 
 Without bullet identity (AD-18.3) only option 1 is even expressible — which is precisely why today's UI can
-edit a bullet but cannot tell the user what became of it.
+edit a bullet but cannot tell the user what became of it. (Identity alone was not enough either: the
+*assembler* threw it away one line before the DTO. See AD-18.6.)
 
-### 18.5 Decision — AD-18.3: bullets need IDENTITY (contract v2.9.0, the prerequisite)
+> **AMENDED 2026-07-13, after adversarial pre-execution review — this decision was wrong twice.**
+>
+> **(a) "Overwrite" must be an IN-PLACE update, not `supersedes`.** A `supersedes` overwrite mints a *new*
+> `Bullet(source="user")`, which `web/coverage.py` reads as UNCOVERED — no story names it. That flows
+> straight through `entry_still_needs_grilling` → `_has_pending_work`, so the router **re-opens a finished
+> entry and marches the user back to put a number on the line they just polished.** That is the CQ-5b
+> failure, prescribed by the architecture. An in-place update keeps `bullet_id` stable, so
+> `answers_bullet_id`, coverage, and the ID-dedup all keep pointing at the right thing. (Worse: the
+> `accept_bullets` seam *permanently deletes* the superseded original — destructive, not merely hidden.)
+>
+> **(b) "Persist as a new variant" is underspecified and is NOT built.** A variant is an *alternate phrasing
+> of a line that already exists*, and there is no model for alternates — so as written it is a button that
+> makes the master résumé list one achievement twice (the exact bug AD-18.6 fixes) and re-opens the entry in
+> the grill. Coherent variants need a variant-group model: **which phrasing the master shows** (a product
+> call, not a code call), how the tailor chooses among alternates for a given JD, and how coverage inherits
+> through the link. Tracked as **CQ-7**, blocked on an operator decision. The UI **omits** the option rather
+> than disabling it — a greyed-out button is a promise we did not ship.
+
+### 18.6 Decision — AD-18.3: bullets need IDENTITY (contract v2.9.0, the prerequisite)
 > **SHIPPED** in CQ-1 (PR #87). The problem statement below is kept in the past tense as the rationale
 > for the decision; the current shape is `Entry.bullets: list[Bullet]`.
 
@@ -930,3 +949,62 @@ spec in place).
 
 **Bullet identity is the shared prerequisite** for merge/dedup, for delete-a-bullet, and for the
 copywriter loop. It is therefore sequenced first (see GROOMING).
+
+### 18.7 Decision — AD-18.6: a résumé LINE is an object with identity, not a string (contract v2.12.0)
+
+`RoleBlock.bullets` was `list[str]`. The assembler took bullets that had identity (AD-18.3) and stories that
+had ids, rendered them to bare text, and **threw the identity away one line before the DTO**. That single
+fact was the ceiling on three shipped bugs, each reproduced against the real code:
+
+- The **master résumé listed one achievement three times** — the raw `story.result`, the original parsed
+  line, and the copywriter rewrite the user had approved. An accepted story-derived proposal recorded
+  nothing about the story it was written for, so nothing could tell they were the same achievement. **Text
+  dedup cannot fix this in principle: the better the copywriter does its job, the less the rewrite resembles
+  the line it replaced.**
+- **Tailor ignored the user's uploaded résumé.** Its catalog was validated STAR stories only, so a user who
+  uploaded a strong CV and tailored it before grilling got an EMPTY document — the same failure already
+  fixed for the master résumé and never fixed here.
+- **Tailor shipped raw grill text** even when the user had approved better prose, making AD-18.2's promise
+  ("no unreviewed prose can ever reach a PDF") **false for the tailored résumé — the actual product.**
+
+**The decision.** A rendered line is `ResumeLine(text, bullet_id, story_id)`: it knows what it came from.
+`Bullet.derived_from_story_id` (additive, v2.12.0) is the missing link — *this bullet **is** that story's
+résumé line* — so the assembler renders the approved bullet **instead of** `story.result`. Note the
+direction: this is the opposite of `StarStory.answers_bullet_id` (v2.11.0), which records which bullet a
+grill *question* was about. A story can be *about* one bullet while its résumé line is a different, newly
+written one; conflating the two loses that.
+
+**The tailor's catalog is DEFINED as "the lines the master would render."** Not a second query that happens
+to agree — literally the same function. The model can only select something that will actually render, and
+anything renderable can be selected. Two things that must agree cannot drift if there is only one of them.
+
+**Dedup is by ID — with ONE scoped exception, and it is load-bearing.** `_covers()` (text containment)
+survives *only* for stories whose `answers_bullet_id` is empty. Every story written before v2.11.0 has an
+empty link, **and that is all of the data in the live database**; the link cannot be backfilled, because
+which line a story answered is not recoverable and guessing it is what this design exists to end. Deleting
+the shim — which an earlier draft of this decision did — would double-list every grilled bullet of every
+returning user on day one. It carries its deletion condition in its docstring: *when no `metrics_validated`
+story with an empty `answers_bullet_id` remains in live data.*
+
+**Coverage must learn the new link, and the ORDER of the checks is part of the decision.**
+`derived_from_story_id` → QUANTIFIED is tested **before** `source is GRILLED` → STRENGTHENED. Every bullet
+the copywriter writes is GRILLED, so testing GRILLED first makes the linked branch unreachable in
+production — it would only fire for a `source=USER` bullet, which no write path creates. (Adversarial review
+caught exactly that, over a green suite whose tests hand-built a bullet in a shape the app cannot produce.
+This codebase has now shipped that failure three times; the order is not incidental.)
+
+**Consequences that must not be re-litigated by a future change:**
+- A rewrite that supersedes a story-derived bullet **inherits** its `derived_from_story_id`. The superseded
+  original is deleted by the accept seam, so a replacement that does not inherit the link orphans the story
+  — which then renders its raw grill text again, next to the rewrite. "Polish a line, then polish it again"
+  is the most ordinary flow there is, and it silently reintroduces the bug this decision removes.
+- The copywriter does not re-offer a story that already has an approved line; it offers the **bullet**.
+  Otherwise the user is asked to re-approve work they already approved, and accepting mints a second bullet
+  claiming the same story — a loop that never converges.
+- `derived_from_story_id` is set **at creation only**. An edit that could set it would let any bullet be
+  pointed at any validated story and be marked covered without ever having been grilled: a **false
+  QUANTIFIED**, which AD-18.5 identifies as the worst error coverage can make.
+- Deleting a STAR story **clears** the link on bullets that spoke for it (the user keeps their words; the
+  dangling claim goes) — and patches `work_timeline` **only when a link was actually cleared**, because a
+  `state_delta` is applied by `dict.update()`: writing the timeline unconditionally lets a story deletion
+  silently erase a bullet a concurrent request just added to an unrelated entry.
