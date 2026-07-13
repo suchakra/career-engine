@@ -779,11 +779,10 @@ def execute_grill_turn_node(
             )
             new_timeline = _update_entry_in_timeline(state.work_timeline, grilled_entry)
 
-            # Advance the frontier to the next entry needing work. `new_stories` is passed
-            # so COVERAGE is honoured (CQ-5): the entry we just grilled is only left behind
-            # if every one of its bullets is now quantified, strengthened, or explicitly
-            # skipped. One validated story used to be enough to abandon an entry carrying a
-            # dozen untouched lines.
+            # Advance the frontier to the next entry needing work.
+            # NOTE: coverage does NOT steer this yet — one validated story is still enough to
+            # leave an entry carrying a dozen untouched lines. That is CQ-5b, and it is not a
+            # one-liner: see _next_frontier's docstring for why the naive wiring loops forever.
             next_fid = _next_frontier(new_timeline, frontier_id)
 
             # Clear this entry's failed-attempt counter + answer memory on success.

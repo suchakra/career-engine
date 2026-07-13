@@ -62,19 +62,39 @@ class EntryCoverage:
         return f"{self.covered} of {self.total} covered"
 
 
+_MIN_TOKENS_FOR_CONTAINMENT = 4
+"""A bullet must be this substantial before substring containment is trusted.
+
+Short, generic lines ("Ran CI", "Led hiring", "Python") turn up as substrings of unrelated
+prose all the time. Without this floor, an entry's OTHER story ("...ran CI/CD pipelines 50%
+faster...") silently marks an untouched "Ran CI" bullet as QUANTIFIED — telling the user a line
+is covered when it was never grilled. A false QUANTIFIED is the worst error this module can
+make: it HIDES outstanding work, which is the very thing coverage exists to surface.
+"""
+
+
 def _covers(story_result: str, bullet_text: str) -> bool:
     """Does a validated story's result already account for this bullet?
 
-    Containment either way, whitespace/case normalised — the same conservative rule the
-    résumé assembler uses. A grilled result typically quotes or subsumes the line it came
-    from; it is almost never byte-identical, so an exact compare would report a bullet as
-    uncovered when we have in fact already quantified it.
+    Exact match always counts. Substring containment only counts for a bullet substantial
+    enough (>= ``_MIN_TOKENS_FOR_CONTAINMENT`` words) that an accidental match is implausible.
+
+    This is deliberately biased toward UNDER-reporting coverage: a false UNCOVERED merely asks
+    the user about something already handled (annoying, recoverable), while a false QUANTIFIED
+    hides work they still need to do (silent, and the opposite of this module's purpose).
+
+    Text matching is a stopgap. **CQ-5b** replaces it with a real link — the grill recording
+    WHICH bullet a story answers — at which point this heuristic goes away entirely.
     """
     a = " ".join(story_result.split()).casefold()
     b = " ".join(bullet_text.split()).casefold()
     if not a or not b:
         return False
-    return a == b or b in a or a in b
+    if a == b:
+        return True
+    if len(b.split()) < _MIN_TOKENS_FOR_CONTAINMENT:
+        return False  # too short to trust a substring hit
+    return b in a
 
 
 def bullet_state(

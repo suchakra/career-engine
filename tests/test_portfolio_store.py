@@ -34,6 +34,7 @@ from web.portfolio_store import (
     delete_entry_bullet,
     delete_star_story,
     merge_work_timeline,
+    set_bullet_skipped,
     set_entry_highlight,
     set_grill_frontier,
     update_entry_bullet,
@@ -782,5 +783,55 @@ class TestAcceptBullets:
         service = _service()
         assert (
             accept_bullets(service, app_name=_APP, user_id=_UID, entry_id="x", bullets=[])
+            is None
+        )
+
+
+class TestSetBulletSkipped:
+    def test_skipping_and_unskipping_a_bullet(self) -> None:
+        service = _service()
+        entry = Entry(type=ExperienceType.PROJECT, title="P", bullets=[Bullet(text="Standups")])
+        _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
+        bid = str(entry.bullets[0].bullet_id)
+
+        set_bullet_skipped(
+            service, app_name=_APP, user_id=_UID, entry_id=str(entry.entry_id),
+            bullet_id=bid, skipped=True,
+        )
+        assert _read_latest(service).work_timeline[0].bullets[0].skipped is True
+
+        set_bullet_skipped(
+            service, app_name=_APP, user_id=_UID, entry_id=str(entry.entry_id),
+            bullet_id=bid, skipped=False,
+        )
+        assert _read_latest(service).work_timeline[0].bullets[0].skipped is False
+
+    def test_re_skipping_an_already_skipped_bullet_is_a_clean_no_op(self) -> None:
+        """Regression (adversarial review): "not found" was detected by comparing the RESULTING
+        lists, so an idempotent replay produced an identical list and was logged as
+        'bullet not found' — poisoning the signal used to debug a real id mismatch.
+        """
+        service = _service()
+        entry = Entry(
+            type=ExperienceType.PROJECT, title="P",
+            bullets=[Bullet(text="Standups", skipped=True)],
+        )
+        _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
+
+        sid = set_bullet_skipped(
+            service, app_name=_APP, user_id=_UID, entry_id=str(entry.entry_id),
+            bullet_id=str(entry.bullets[0].bullet_id), skipped=True,
+        )
+
+        assert sid is not None
+        assert _read_latest(service).work_timeline[0].bullets[0].skipped is True
+
+    def test_returns_none_when_no_session(self) -> None:
+        service = _service()
+        assert (
+            set_bullet_skipped(
+                service, app_name=_APP, user_id=_UID, entry_id="x",
+                bullet_id=str(uuid4()), skipped=True,
+            )
             is None
         )

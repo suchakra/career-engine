@@ -945,17 +945,21 @@ async def _aset_bullet_skipped(
     new_timeline: list[Entry] = []
     for entry in existing.work_timeline:
         if str(entry.entry_id) == entry_id:
+            # Detect "not found" by ID, not by comparing the resulting lists: skipping an
+            # ALREADY-skipped bullet is a legitimate idempotent replay that produces an
+            # identical list, and the old comparison logged it as "bullet not found" — poisoning
+            # the very signal used to debug a real id mismatch.
+            if not any(str(b.bullet_id) == bullet_id for b in entry.bullets):
+                logger.warning(
+                    "set_bullet_skipped: bullet %s not found on entry %s", bullet_id, entry_id
+                )
+                return session_id
             updated = [
                 b.model_copy(update={"skipped": skipped})
                 if str(b.bullet_id) == bullet_id
                 else b
                 for b in entry.bullets
             ]
-            if updated == list(entry.bullets):
-                logger.warning(
-                    "set_bullet_skipped: bullet %s not found on entry %s", bullet_id, entry_id
-                )
-                return session_id
             entry = entry.model_copy(update={"bullets": updated})
             found = True
         new_timeline.append(entry)

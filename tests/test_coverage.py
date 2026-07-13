@@ -24,15 +24,21 @@ def _story(entry: Entry, result: str, *, validated: bool = True) -> StarStory:
 
 class TestBulletState:
     def test_a_bullet_a_validated_story_covers_is_QUANTIFIED(self) -> None:
-        entry = _entry(Bullet(text="Rebuilt CI"))
-        story = _story(entry, "Rebuilt CI, cutting deploy failures 40%")
+        entry = _entry(Bullet(text="Rebuilt the CI pipeline on Kubernetes"))
+        story = _story(
+            entry, "Rebuilt the CI pipeline on Kubernetes, cutting deploy failures 40%"
+        )
 
         assert bullet_state(entry.bullets[0], [story]) is CoverageState.QUANTIFIED
 
     def test_an_UNVALIDATED_story_does_not_count_as_quantified(self) -> None:
         """No metric was actually extracted — the line is still outstanding."""
-        entry = _entry(Bullet(text="Rebuilt CI"))
-        story = _story(entry, "Rebuilt CI, cutting deploy failures 40%", validated=False)
+        entry = _entry(Bullet(text="Rebuilt the CI pipeline on Kubernetes"))
+        story = _story(
+            entry,
+            "Rebuilt the CI pipeline on Kubernetes, cutting failures 40%",
+            validated=False,
+        )
 
         assert bullet_state(entry.bullets[0], [story]) is CoverageState.UNCOVERED
 
@@ -50,15 +56,44 @@ class TestBulletState:
     def test_an_untouched_bullet_is_UNCOVERED(self) -> None:
         assert bullet_state(Bullet(text="Ran the platform"), []) is CoverageState.UNCOVERED
 
+    def test_a_SHORT_bullet_is_not_falsely_marked_covered_by_an_unrelated_story(self) -> None:
+        """A false QUANTIFIED is the worst error this module can make — it HIDES work.
+
+        Regression (adversarial review): containment was trusted at any length, so a short,
+        generic line was a substring of unrelated prose and got marked covered. Here the entry
+        has a DIFFERENT achievement that was genuinely grilled, whose result happens to contain
+        the words "ran ci" — the untouched "Ran CI" bullet must NOT ride on it.
+        """
+        entry = _entry(Bullet(text="Ran CI"))
+        unrelated = _story(entry, "Rebuilt the release process so teams ran CI/CD 50% faster")
+
+        assert bullet_state(entry.bullets[0], [unrelated]) is CoverageState.UNCOVERED
+
+    def test_a_SUBSTANTIAL_bullet_is_still_matched_by_containment(self) -> None:
+        """The floor must not break the case containment exists for."""
+        entry = _entry(Bullet(text="Rebuilt the CI pipeline on Kubernetes"))
+        story = _story(
+            entry, "Rebuilt the CI pipeline on Kubernetes, cutting deploy failures 40%"
+        )
+
+        assert bullet_state(entry.bullets[0], [story]) is CoverageState.QUANTIFIED
+
+    def test_an_exact_match_counts_however_short(self) -> None:
+        entry = _entry(Bullet(text="Ran CI"))
+
+        assert bullet_state(entry.bullets[0], [_story(entry, "Ran CI")]) is CoverageState.QUANTIFIED
+
 
 class TestEntryCoverage:
     def test_the_label_tells_the_user_what_is_LEFT(self) -> None:
         entry = _entry(
-            Bullet(text="Rebuilt CI"),
-            Bullet(text="Hired six engineers"),
+            Bullet(text="Rebuilt the CI pipeline on Kubernetes"),
+            Bullet(text="Hired and mentored six platform engineers"),
             Bullet(text="Attended standups", skipped=True),
         )
-        story = _story(entry, "Rebuilt CI, cutting deploy failures 40%")
+        story = _story(
+            entry, "Rebuilt the CI pipeline on Kubernetes, cutting deploy failures 40%"
+        )
 
         coverage = entry_coverage(entry, [story])
 
@@ -90,20 +125,24 @@ class TestEntryNeedsWork:
     def test_a_GRILLED_entry_with_untouched_bullets_STILL_needs_work(self) -> None:
         """THE bug. One story used to be enough to abandon an entry with 11 lines left."""
         entry = _entry(
-            Bullet(text="Rebuilt CI"),
-            *[Bullet(text=f"Untouched line {i}") for i in range(11)],
+            Bullet(text="Rebuilt the CI pipeline on Kubernetes"),
+            *[Bullet(text=f"Untouched line number {i} of the résumé") for i in range(11)],
         )
-        story = _story(entry, "Rebuilt CI, cutting deploy failures 40%")
+        story = _story(
+            entry, "Rebuilt the CI pipeline on Kubernetes, cutting deploy failures 40%"
+        )
 
         assert entry_needs_work(entry, [story]) is True
 
     def test_an_entry_whose_every_bullet_is_terminal_is_done(self) -> None:
         entry = _entry(
-            Bullet(text="Rebuilt CI"),
+            Bullet(text="Rebuilt the CI pipeline on Kubernetes"),
             Bullet(text="Attended standups", skipped=True),
             Bullet(text="Hired six", source=BulletSource.GRILLED),
         )
-        story = _story(entry, "Rebuilt CI, cutting deploy failures 40%")
+        story = _story(
+            entry, "Rebuilt the CI pipeline on Kubernetes, cutting deploy failures 40%"
+        )
 
         assert entry_needs_work(entry, [story]) is False
 
