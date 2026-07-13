@@ -179,6 +179,39 @@ class TestSetGrillFrontier:
         assert state.grill_frontier == str(entry.entry_id)
         assert state.current_question == ""
 
+    def test_pinning_a_new_entry_clears_the_PREVIOUS_entrys_grill_state(self) -> None:
+        """Otherwise the user's answer is filed under the WRONG JOB.
+
+        Found by adversarial review, and it needs no race — just the ordinary API sequence:
+        POST /api/grill {action:"answer"} records the answer WITHOUT running the graph, then
+        the user pins entry B from the Portfolio, then the stream runs the turn. The answer
+        (about entry A) was committed as a story on entry B, carrying answers_bullet_id of a
+        bullet that belongs to entry A — a cross-entry coverage link marking the wrong line
+        covered.
+        """
+        service = _service()
+        a = Entry(type=ExperienceType.PROJECT, title="A", bullets=[Bullet(text="line")])
+        b = Entry(type=ExperienceType.PROJECT, title="B")
+        _seed(
+            service,
+            CareerEngineState(
+                reference_date=_REF,
+                work_timeline=[a, b],
+                grill_frontier=str(a.entry_id),
+                grill_bullet_frontier=str(a.bullets[0].bullet_id),
+                current_question="What did that save?",
+                pending_user_answer="We cut latency 40%",
+            ),
+        )
+
+        set_grill_frontier(service, app_name=_APP, user_id=_UID, entry_id=str(b.entry_id))
+
+        state = _read_latest(service)
+        assert state.grill_frontier == str(b.entry_id)
+        assert state.current_question == ""
+        assert state.pending_user_answer == ""  # must not be consumed as B's answer
+        assert state.grill_bullet_frontier == ""  # must not link B's story to A's bullet
+
     def test_returns_none_when_no_session(self) -> None:
         service = _service()
         result = set_grill_frontier(
@@ -595,6 +628,42 @@ class TestMergeParsedEntriesIntoSession:
         new_role = next(e for e in state.work_timeline if e.title == "Senior SDE")
         assert state.grill_frontier == str(new_role.entry_id)
         assert state.current_question == ""
+
+    def test_a_re_upload_that_moves_the_frontier_clears_the_stale_grill_state(self) -> None:
+        """The sibling of the pin corruption (adversarial review).
+
+        A user mid-grill on entry A, with an answer typed but not yet streamed, who uploads a
+        second résumé would have that answer committed as a story on the NEWLY MERGED entry —
+        carrying answers_bullet_id of a bullet belonging to A. Achievement filed under the wrong
+        job; the wrong line marked covered.
+        """
+        service = _service()
+        a = Entry(
+            type=ExperienceType.FULL_TIME, title="A", org="Acme",
+            bullets=[Bullet(text="line")],
+        )
+        _seed(
+            service,
+            CareerEngineState(
+                reference_date=_REF,
+                work_timeline=[a],
+                grill_frontier=str(a.entry_id),
+                grill_bullet_frontier=str(a.bullets[0].bullet_id),
+                pending_user_answer="We cut latency 40%",
+                current_question="What did that save?",
+            ),
+        )
+
+        run_async(
+            amerge_parsed_entries(
+                service, app_name=_APP, user_id=_UID,
+                entries=[Entry(type=ExperienceType.FULL_TIME, title="B", org="Globex")],
+            )
+        )
+
+        state = _read_latest(service)
+        assert state.pending_user_answer == ""
+        assert state.grill_bullet_frontier == ""
 
     def test_returns_none_when_there_is_no_session_to_merge_into(self) -> None:
         """A FIRST upload has nothing to merge into — the caller creates instead."""

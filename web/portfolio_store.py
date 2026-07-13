@@ -130,11 +130,17 @@ async def _aset_grill_frontier(
 ) -> str | None:
     """Pin grill_frontier to entry_id on the canonical session; None if no session.
 
-    Also CLEARS ``current_question``. The frontier only takes effect on the next turn, so
-    leaving the previous question persisted meant "Grill me about this" pinned entry B
-    and then re-asked the user the pending question about entry A — the feature looked
-    broken. An empty ``current_question`` is the client's signal to run a fresh turn,
-    which the router then aims at the pinned entry.
+    Also CLEARS every scrap of the PREVIOUS entry's in-flight grill state:
+
+    - ``current_question`` — else "Grill me about this" pinned entry B and then re-asked the
+      pending question about entry A, and the feature looked broken. An empty question is the
+      client's signal to run a fresh turn.
+    - ``pending_user_answer`` — an answer typed about entry A would otherwise be consumed as
+      the answer for entry B, filing the user's achievement under **the wrong job**.
+    - ``grill_bullet_frontier`` (v2.11.0) — else the story committed on entry B would carry
+      ``answers_bullet_id`` of a bullet belonging to entry A: a cross-entry coverage link that
+      marks the wrong line covered. Found by adversarial review; it needs no race, just the
+      ordinary API sequence (record answer → pin a new entry → run the stream).
     """
     session_id = web_session_id(user_id)
     existing = await session_helpers.get_session_state_if_exists(
@@ -150,7 +156,12 @@ async def _aset_grill_frontier(
         app_name=app_name,
         user_id=user_id,
         session_id=session_id,
-        state_delta={"grill_frontier": entry_id, "current_question": ""},
+        state_delta={
+            "grill_frontier": entry_id,
+            "current_question": "",
+            "pending_user_answer": "",
+            "grill_bullet_frontier": "",
+        },
     )
     return session_id
 
@@ -657,8 +668,17 @@ async def _amerge_parsed_entries(
         "contract_version": CONTRACT_VERSION,
     }
     if added:
+        # Moving the frontier must clear EVERY scrap of the previous entry's in-flight grill
+        # state — exactly as _aset_grill_frontier does. This path was missed: a user mid-grill
+        # on entry A, with an answer typed but not yet streamed, who uploads a second résumé
+        # would have that answer committed as a story on the NEWLY MERGED entry, carrying
+        # answers_bullet_id of a bullet belonging to A. Their achievement filed under the wrong
+        # job, and the wrong line marked covered. (Adversarial review — the sibling of the bug
+        # fixed in _aset_grill_frontier.)
         delta["grill_frontier"] = str(added[0].entry_id)
         delta["current_question"] = ""
+        delta["pending_user_answer"] = ""
+        delta["grill_bullet_frontier"] = ""
     await _patch_session(
         session_service,
         app_name=app_name,

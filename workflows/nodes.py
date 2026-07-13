@@ -40,6 +40,7 @@ from typing import Any
 from config import AccessMode, get_settings
 from models.registry import get_registry
 from schema import (
+    Bullet,
     Capability,
     CareerEngineState,
     Entry,
@@ -49,6 +50,7 @@ from schema import (
     StarStory,
     UpgradeRequired,
 )
+from web.coverage import entry_coverage, entry_needs_work
 from workflows.prompts import (
     CHECKPOINT_SUMMARY_PROMPT,
     DISCOVERY_SYSTEM_PROMPT,
@@ -267,6 +269,64 @@ def _has_metric_bullet(entry: Entry) -> bool:
     return any(_contains_real_metric(b) for b in entry.bullet_texts)
 
 
+def _grilled_before_the_link_existed(entry: Entry, stories: list[StarStory]) -> bool:
+    """Was this entry grilled BEFORE the story→bullet link existed (pre-v2.11.0)?
+
+    Every story written before CQ-5b has an empty ``answers_bullet_id``, because per-bullet
+    targeting did not exist. Coverage therefore reads such an entry as 0-of-N covered — and
+    once coverage steers the grill, that would silently RE-OPEN the finished portfolio of every
+    returning user and march them back through work they already did. (Found by adversarial
+    review against a real legacy-shaped state; it is not hypothetical — every story in the live
+    qa data looks like this.)
+
+    We cannot know which line those stories answered, so we do not pretend to: such an entry is
+    left alone by the AUTOMATIC gates. The user can still aim the grill at it explicitly with
+    "Grill me about this" — see ``entry_still_needs_grilling(..., explicit=True)``.
+    """
+    return entry.status is EntryStatus.GRILLED and any(
+        s.metrics_validated and not s.answers_bullet_id for s in stories
+    )
+
+
+def entry_still_needs_grilling(
+    entry: Entry, stories: list[StarStory], *, explicit: bool = False
+) -> bool:
+    """THE single definition of "this entry is not done" (CQ-5b).
+
+    Every gate in the grill must ask this same question, or they diverge and the grill either
+    abandons work (the router says finalize while the frontier holds an entry) or spins (the
+    frontier holds an entry the question-targeter has nothing to ask about). Both happened.
+
+    ``stories`` must be THIS ENTRY'S stories. ``explicit=True`` means the USER pointed the grill
+    at this entry, which overrides the pre-v2.11.0 grandfather above — if they ask to be grilled
+    on it, they get grilled on it.
+    """
+    if entry.status is EntryStatus.SKIPPED:
+        return False
+    if entry.status in (EntryStatus.NEEDS_QUANTIFYING, EntryStatus.DOCUMENTED):
+        return True
+    if not explicit and _grilled_before_the_link_existed(entry, stories):
+        return False
+    # GRILLED / SUMMARIZED, but still carrying lines nobody has dealt with.
+    return entry_needs_work(entry, stories)
+
+
+def stories_for(entry: Entry, stories: list[StarStory]) -> list[StarStory]:
+    """This entry's stories. Filtering INCONSISTENTLY is how the two coverage views diverged."""
+    return [s for s in stories if s.entry_id == str(entry.entry_id)]
+
+
+def _next_uncovered_bullet(entry: Entry, stories: list[StarStory]) -> Bullet | None:
+    """The bullet the grill should ask about next on this entry (CQ-5b).
+
+    The FIRST uncovered one, in the order the user wrote them — a résumé is ordered by the
+    author's own sense of importance, so working top-down matches their intent and is
+    predictable. Returns None when nothing is outstanding.
+    """
+    outstanding = set(entry_coverage(entry, stories).uncovered_bullet_ids)
+    return next((b for b in entry.bullets if str(b.bullet_id) in outstanding), None)
+
+
 def _find_entry_by_id(timeline: list[Entry], entry_id: str) -> Entry | None:
     """Find an entry in the timeline by its entry_id string; return None if not found."""
     for entry in timeline:
@@ -327,24 +387,29 @@ def _next_frontier(
     the highest-ranked by :func:`_frontier_sort_key` — current/recent substantive roles
     before older or trivial ones. Returns "" if nothing is left to grill.
 
-    **Coverage (CQ-5) is NOT yet wired in here — deliberately.** An entry stops needing work
-    the moment its status becomes GRILLED, which happens after ONE validated story, so a
-    résumé with a dozen bullets gets one interrogated and eleven ignored. The fix is tracked
-    as **CQ-5b** in GROOMING, and it is *not* a one-line change: re-selecting an entry while
-    it has uncovered bullets can trap the grill in an INFINITE LOOP, because coverage is
-    detected by TEXT CONTAINMENT (``web.coverage._covers``). A story worded differently enough
-    to match no bullet would leave coverage unchanged, the frontier would stay put, and the
-    grill would ask forever. CQ-5b needs the grill to record WHICH bullet a story answers, so
-    progress is monotonic by construction rather than by string matching.
+    **Coverage steers this (CQ-5b).** An entry used to stop needing work the moment its status
+    became GRILLED — which happens after ONE validated story — so a user who uploaded a résumé
+    with a dozen strong bullets got one interrogated and eleven silently ignored. Now an entry
+    still needs work while ANY of its bullets is uncovered (see :mod:`web.coverage`).
 
-    ``stories`` is accepted (and currently unused) so the signature is ready for that work.
+    This is only SAFE because of the ``answers_bullet_id`` link (v2.11.0): the grill records
+    which bullet it is asking about, and the resulting story retires exactly that bullet, so
+    every successful turn makes progress **by construction**. The earlier text-matching version
+    could not guarantee that — a story worded so as to match no bullet advanced nothing, the
+    frontier stayed put, and the grill would have asked forever. ``skipped`` remains the escape
+    hatch for a line the user simply does not care about.
+
+    ``stories`` is optional so existing callers keep working; without it, coverage cannot be
+    computed and the status-only rule applies.
     """
-    needs_work = [
-        e
-        for e in timeline
-        if e.status in (EntryStatus.NEEDS_QUANTIFYING, EntryStatus.DOCUMENTED)
-        and str(e.entry_id) != current_frontier_id
-    ]
+    def _needs_work(entry: Entry) -> bool:
+        if str(entry.entry_id) == current_frontier_id:
+            return False
+        if stories is None:  # legacy callers: status-only
+            return entry.status in (EntryStatus.NEEDS_QUANTIFYING, EntryStatus.DOCUMENTED)
+        return entry_still_needs_grilling(entry, stories_for(entry, stories))
+
+    needs_work = [e for e in timeline if _needs_work(e)]
     if not needs_work:
         return ""
     needs_work.sort(key=_frontier_sort_key, reverse=True)
@@ -357,18 +422,23 @@ def _get_frontier_entry(state: CareerEngineState) -> Entry | None:
     If grill_frontier is empty, picks the most-recent ungrilled entry.
     If no ungrilled entry exists, returns None.
     """
+    # COVERAGE (CQ-5b): this gate was status-only, so it REFUSED a GRILLED entry that still
+    # had uncovered lines — the pinned frontier was silently ignored and a different entry was
+    # auto-picked. That made "Grill me about this" a no-op on exactly the entries the coverage
+    # UI was telling the user to come back to.
     if state.grill_frontier:
         entry = _find_entry_by_id(state.work_timeline, state.grill_frontier)
-        if entry is not None:
-            # Only return it if it actually needs work (jumpable target may have
-            # been completed already)
-            if entry.status in (EntryStatus.NEEDS_QUANTIFYING, EntryStatus.DOCUMENTED):
-                return entry
+        if entry is not None and entry_still_needs_grilling(
+            entry,
+            stories_for(entry, state.extracted_star_stories),
+            explicit=True,  # the user pinned it — honour that over the legacy grandfather
+        ):
+            return entry
 
-    # Auto-pick: highest-ranked entry that needs work (recent + substantive first).
     needs_work = [
-        e for e in state.work_timeline
-        if e.status in (EntryStatus.NEEDS_QUANTIFYING, EntryStatus.DOCUMENTED)
+        e
+        for e in state.work_timeline
+        if entry_still_needs_grilling(e, stories_for(e, state.extracted_star_stories))
     ]
     if not needs_work:
         return None
@@ -756,6 +826,11 @@ def execute_grill_turn_node(
             # ── Commit a validated StarStory ──────────────────────────────
             story = StarStory(
                 entry_id=frontier_id,
+                # THE LINK (CQ-5b): this story answers the bullet the grill was asking about.
+                # Coverage reads this instead of comparing prose, so a successful turn retires
+                # exactly one bullet — progress is monotonic BY CONSTRUCTION, which is what makes
+                # it safe for the frontier to hold an entry until it is covered.
+                answers_bullet_id=state.grill_bullet_frontier,
                 pillar=extracted.get("pillar") or frontier_entry.type.value,
                 situation=extracted.get("situation") or "",
                 task=extracted.get("task") or "",
@@ -779,11 +854,15 @@ def execute_grill_turn_node(
             )
             new_timeline = _update_entry_in_timeline(state.work_timeline, grilled_entry)
 
-            # Advance the frontier to the next entry needing work.
-            # NOTE: coverage does NOT steer this yet — one validated story is still enough to
-            # leave an entry carrying a dozen untouched lines. That is CQ-5b, and it is not a
-            # one-liner: see _next_frontier's docstring for why the naive wiring loops forever.
-            next_fid = _next_frontier(new_timeline, frontier_id)
+            # Advance the frontier — but only away from an entry we have actually FINISHED.
+            # The story we just committed retired exactly one bullet (via answers_bullet_id),
+            # so if the entry still has uncovered lines we stay on it and ask about the next
+            # one. Progress is guaranteed, so this cannot loop (CQ-5b).
+            mine = stories_for(grilled_entry, new_stories)
+            if entry_needs_work(grilled_entry, mine):
+                next_fid = frontier_id
+            else:
+                next_fid = _next_frontier(new_timeline, frontier_id, new_stories)
 
             # Clear this entry's failed-attempt counter + answer memory on success.
             cleared_attempts = {
@@ -859,24 +938,42 @@ def execute_grill_turn_node(
             )
     else:
         # ── Step 2: generate opening question for the frontier entry ──────
-        opening_context = (
-            f"You are starting to explore the '{frontier_entry.title}' role/project "
-            f"at '{frontier_entry.org}'.  "
-            f"Ask them to describe a specific project or achievement that shows "
-            f"their impact in this role.  "
-            f"Keep it open and conversational — one question only."
+        # COVERAGE (CQ-5b): aim at a SPECIFIC uncovered bullet rather than asking vaguely for
+        # "a project or achievement". That vague opener is exactly why a user who uploaded a
+        # dozen strong lines got one interrogated and eleven ignored. Recording which bullet we
+        # are asking about (grill_bullet_frontier) is also what makes progress monotonic: the
+        # answer's story retires THAT bullet, so the frontier can hold the entry until it is
+        # covered without any risk of looping.
+        target = _next_uncovered_bullet(
+            frontier_entry, stories_for(frontier_entry, state.extracted_star_stories)
         )
+        if target is not None:
+            opening_context = (
+                f"You are exploring the '{frontier_entry.title}' role/project at "
+                f"'{frontier_entry.org}'.  "
+                f"The candidate's résumé claims: \"{target.text}\".  "
+                f"Ask ONE question that pushes them to put a concrete NUMBER on that specific "
+                f"claim — scale, money, time, or percentage.  Do not ask about anything else."
+            )
+        else:
+            opening_context = (
+                f"You are starting to explore the '{frontier_entry.title}' role/project "
+                f"at '{frontier_entry.org}'.  "
+                f"Ask them to describe a specific project or achievement that shows "
+                f"their impact in this role.  "
+                f"Keep it open and conversational — one question only."
+            )
         question_text = client.generate(
             model_id=model_id,
             system=GRILL_SYSTEM_PROMPT,
             user=opening_context,
         )
-        # Set the frontier explicitly so it persists
         return state.model_copy(
             update={
                 "question_count": new_question_count,
                 "current_question": question_text.strip(),
                 "grill_frontier": frontier_id,
+                "grill_bullet_frontier": str(target.bullet_id) if target else "",
             }
         )
 

@@ -53,13 +53,15 @@ from google.adk.runners import Runner
 from google.adk.sessions import BaseSessionService, InMemorySessionService
 from google.adk.workflow import DEFAULT_ROUTE, START, Edge, FunctionNode, Workflow
 
-from schema import CareerEngineState, EntryStatus, PhaseStatus
+from schema import CareerEngineState, PhaseStatus
 from workflows.nodes import (
     ModelClient,
     discovery_turn_node,
+    entry_still_needs_grilling,
     execute_grill_turn_node,
     finalize_master_resume_node,
     ingest_node,
+    stories_for,
     tailor_node,
     user_checkpoint_node,
 )
@@ -68,9 +70,16 @@ from workflows.nodes import (
 
 
 def _has_pending_work(state: CareerEngineState) -> bool:
-    """Return True if any entries in the work_timeline still need grilling."""
+    """Return True if any entry still needs grilling.
+
+    COVERAGE (CQ-5b): this was status-only, and it is what made the whole feature inert — the
+    grill node could hold its frontier on an entry with uncovered lines, but this router looked
+    only at STATUS, saw nothing NEEDS_QUANTIFYING, and routed straight to *finalize*. The entry
+    was abandoned anyway, with 11 of the user's 12 bullets untouched. Every gate must ask the
+    same question (:func:`workflows.nodes.entry_still_needs_grilling`) or they diverge.
+    """
     return any(
-        e.status in (EntryStatus.NEEDS_QUANTIFYING, EntryStatus.DOCUMENTED)
+        entry_still_needs_grilling(e, stories_for(e, state.extracted_star_stories))
         for e in state.work_timeline
     )
 
