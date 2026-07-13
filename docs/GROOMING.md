@@ -189,7 +189,18 @@ by running the real code *before* planning:
 résumé line*). The tailor's catalog is now **defined as "the lines the master would render"**, so it cannot
 drift from the document. See ARCHITECTURE §18 (AD-18.6).
 
-### ⬜ CQ-6b — Post-tailor, pre-render editing — and the choice to PERSIST it
+### ✅ CQ-6b — Post-tailor, pre-render editing + the persist choice — SHIPPED (PR #101)
+The Tailor preview is editable; each edit carries a destination (below). Two adversarial reviews
+independently found the same showstopper: **the undo didn't restore, it FABRICATED.** `previous` was
+read off the *preview* line, which a "this résumé only" edit has already changed — so rewording for a
+JD, then later overwriting, then undoing, would **write the JD-specific wording into the master
+résumé** while the true original was lost. Undo left the user worse off than not undoing. Fixed by
+snapshotting the server's text at tailor time, keying lines **positionally** (an identity-derived key
+changes the moment a line adopts a new bullet id, which silently broke the rollback *and* left the line
+pointing at a deleted bullet, making every later overwrite a no-op that reported success), and keeping
+an undo **per line** rather than one page-level slot.
+
+### (spec, as built) — CQ-6b
 Let the user edit bullets after tailoring but before export, and decide what that edit *means*. This is the
 step where people actually notice the wording is wrong — the JD is in front of them.
 
@@ -255,6 +266,24 @@ renders and opens the drawer — **a test that would FAIL today**, which is exac
 nav shipped past a green suite.
 
 ## Cleanups (non-blocking, do when convenient)
+
+### ⬜ CLEAN-2 — `make check` does not lint `api/` AT ALL
+`SRC_DIRS` in the Makefile omits `api/`, so **ruff never runs on the FastAPI layer** — every route
+and every wire DTO, i.e. the files where the contract actually lives. (`mypy --strict` *does* cover
+them and is clean; it is only the lint lane that is blind.)
+
+**Why it happened:** 39 of the 44 findings in `api/` are `B008` *function-call-in-default-argument* —
+which is FastAPI's `Depends()` idiom, a false positive. The whole directory was excluded to silence one
+noisy rule, and lost lint coverage as collateral.
+
+**Why it matters:** this is the layer where a stale generated contract shipped in #87 — `openapi.json`
+and `types.gen.ts` disagreed with the deployed server, and `tsc` couldn't see it because `apiFetch`'s
+body is typed `unknown`. A gate that skips the contract layer is a gate with a hole exactly where the
+contract lives.
+
+**Change:** add `api/` to `SRC_DIRS`, add a `per-file-ignores` entry for `B008` in `api/` (the idiom is
+correct there), then fix the 5 genuine findings (2 × unused-noqa, 1 × unsorted-imports, 1 ×
+ambiguous-unicode, 1 × unsorted-dunder-slots). Small, and it closes a real hole.
 
 ### ⬜ CLEAN-1 — Rename the async store functions: `a<name>` → `<name>_async`
 The store's async functions are named by **prepending `a`**: `aadd_manual_entry`,
