@@ -293,6 +293,42 @@ class TestDeleteStarStory:
         remaining = [str(s.story_id) for s in state.extracted_star_stories]
         assert remaining == [str(story_b.story_id)]
 
+    def test_deleting_a_story_CLEARS_the_link_of_bullets_written_for_it(self) -> None:
+        """A bullet may outlive the story it speaks for — its LINK must not (CQ-6).
+
+        (Adversarial review.) The user overwrites a story's line in the tailor preview, which
+        persists a bullet with ``derived_from_story_id`` set. Later they delete that STAR story
+        from Portfolio. If the link survives, it points at nothing: the résumé assembler would
+        still render the bullet (fine — they keep their words) but coverage would read a link
+        to a story it cannot find. Clearing it leaves the line honestly UNCOVERED, which is the
+        truth: the metric evidence is gone.
+        """
+        service = _service()
+        story = StarStory(pillar="delivery", result="cut latency 40%", metrics_validated=True)
+        bullet = Bullet(
+            text="Rebuilt the pipeline, cutting latency 40%",
+            source=BulletSource.USER,
+            derived_from_story_id=str(story.story_id),
+        )
+        keep = Bullet(text="Mentored six engineers")
+        entry = Entry(type=ExperienceType.PROJECT, title="Billing rewrite", bullets=[bullet, keep])
+        story = story.model_copy(update={"entry_id": str(entry.entry_id)})
+        _seed(
+            service,
+            CareerEngineState(
+                reference_date=_REF, work_timeline=[entry], extracted_star_stories=[story]
+            ),
+        )
+
+        delete_star_story(service, app_name=_APP, user_id=_UID, story_id=str(story.story_id))
+
+        bullets = _read_latest(service).work_timeline[0].bullets
+        assert [b.text for b in bullets] == [  # the user KEEPS the words they wrote
+            "Rebuilt the pipeline, cutting latency 40%",
+            "Mentored six engineers",
+        ]
+        assert bullets[0].derived_from_story_id == ""  # …but the dangling link is gone
+
     def test_delete_star_story_idempotent(self) -> None:
         service = _service()
         story = StarStory(pillar="delivery", result="did a thing")
@@ -830,6 +866,41 @@ class TestAcceptBullets:
         assert "Ran CI" not in texts  # superseded → gone, resolved BY ID
         assert texts == ["Hired six engineers", "Rebuilt CI, cutting deploy failures 40%"]
         assert bullets[-1].source is BulletSource.GRILLED
+
+    def test_POLISHING_TWICE_keeps_the_line_speaking_for_its_story(self) -> None:
+        """A rewrite of a story's line must INHERIT the link to that story (CQ-6).
+
+        (Adversarial review — the most ordinary flow there is, and it broke.) The user polishes
+        a story's line (bullet R1, ``derived_from_story_id=S``), then polishes it again: R2
+        supersedes R1, and R1 is DELETED by this seam. If R2 does not inherit the link, story S
+        is orphaned — so the résumé renders S's RAW GRILL TEXT again, right beside R2. The
+        duplicate this whole feature exists to kill, back via "polish, then polish again",
+        with nothing to warn the user (coverage stays complete either way).
+        """
+        service = _service()
+        story_id = str(uuid4())
+        r1 = Bullet(
+            text="Rebuilt CI, cutting failures 40%",
+            source=BulletSource.GRILLED,
+            derived_from_story_id=story_id,
+        )
+        entry = Entry(type=ExperienceType.PROJECT, title="Platform", bullets=[r1])
+        _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
+
+        r2 = Bullet(  # the second pass rewrites R1 — and knows nothing of the story
+            text="Re-architected CI end to end, eliminating 40% of deploy failures",
+            source=BulletSource.GRILLED,
+            supersedes=r1.bullet_id,
+        )
+        accept_bullets(
+            service, app_name=_APP, user_id=_UID, entry_id=str(entry.entry_id), bullets=[r2]
+        )
+
+        bullets = _read_latest(service).work_timeline[0].bullets
+        assert [b.text for b in bullets] == [
+            "Re-architected CI end to end, eliminating 40% of deploy failures"
+        ]
+        assert bullets[0].derived_from_story_id == story_id  # the link SURVIVED the rewrite
 
     def test_a_story_derived_bullet_is_ADDED_without_removing_anything(self) -> None:
         service = _service()

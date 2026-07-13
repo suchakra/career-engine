@@ -5,7 +5,7 @@ from __future__ import annotations
 import io
 import zipfile
 
-from web.resume_builder import Contact, RoleBlock, StructuredResume
+from web.resume_builder import Contact, ResumeLine, RoleBlock, StructuredResume
 from web.resume_render import (
     structured_to_docx_bytes,
     structured_to_markdown,
@@ -22,7 +22,7 @@ _RESUME = StructuredResume(
     experience=[
         RoleBlock(
             title="Staff Engineer", org="Acme", dates="2020 - 2023",
-            bullets=["Cut p99 latency 40%", "Led billing rewrite"],
+            bullets=[ResumeLine(text="Cut p99 latency 40%"), ResumeLine(text="Led billing rewrite")],
         )
     ],
     education=[RoleBlock(title="BSc Computer Science", org="MIT", dates="2016 - 2020")],

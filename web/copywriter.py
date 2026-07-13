@@ -66,13 +66,28 @@ def _source_items(entry: Entry, stories: list[StarStory]) -> list[dict[str, str]
     bullets. A bullet already covered by a story is NOT sent twice: the story carries the
     same achievement with more context, so rewriting both would propose two bullets for one
     thing. Matching is by containment, the same conservative rule the résumé assembler uses.
+
+    **A story whose résumé line is already a bullet is offered as that BULLET, not as the
+    story** (CQ-6). Once the user has approved prose for a story, that prose — not the grill's
+    raw ``result`` — is the thing to polish further. Without this the second copywriter pass
+    re-proposes an achievement the user already approved, and accepting it mints a *second*
+    bullet claiming to speak for the same story: the loop never converges, and coverage counts
+    the achievement twice. (The write side recorded the link from the start; this is the read
+    side finally using it.)
+
+    Superseded bullets are never offered — they are not on the résumé, and proposing a rewrite
+    of a line the user has already replaced is noise at best.
     """
+    superseded = {str(b.supersedes) for b in entry.bullets if b.supersedes is not None}
+    live = [b for b in entry.bullets if str(b.bullet_id) not in superseded]
+    spoken_for = {b.derived_from_story_id for b in live if b.derived_from_story_id}
+
     items: list[dict[str, str]] = []
     covered: set[str] = set()
 
     for story in stories:
         result = story.result.strip()
-        if not result:
+        if not result or str(story.story_id) in spoken_for:
             continue
         items.append(
             {
@@ -85,7 +100,7 @@ def _source_items(entry: Entry, stories: list[StarStory]) -> list[dict[str, str]
         )
         covered.add(" ".join(result.split()).casefold())
 
-    for bullet in entry.bullets:
+    for bullet in live:
         text = bullet.text.strip()
         if not text:
             continue
@@ -168,17 +183,30 @@ def accept(proposal: Proposal) -> Bullet:
     """Turn an ACCEPTED proposal into the bullet that will be persisted.
 
     A rewrite of an existing bullet ``supersedes`` it — so the original stops appearing on the
-    résumé, resolved **by id** rather than by guessing at text similarity. A proposal derived
-    from a STAR story supersedes nothing: it adds a bullet the entry did not have.
+    résumé, resolved **by id** rather than by guessing at text similarity.
+
+    A proposal derived from a STAR story supersedes nothing (the entry had no such bullet);
+    instead it records ``derived_from_story_id`` — *this bullet is that story's résumé line*
+    (v2.12.0, CQ-6). Until CQ-6 that provenance was dropped on the floor, with two consequences:
+    the assembler had no way to know the approved rewrite and the raw ``story.result`` were the
+    same achievement, so the master résumé **listed it twice**; and the tailored résumé, which
+    renders stories, shipped the **raw grill text** even though the user had approved better
+    prose — making a liar of CQ-4's promise that no unreviewed text reaches a PDF.
     """
     from uuid import UUID
 
     from schema import BulletSource
 
+    story_id = (
+        proposal.source_id.split(":", 1)[1]
+        if proposal.source_id.startswith("story:")
+        else ""
+    )
     return Bullet(
         text=proposal.text,
         source=BulletSource.GRILLED,
         supersedes=UUID(proposal.source_bullet_id) if proposal.source_bullet_id else None,
+        derived_from_story_id=story_id,
     )
 
 

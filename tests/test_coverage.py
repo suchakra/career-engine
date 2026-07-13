@@ -9,6 +9,7 @@ something else. **Coverage is the product.**
 from __future__ import annotations
 
 from schema import Bullet, BulletSource, CareerEngineState, Entry, ExperienceType, StarStory
+from web.copywriter import Proposal, accept
 from web.coverage import CoverageState, bullet_state, entry_coverage, entry_needs_work
 
 
@@ -38,6 +39,51 @@ class TestBulletState:
 
     def test_an_untouched_bullet_is_UNCOVERED(self) -> None:
         assert bullet_state(Bullet(text="Ran the platform"), []) is CoverageState.UNCOVERED
+
+    def test_a_bullet_written_FOR_a_validated_story_is_QUANTIFIED_not_merely_strengthened(
+        self,
+    ) -> None:
+        """CQ-6. Built exactly as ``copywriter.accept()`` builds it — GRILLED *and* linked.
+
+        (Adversarial review.) The first cut tested the ``GRILLED`` rule first, which made this
+        branch **unreachable in production**: every bullet the copywriter writes is GRILLED, so
+        the linked case could only ever fire for a ``source=USER`` bullet — which no write path
+        creates. The tests "proving" it passed because they built a bullet by hand in a shape
+        the app cannot produce. Green tests over dead code is this codebase's signature failure,
+        so this test builds the bullet the way the real seam does.
+
+        QUANTIFIED is also the stronger, truer claim: we can name the validated metric this
+        line stands on, not merely note that somebody rewrote it.
+        """
+        entry = _entry()
+        story = _story(entry, "Cut deploy failures 40%")
+        accepted = accept(
+            Proposal(
+                source_id=f"story:{story.story_id}",
+                text="Rebuilt CI from scratch, cutting deploy failures 40%",
+                original="Cut deploy failures 40%",
+                source_bullet_id=None,
+            )
+        )
+
+        assert accepted.source is BulletSource.GRILLED  # what the real path produces
+        assert accepted.derived_from_story_id == str(story.story_id)
+        assert bullet_state(accepted, [story]) is CoverageState.QUANTIFIED
+
+    def test_a_bullet_linked_to_an_UNVALIDATED_story_is_not_quantified(self) -> None:
+        """The link BORROWS the story's metric. No metric, nothing to borrow.
+
+        It still reads STRENGTHENED — the user did approve the rewrite — but not QUANTIFIED:
+        there is no validated number behind it, and coverage must never claim one there isn't.
+        """
+        entry = _entry()
+        story = _story(entry, "Did some CI work", validated=False)
+        bullet = Bullet(
+            text="Rebuilt CI", source=BulletSource.GRILLED,
+            derived_from_story_id=str(story.story_id),
+        )
+
+        assert bullet_state(bullet, [story]) is CoverageState.STRENGTHENED
 
     def test_a_story_QUANTIFIES_the_bullet_it_says_it_answers(self) -> None:
         """CQ-5b: coverage is decided by a LINK, not by comparing prose."""

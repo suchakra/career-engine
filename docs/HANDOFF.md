@@ -35,9 +35,56 @@
 > the grandfather, **8 finished entries across the three real portfolios would have been re-opened**
 > and those users marched back through work they had already done. After the fix: 0.
 >
-> 🔴 **NEXT — CQ-6** (spec in [GROOMING.md](GROOMING.md)): post-tailor, pre-render editing with the
-> 3-way persist choice (this-résumé-only / new variant / overwrite). Then ⬜ **CLEAN-1** (rename the
-> store's `a`-prefixed async fns to a `_async` suffix).
+> ✅ **CQ-6a — every résumé line carries its IDENTITY — SHIPPED** (PR #100, contract **v2.12.0**).
+> `RoleBlock.bullets` was `list[str]`: the assembler threw away the identity CQ-1 exists to provide, one
+> line before the DTO. That was the ceiling on **three bugs that were already LIVE**, all three reproduced
+> against the real code before anything was planned:
+> - the master résumé listed **one achievement three times** (raw grill text + the parsed line + the
+>   rewrite the user approved);
+> - **Tailor ignored the uploaded résumé** — upload-then-tailor returned an EMPTY document. *This is the
+>   bug you reported as "master resume ignores all original resume"; it was fixed for the master and
+>   never for Tailor;*
+> - **Tailor shipped raw grill text** even when the user had approved better prose — so CQ-4's promise
+>   ("no unreviewed prose reaches a PDF") was **false for the actual product**.
+>
+> `ResumeLine(text, bullet_id, story_id)` + `Bullet.derived_from_story_id`. The tailor's catalog is now
+> **defined as "the lines the master would render"** — one function, so it cannot drift from the document.
+> Design: [ARCHITECTURE §18.7 (AD-18.6)](ARCHITECTURE.md).
+>
+> 🔴 **NEXT — CQ-6b** (spec in [GROOMING.md](GROOMING.md)): the editable Tailor preview itself, with a
+> **2-way** persist choice — *this résumé only* (client-side; also the only home for edits to the
+> model-written summary/skills) and *overwrite* (in-place `PATCH` when the line has a `bullet_id`;
+> otherwise POST a bullet carrying `derived_from_story_id`).
+> **Do NOT use `supersedes` for overwrite** — it mints a new `source=USER` bullet, which coverage reads as
+> UNCOVERED, so the router **re-opens the finished entry** and the grill demands a number for the line the
+> user just polished. GROOMING/AD-18.4 originally prescribed `supersedes`; both are now amended.
+>
+> Then: ⬜ **CQ-7** bullet variants — **BLOCKED ON A PRODUCT DECISION (ask Sumanta).** GROOMING's third
+> destination ("persist as a new variant, original kept") is underspecified: a variant is an *alternate
+> phrasing of an existing line*, and there is no model for alternates — so as written it is a button that
+> makes the master list one achievement twice (the exact bug CQ-6a just fixed). **Which phrasing the master
+> shows is a product call, not a code call.** ⬜ **UX-1** — the app has **NO navigation on mobile**
+> (`AppShell`'s sidebar is `hidden … md:flex` with *nothing* replacing it, and the home link lives inside
+> it: on a phone, no route is reachable except by typing a URL). ⬜ **CLEAN-1** rename the `a`-prefixed
+> async fns.
+>
+> 🔬 **THE RECURRING FAILURE — read this before you trust a green suite.** Three tickets in a row have
+> shipped (or nearly shipped) a feature the tests were green over and that **did not work**:
+> - **CQ-5b**: coverage was wired into the grill node but not the ROUTER. 839 green tests over a no-op.
+> - **CQ-6a**: the new QUANTIFIED rule was **unreachable in production** — `source is GRILLED` was tested
+>   first, and every bullet the copywriter writes is GRILLED, so the branch could only fire for a
+>   `source=USER` bullet, which **no write path creates**. The tests "proving" it hand-built a bullet in a
+>   shape the app cannot produce.
+> - **CQ-6a again**: "polish a line, then polish it again" silently orphaned the story back to raw grill
+>   text — the most ordinary flow in the app, untested.
+>
+> The pattern is always the same: **a test that constructs its own state can prove a function correct while
+> the production path never reaches it.** Two defences, both cheap:
+> 1. **Build the fixture through the real seam** (call `copywriter.accept()`, not `Bullet(...)`) — if you
+>    cannot reach the state through a write path, the state cannot happen.
+> 2. **Mutation-test the guard**: delete the line you think is load-bearing and confirm a test goes red. If
+>    nothing fails, you have written documentation, not a test. (This is how the legacy `_covers` shim was
+>    confirmed load-bearing: removing it fails 3 tests.)
 >
 > ⚠️ **PLAN REVIEW BEFORE YOU BUILD (Sumanta, 2026-07-13 — "it will save rework").** Hand the plan
 > to a **different model** (`Agent(model="fable")`) for an adversarial pre-execution review *before*

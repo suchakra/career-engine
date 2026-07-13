@@ -169,26 +169,90 @@ link, not the text, decides); an entry with N uncovered bullets is retired after
 successful turns; the existing `test_a_grilled_entry_is_still_left_behind_today` in
 `tests/test_coverage.py` is inverted to assert the entry is KEPT.
 
-### ⬜ CQ-6 — Post-tailor, pre-render editing — and the choice to PERSIST it
+### ✅ CQ-6a — Every résumé line carries its identity (contract v2.12.0) — SHIPPED (PR #100)
+The prerequisite CQ-6 turned out to need, and it fixed **three bugs that were already live**. A résumé line
+was a bare `str` (`RoleBlock.bullets: list[str]`), so the preview could not say which portfolio object a
+line came from — which is precisely why "overwrite the original" was not expressible. All three reproduced
+by running the real code *before* planning:
+
+- The **master résumé listed one achievement three times** (raw grill text + the original parsed line + the
+  copywriter rewrite the user approved). A story-derived accepted proposal recorded nothing about its story,
+  and text dedup can never catch this: *the better the copywriter does its job, the less the rewrite
+  resembles the line it replaced.*
+- **Tailor ignored the uploaded résumé** — catalog was validated STAR stories only, so upload-then-tailor
+  returned an EMPTY document. Same bug as "master resume ignores all original resume"; fixed there, still
+  live here.
+- **Tailor shipped raw grill text** even when the user had approved better prose — making CQ-4's "no
+  unreviewed prose reaches a PDF" false for the actual product.
+
+`ResumeLine(text, bullet_id, story_id)` + `Bullet.derived_from_story_id` (*this bullet IS that story's
+résumé line*). The tailor's catalog is now **defined as "the lines the master would render"**, so it cannot
+drift from the document. See ARCHITECTURE §18 (AD-18.6).
+
+### ⬜ CQ-6b — Post-tailor, pre-render editing — and the choice to PERSIST it
 Let the user edit bullets after tailoring but before export, and decide what that edit *means*. This is the
 step where people actually notice the wording is wrong — the JD is in front of them.
 
-The subtlety that must not be fudged: a tailored résumé is a **rendering** of the portfolio, not a copy of
-it. So an edit made here has three legitimate destinations, and the user picks:
-1. **This résumé only** — a JD-specific rewording that should NOT pollute the master (e.g. echoing that
-   company's vocabulary). Lives in the exported document, nowhere else.
-2. **Persist as a new variant** — a genuinely better phrasing; stored as a `Bullet` with `source="user"`,
-   available to every future résumé, original kept.
-3. **Overwrite the original** — the old line was simply worse; stored with `supersedes` set (CQ-1), so the
-   superseded bullet stops appearing (and the master-résumé dedup handles it by id, not by guessing at text).
+A tailored résumé is a **rendering** of the portfolio, not a copy of it, so an edit here needs a destination:
+1. **This résumé only** — a JD-specific rewording that must NOT pollute the master. Client-side: export
+   already POSTs the résumé body, so nothing touches `work_timeline`. Also the only meaningful destination
+   for the model-written **summary** and **skills**, which have no portfolio object behind them.
+2. **Overwrite the original** —
+   - line has a `bullet_id` → **in-place** `PATCH /api/experience/{id}/bullet`.
+   - line has only a `story_id` → POST a `Bullet(source=user, derived_from_story_id=story_id)`, which the
+     CQ-6a assembler renders *in place of* `story.result`.
 
-Without CQ-1's bullet identity, only option 1 is expressible — which is exactly why the current UI can edit
-a bullet but cannot tell you what happened to it.
+**Use in-place update, NOT `supersedes`** (this ticket originally said `supersedes` — that was wrong).
+A `supersedes` overwrite mints a new `source=USER` bullet, which coverage reads as UNCOVERED → the entry
+**re-opens and the grill marches the user back to put a number on the line they just polished**. That is the
+CQ-5b failure. In-place keeps `bullet_id` stable, so `answers_bullet_id`, coverage and the ID-dedup all keep
+pointing at the right thing. (Worse: the `accept_bullets` seam *permanently deletes* the superseded original.)
 
-**Scope:** Tailor preview becomes editable; a per-edit destination control; reuse the CQ-1 store seams.
-**Acceptance:** an edit marked "this résumé only" never changes `work_timeline`; an edit marked "overwrite"
-sets `supersedes` and the superseded line disappears from the master résumé; an edit marked "new variant"
-leaves the original in place and both are available to the tailor.
+**Acceptance:** "this résumé only" makes **zero** store writes; after "overwrite" the master renders the new
+text and nothing renders the old, `bullet_id` is unchanged, and the coverage label is unchanged; **each
+destination, applied to a fully-covered entry, leaves `entry_still_needs_grilling` AND `_has_pending_work`
+False** (drive the ROUTER, not just the pure helper — the CQ-5b lesson); `Track as application` serializes
+the EDITED résumé, not the pre-edit one.
+
+### ⬜ CQ-7 — Bullet VARIANTS (alternate phrasings) — needs a product decision first
+CQ-6 originally had a third destination: *"persist as a new variant — original kept, both available to the
+tailor."* **Deliberately not built**, because as written it is a button that makes the master résumé list the
+same achievement twice — i.e. the exact bug CQ-6a just fixed — and re-opens the entry in the grill.
+
+A variant is an **alternate phrasing of a line that already exists**, and there is no model for alternates.
+Making it coherent needs answers the code cannot invent:
+- **Which phrasing does the MASTER show?** (Both = redundant. One = which, and how does the user change it?)
+- How does the tailor **choose among alternates** for a given JD? (This is the actual value: let the
+  JD-aware model pick the phrasing that fits *this* posting.)
+- How does **coverage inherit** through the variant link, so adding a variant of a covered line doesn't
+  re-open the entry?
+
+Needs `Bullet.variant_of` (or a variant-group id), a render rule, a tailor-selection rule, and a coverage
+rule. **Ask the operator before building** — the master-résumé question is a product call.
+
+### ⬜ UX-1 — The app has NO navigation on mobile (+ a responsive audit)
+**Not polish — the app is unusable on a phone.** `AppShell` renders the nav in an
+`<aside className="hidden … md:flex">` (`frontend/src/components/AppShell.tsx`), so below 768px the sidebar
+is removed **and nothing replaces it**: no hamburger, no drawer, no bottom bar. The "CareerEngine" home link
+lives *inside* that same hidden `<aside>`. A phone user cannot reach Dashboard, Portfolio, Grill, Jobs,
+Tailor or Settings **at all** — only by typing a URL. Reported from the field: *"in mobile the left menu
+never shows up."*
+
+**Scope**
+- A mobile nav that exists: hamburger in the header → slide-over drawer rendering the **same** `SidebarNav`
+  (ONE nav component — a second copy will drift), or a bottom tab bar. Closes on route change and Escape;
+  focus trapped while open; trigger has an accessible name + `aria-expanded`.
+- The header must survive 360px — today the page title, `KeyChip` and `IdentityMenu` share one flex row with
+  no wrapping.
+- **Then audit every route at 360 / 768 / 1280.** Known-suspect surfaces, being the ones built widest: the
+  Tailor two-pane (JD textarea beside the preview), the résumé preview, the Portfolio entry cards with their
+  inline edit/grill/pin/delete action rows, and the Jobs list.
+- Tap targets: the `min-h-tap` utility already exists — apply it to the action rows that don't use it.
+
+**Acceptance:** at 360px every route is reachable from the UI alone; no horizontal page scroll on any route;
+the drawer traps focus and closes on Escape/navigation; a Vitest/RTL test asserts the mobile nav trigger
+renders and opens the drawer — **a test that would FAIL today**, which is exactly how an app with no mobile
+nav shipped past a green suite.
 
 ## Cleanups (non-blocking, do when convenient)
 

@@ -19,7 +19,15 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from integration.model_client import GeminiModelClient
-from schema import Capability, CareerEngineState, Entry, ExperienceType, StarStory, UpgradeRequired
+from schema import (
+    Bullet,
+    Capability,
+    CareerEngineState,
+    Entry,
+    ExperienceType,
+    StarStory,
+    UpgradeRequired,
+)
 from workflows.prompts import STRUCTURED_TAILOR_SYSTEM_PROMPT
 
 
@@ -35,13 +43,47 @@ class Contact:
 
 
 @dataclass(frozen=True)
+class ResumeLine:
+    """One rendered résumé line — WITH the identity of what it came from (CQ-6).
+
+    A résumé line used to be a bare ``str``, and that single fact was the ceiling on three
+    features at once:
+
+    - the tailor preview could not say *which* portfolio object a line came from, so an edit
+      there could never be persisted (CQ-6's whole point);
+    - an approved copywriter rewrite could not be rendered *instead of* the raw ``story.result``
+      it replaced, so the tailored résumé shipped raw grill text and listed the achievement twice;
+    - de-duplication had to guess, by comparing prose.
+
+    ``bullet_id`` is set when the line IS a stored :class:`schema.Bullet`. ``story_id`` is set
+    when the line SPEAKS FOR a :class:`schema.StarStory`. Both are set for a bullet that was
+    written to voice a story (``Bullet.derived_from_story_id``) — the common, healthy case.
+    """
+
+    text: str
+    bullet_id: str = ""
+    story_id: str = ""
+
+
+def _line_id(line: ResumeLine) -> str:
+    """Stable id for one résumé line — the token the tailor's model selects it by.
+
+    A line backed by a stored bullet is addressed as that bullet (the durable object);
+    otherwise it is addressed as the story it speaks for. Mirrors the copywriter's
+    ``bullet:`` / ``story:`` convention so there is one id vocabulary, not two.
+    """
+    return f"bullet:{line.bullet_id}" if line.bullet_id else f"story:{line.story_id}"
+
+
+@dataclass(frozen=True)
 class RoleBlock:
     """One experience or education entry with its bullets, résumé-ready."""
 
     title: str
     org: str
     dates: str
-    bullets: list[str] = field(default_factory=list)
+    bullets: list[ResumeLine] = field(default_factory=list)
+    entry_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -103,20 +145,28 @@ def _extract_json_object(text: str) -> dict[str, Any]:
 
 
 def _covers(story_bullet: str, entry_bullet: str) -> bool:
-    """Is ``entry_bullet`` already said by ``story_bullet`` (or vice versa)?
+    """LEGACY SHIM — text-containment dedup, used ONLY for link-less (pre-v2.11.0) stories.
 
-    A story bullet is ``story.result`` — the grilled, quantified restatement of an
-    achievement — while an entry bullet is the user's original résumé line. The two are
-    almost never byte-identical, so an exact compare would call them distinct and list
-    the same achievement twice: the more the user grills, the more repetitive their
-    master résumé gets. Containment (either direction, whitespace/case normalised) is
-    what actually fires in practice, because the grilled result typically quotes or
-    subsumes the original line.
+    **Do not reach for this in new code, and do not delete it.**
 
-    This is still textual, not semantic: genuinely reworded overlap slips through. That
-    is the deliberate trade — a false MATCH deletes the user's own words, which is worse
-    than a duplicate they can see and remove. Real semantic consolidation belongs to a
-    copywriter pass over the assembled résumé, not to this deterministic assembler.
+    De-duplication is now decided by an ID link: a bullet is dropped when a story we already
+    rendered declares — via ``StarStory.answers_bullet_id`` (v2.11.0) — that it answers *that*
+    bullet. But **every story written before v2.11.0 has an empty link**, and that is all of the
+    data in the live database. For those stories there is no link to reason with, and there
+    never will be: which line they answered is not recoverable, and guessing it is precisely
+    what this repo has banned everywhere else.
+
+    So for a link-less story we keep doing exactly what we did before — containment, either
+    direction, whitespace/case normalised — because the grilled result typically quotes or
+    subsumes the original line it was extracted from. Deleting this outright (as an earlier
+    draft of CQ-6 did) makes every grilled role of every returning user list its achievement
+    TWICE on day one: the raw ``story.result`` *and* the original bullet it restated.
+
+    It is still textual, so genuinely reworded overlap slips through — the same trade as
+    before: a false match deletes the user's own words, a miss is a duplicate they can see.
+
+    **Deletion condition:** when no ``metrics_validated`` story with an empty
+    ``answers_bullet_id`` remains in live data, this function and its call site can go.
     """
     a = " ".join(story_bullet.split()).casefold()
     b = " ".join(entry_bullet.split()).casefold()
@@ -125,19 +175,118 @@ def _covers(story_bullet: str, entry_bullet: str) -> bool:
     return a == b or b in a or a in b
 
 
-def _merge_entry_bullets(story_bullets: list[str], entry_bullets: list[str]) -> list[str]:
-    """Story bullets first (quantified — the strongest), then the entry's own lines.
+def _said_by(bullet: Bullet, rendered: list[StarStory]) -> bool:
+    """Is this bullet's achievement ALREADY on the résumé, said by a story we rendered?
 
-    An entry's ``bullets`` are what the user actually wrote (or what the vision parser
-    read off their uploaded résumé). A line already covered by a validated story is
-    skipped (see :func:`_covers`) so one achievement isn't listed twice.
+    Three ways, in order of how much we trust them:
+
+    1. ``bullet.derived_from_story_id`` names a rendered story — this bullet was written to
+       voice that story, and the story's line has already been emitted (possibly by a
+       *different* derived bullet; see the tiebreak in :func:`_entry_lines`). Two live bullets
+       may point at one story, and without this check the loser of that tiebreak comes back as
+       its own line — the duplicate bug, re-entering through the front door.
+    2. ``story.answers_bullet_id`` names this bullet — the grill asked about THIS line and got
+       a metric back (v2.11.0). The story's text *is* this line's résumé form.
+    3. The story carries **no link at all** (pre-v2.11.0 — i.e. all live data): fall back to
+       :func:`_covers`. This is the only text comparison left in the assembler, and it is
+       scoped to data that predates the link.
+
+    A story that HAS a link and names a *different* bullet says nothing about this one — we
+    trust the link over the prose, which is the whole point of having it.
     """
-    extra = [
-        b
-        for b in entry_bullets
-        if b.strip() and not any(_covers(s, b) for s in story_bullets)
-    ]
-    return [*story_bullets, *extra]
+    bullet_id = str(bullet.bullet_id)
+    for story in rendered:
+        if bullet.derived_from_story_id == str(story.story_id):
+            return True
+        if story.answers_bullet_id:
+            if story.answers_bullet_id == bullet_id:
+                return True
+            continue
+        if _covers(_bullet_for(story), bullet.text):
+            return True
+    return False
+
+
+def _entry_lines(entry: Entry, stories: list[StarStory]) -> list[ResumeLine]:
+    """Every line the MASTER résumé would render for one entry, in order.
+
+    This is the single definition of "the candidate's material for this role". The tailored
+    résumé is a *selection* from these same lines (never a separately-assembled set), which is
+    what keeps the tailor's catalog and the rendered document from ever drifting apart.
+
+    1. **One line per validated story** — its *derived bullet* if the user has approved or
+       written one (``Bullet.derived_from_story_id``), else the raw ``story.result``. This is
+       what puts human-approved prose on the résumé instead of raw grill text.
+    2. **Then the entry's own bullets** — what the user wrote or uploaded — minus anything a
+       rendered story already said (:func:`_said_by`). Without step 2, uploading a good résumé
+       and asking for one back returns an EMPTY document: every line the user supplied is
+       discarded because no story has been extracted from it yet.
+
+    Education is deliberately step-1 only: carrying its raw bullets would spill parsed
+    coursework, honours and thesis blurbs into the education section, which the renderer has
+    never had to lay out.
+    """
+    superseded = {str(b.supersedes) for b in entry.bullets if b.supersedes is not None}
+    live = [b for b in entry.bullets if str(b.bullet_id) not in superseded]
+
+    # Which bullet speaks for which story. Two live bullets CAN name the same story (e.g. the
+    # user overwrites a line in the tailor preview that a copywriter rewrite already covers);
+    # `Bullet` has no timestamp, so the only deterministic tiebreak available is document
+    # order — the last one wins, i.e. the most recently appended.
+    derived: dict[str, Bullet] = {
+        b.derived_from_story_id: b for b in live if b.derived_from_story_id
+    }
+
+    lines: list[ResumeLine] = []
+    rendered: list[StarStory] = []
+    for story in stories:
+        story_id = str(story.story_id)
+        bullet = derived.get(story_id)
+        # A blank derived bullet must fall back to the story, not delete it. Losing the polish
+        # is a cosmetic regression; losing the ACHIEVEMENT is data disappearing off a résumé.
+        # Unreachable today (accepted text is min_length=1 and blank edits are refused), which
+        # is precisely why it is worth a fallback rather than a trusted invariant.
+        text = (bullet.text.strip() if bullet is not None else "") or _bullet_for(story)
+        if not text:
+            continue
+        if bullet is not None and not bullet.text.strip():
+            bullet = None  # the line is the story's, so it must not claim the bullet's id
+        lines.append(
+            ResumeLine(
+                text=text,
+                bullet_id=str(bullet.bullet_id) if bullet is not None else "",
+                story_id=story_id,
+            )
+        )
+        rendered.append(story)
+
+    if entry.type is ExperienceType.EDUCATION:
+        return lines
+
+    emitted = {line.bullet_id for line in lines if line.bullet_id}
+    lines.extend(
+        ResumeLine(text=b.text.strip(), bullet_id=str(b.bullet_id))
+        for b in live
+        if b.text.strip() and str(b.bullet_id) not in emitted and not _said_by(b, rendered)
+    )
+    return lines
+
+
+def resume_lines(state: CareerEngineState) -> dict[str, list[ResumeLine]]:
+    """The master résumé's lines, keyed by ``entry_id`` — the tailor's catalog, too.
+
+    Defining the catalog as *"the lines the master would render"* (rather than as its own
+    hand-rolled query) is what guarantees the model can only ever select something that will
+    actually render, and that anything renderable can be selected.
+    """
+    by_entry: dict[str, list[StarStory]] = {}
+    for story in state.extracted_star_stories:
+        if story.metrics_validated:
+            by_entry.setdefault(story.entry_id, []).append(story)
+    return {
+        str(entry.entry_id): _entry_lines(entry, by_entry.get(str(entry.entry_id), []))
+        for entry in state.work_timeline
+    }
 
 
 def assemble_resume(
@@ -146,58 +295,32 @@ def assemble_resume(
     contact: Contact,
     summary: str,
     skills: list[str],
-    selected_story_ids: list[str] | None = None,
-    include_entry_bullets: bool = False,
+    selected_line_ids: set[str] | None = None,
 ) -> StructuredResume:
     """Deterministically build a StructuredResume from the session (grouped by role).
 
-    Only ``metrics_validated`` stories are used for the story bullets. If
-    ``selected_story_ids`` is given, those are limited to that selection (JD-tailored);
-    otherwise all validated stories are included (master résumé). Education entries are
-    listed regardless of stories. Experience order follows ``work_timeline``.
-
-    ``include_entry_bullets`` (master résumé only) also carries the entry's OWN bullets —
-    what the user wrote, or what the vision parser read off their uploaded résumé —
-    after the story bullets, and lets a role earn its place on the strength of those
-    alone. Without it, an uploaded-but-not-yet-grilled résumé assembles to an EMPTY
-    master résumé: every bullet the user actually supplied is silently discarded because
-    no STAR story has been extracted from it yet. The JD-tailored pass leaves this off:
-    there, achievement selection is the model's job.
+    ``selected_line_ids`` (``bullet:<id>`` / ``story:<id>``, see :func:`_line_id`) keeps only
+    those lines — the JD-tailored résumé. ``None`` keeps everything — the master résumé.
+    Education entries are listed regardless. Experience order follows ``work_timeline``.
     """
-    selected = set(selected_story_ids) if selected_story_ids is not None else None
-    by_entry: dict[str, list[StarStory]] = {}
-    for story in state.extracted_star_stories:
-        if not story.metrics_validated:
-            continue
-        if selected is not None and str(story.story_id) not in selected:
-            continue
-        by_entry.setdefault(story.entry_id, []).append(story)
+    lines_by_entry = resume_lines(state)
 
     experience: list[RoleBlock] = []
     education: list[RoleBlock] = []
     for entry in state.work_timeline:
-        stories = by_entry.get(str(entry.entry_id), [])
-        bullets = [b for b in (_bullet_for(s) for s in stories) if b]
-        is_education = entry.type is ExperienceType.EDUCATION
-        # A bullet the user replaced during the copywriter pass must NOT also appear
-        # (CQ-4 / AD-18.3). Resolved BY ID — never by guessing at text similarity, which is
-        # the game bullet identity exists to end.
-        superseded = {
-            str(b.supersedes) for b in entry.bullets if b.supersedes is not None
-        }
-        live_bullets = [
-            b.text for b in entry.bullets if str(b.bullet_id) not in superseded
-        ]
-        # Education stays a clean degree/school/dates line. Carrying its raw entry bullets
-        # would spill parsed coursework, honours and thesis blurbs into the résumé's
-        # education section — that content belongs to the experience narrative, and the
-        # renderer has never had to lay it out.
-        if include_entry_bullets and not is_education:
-            bullets = _merge_entry_bullets(bullets, live_bullets)
-        block = RoleBlock(title=entry.title, org=entry.org, dates=_dates(entry), bullets=bullets)
-        if is_education:
+        lines = lines_by_entry[str(entry.entry_id)]
+        if selected_line_ids is not None:
+            lines = [line for line in lines if _line_id(line) in selected_line_ids]
+        block = RoleBlock(
+            title=entry.title,
+            org=entry.org,
+            dates=_dates(entry),
+            bullets=lines,
+            entry_id=str(entry.entry_id),
+        )
+        if entry.type is ExperienceType.EDUCATION:
             education.append(block)
-        elif bullets:  # a work role earns a spot only if it has something to show
+        elif lines:  # a work role earns a spot only if it has something to show
             experience.append(block)
 
     return StructuredResume(
@@ -218,18 +341,16 @@ def master_structured_resume(
     all validated stories (no ``selected_story_ids``), grouped by role, with the
     profile summary. Skills are left to the tailored pass (they are JD-aligned there).
 
-    ``include_entry_bullets=True``: the master résumé is the user's COMPLETE record, so
-    it also carries the lines they wrote / uploaded, not only the achievements we have
-    grilled a metric out of. Without this, uploading a good résumé and asking for a
-    master résumé returned an empty document.
+    The master résumé is the user's COMPLETE record, so it carries the lines they wrote /
+    uploaded as well as the achievements we have grilled a metric out of. Without that,
+    uploading a good résumé and asking for a master résumé returned an empty document.
     """
     return assemble_resume(
         state,
         contact=contact or Contact(),
         summary=state.professional_summary,
         skills=[],
-        selected_story_ids=None,
-        include_entry_bullets=True,
+        selected_line_ids=None,
     )
 
 
@@ -243,29 +364,35 @@ def tailor_structured_resume(
 ) -> StructuredResume:
     """Tailor to a JD and return a real, structured résumé.
 
-    One model call selects the most JD-relevant achievements, writes a tailored
-    summary, and lists JD-aligned skills; the résumé structure (experience by role)
-    is then assembled deterministically from ``entry_id`` links.
+    One model call selects the most JD-relevant lines, writes a tailored summary, and lists
+    JD-aligned skills; the résumé structure (experience by role) is then assembled
+    deterministically from ``entry_id`` links.
+
+    **The catalog is exactly the set of lines the MASTER résumé would render** (CQ-6). It used
+    to be validated STAR stories only, which meant a user who uploaded a strong résumé and
+    tailored it before grilling got an EMPTY document — the same bug we had already fixed for
+    the master résumé, still live here. It also meant a copywriter-approved rewrite never
+    reached a tailored résumé: it shipped the raw grill text instead.
     """
     from workflows.nodes import _resolve_model, set_model_client_factory
 
     set_model_client_factory(lambda: client)
 
+    lines_by_entry = resume_lines(state)
     entry_by_id = {str(e.entry_id): e for e in state.work_timeline}
     catalog = [
         {
-            "id": str(s.story_id),
-            "role": f"{entry_by_id[s.entry_id].title} at {entry_by_id[s.entry_id].org}"
-            if s.entry_id in entry_by_id
-            else "",
-            "achievement": s.result.strip(),
+            "id": _line_id(line),
+            "role": f"{entry_by_id[entry_id].title} at {entry_by_id[entry_id].org}",
+            "achievement": line.text,
         }
-        for s in state.extracted_star_stories
-        if s.metrics_validated and s.result.strip()
+        for entry_id, lines in lines_by_entry.items()
+        for line in lines
+        if entry_id in entry_by_id
     ]
 
-    if not catalog:  # nothing grilled yet → an honest empty résumé (never crash)
-        return assemble_resume(state, contact=contact, summary="", skills=[], selected_story_ids=[])
+    if not catalog:  # nothing to say yet → an honest empty résumé (never crash)
+        return assemble_resume(state, contact=contact, summary="", skills=[], selected_line_ids=set())
 
     model_id = _resolve_model(Capability.REASONING_HIGH)
     if isinstance(model_id, UpgradeRequired):
@@ -289,31 +416,41 @@ def tailor_structured_resume(
     skills = [str(s).strip() for s in (parsed.get("skills") or []) if str(s).strip()]
     catalog_ids = {c["id"] for c in catalog}
     # Keep only ids the model returned that actually exist. A parse miss OR a set of
-    # all-invalid ids must NOT drop the résumé — fall back to all validated stories.
-    selected = [str(i) for i in (parsed.get("selected_achievement_ids") or []) if str(i) in catalog_ids]
+    # all-invalid ids must NOT drop the résumé — fall back to everything the master would
+    # render. (Pre-CQ-6 this fell back to validated stories only; the safety path is now
+    # wider because the catalog is wider.)
+    selected = {str(i) for i in (parsed.get("selected_achievement_ids") or []) if str(i) in catalog_ids}
     if not selected:
-        selected = [c["id"] for c in catalog]
+        selected = set(catalog_ids)
 
-    # 4E: always include achievements from experiences the user PINNED as tailoring
-    # priority — even if the model didn't pick them — since the user explicitly
-    # prioritized them. Pinned first, then the model's picks, deduped.
-    highlighted_entry_ids = {str(e.entry_id) for e in state.work_timeline if e.highlighted}
-    if highlighted_entry_ids:
-        # StarStory.entry_id is already a str per schema; no coercion needed.
-        story_entry = {str(s.story_id): s.entry_id for s in state.extracted_star_stories}
-        pinned = [c["id"] for c in catalog if story_entry.get(c["id"], "") in highlighted_entry_ids]
-        selected = list(dict.fromkeys([*pinned, *selected]))
+    # 4E: always include the lines of experiences the user PINNED as tailoring priority, even
+    # if the model didn't pick them — they said explicitly that this role matters. Resolved
+    # per ENTRY, so it covers both kinds of line id; the old code looked ids up in a
+    # story→entry map, which returned "" for a bullet-backed line and would have silently
+    # dropped a pinned role whose material is bullets the user uploaded but hasn't grilled.
+    pinned = {
+        _line_id(line)
+        for entry in state.work_timeline
+        if entry.highlighted
+        for line in lines_by_entry.get(str(entry.entry_id), [])
+    }
 
     return assemble_resume(
-        state, contact=contact, summary=summary, skills=skills, selected_story_ids=selected
+        state,
+        contact=contact,
+        summary=summary,
+        skills=skills,
+        selected_line_ids=selected | pinned,
     )
 
 
 __all__ = [
     "Contact",
+    "ResumeLine",
     "RoleBlock",
     "StructuredResume",
     "assemble_resume",
     "master_structured_resume",
+    "resume_lines",
     "tailor_structured_resume",
 ]

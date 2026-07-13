@@ -290,17 +290,19 @@ async def accept_copywritten_bullets(
     bullets = []
     for a in body.accepted:
         source_bullet_id: str | None = None
-        if a.source_id.startswith("bullet:"):
+        # source_id comes from the CLIENT. A malformed one must be a 422, not an unhandled
+        # ValueError out of UUID() surfacing as a 500 — and, for a `story:` id, not a
+        # dangling `derived_from_story_id` quietly persisted into the contract.
+        if a.source_id.startswith(("bullet:", "story:")):
             raw_id = a.source_id.split(":", 1)[1]
-            # source_id comes from the CLIENT. A malformed one must be a 422, not an
-            # unhandled ValueError out of UUID() surfacing as a 500.
             try:
                 UUID(raw_id)
             except ValueError as exc:
                 raise HTTPException(
                     status_code=422, detail=f"Malformed source_id: {a.source_id}"
                 ) from exc
-            source_bullet_id = raw_id
+            if a.source_id.startswith("bullet:"):
+                source_bullet_id = raw_id
         bullets.append(
             accept_proposal(
                 Proposal(

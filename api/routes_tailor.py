@@ -37,13 +37,14 @@ from starlette.concurrency import run_in_threadpool
 
 import workflows.nodes as _nodes
 from api.deps import get_current_user_id, get_discovery_session, get_session_service
-from api.schemas import StructuredResumeDTO, TailorRequest
+from api.schemas import RoleBlockDTO, StructuredResumeDTO, TailorRequest
 from cli.app import DiscoverySession
 from config import get_settings
 from database.firestore_session import FirestoreSessionService
 from schema import CareerEngineState
 from web.resume_builder import (
     Contact,
+    ResumeLine,
     RoleBlock,
     StructuredResume,
     master_structured_resume,
@@ -59,14 +60,34 @@ from web.session_loader import atry_load_latest_discovery_state
 router = APIRouter()
 
 
+def _block_to_domain(dto: RoleBlockDTO) -> RoleBlock:
+    """Rebuild one RoleBlock, converting its lines EXPLICITLY.
+
+    ``RoleBlock(**dto.model_dump())`` would hand the frozen dataclass a ``list[dict]`` for
+    ``bullets`` — which type-checks, renders as ``{'text': …}`` in Markdown, and raises deep
+    inside python-docx on export. The renderers are the last step in the product; they do not
+    get to receive dicts pretending to be lines.
+    """
+    return RoleBlock(
+        title=dto.title,
+        org=dto.org,
+        dates=dto.dates,
+        entry_id=dto.entry_id,
+        bullets=[
+            ResumeLine(text=line.text, bullet_id=line.bullet_id, story_id=line.story_id)
+            for line in dto.bullets
+        ],
+    )
+
+
 def _dto_to_domain(dto: StructuredResumeDTO) -> StructuredResume:
     """Rebuild the (frozen) domain dataclass from the strict wire DTO."""
     return StructuredResume(
         contact=Contact(**dto.contact.model_dump()),
         summary=dto.summary,
         skills=list(dto.skills),
-        experience=[RoleBlock(**b.model_dump()) for b in dto.experience],
-        education=[RoleBlock(**b.model_dump()) for b in dto.education],
+        experience=[_block_to_domain(b) for b in dto.experience],
+        education=[_block_to_domain(b) for b in dto.education],
     )
 
 

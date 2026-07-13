@@ -219,7 +219,13 @@ export const handlers = [
       summary: "Staff engineer, distributed systems.",
       skills: ["Python", "Kubernetes"],
       experience: [
-        { title: "Senior Engineer", org: "Acme", dates: "2022–now", bullets: ["Cut p95 latency 40%"] },
+        {
+          title: "Senior Engineer",
+          org: "Acme",
+          dates: "2022–now",
+          entry_id: "entry-1",
+          bullets: [{ text: "Cut p95 latency 40%", bullet_id: "", story_id: "story-1" }],
+        },
       ],
       education: [],
     }),
@@ -234,10 +240,16 @@ export const handlers = [
           title: "Senior Engineer",
           org: "Acme",
           dates: "2022–now",
-          bullets: ["Cut p95 latency 40%", "Shipped billing v2"],
+          entry_id: "entry-1",
+          bullets: [
+            { text: "Cut p95 latency 40%", bullet_id: "", story_id: "story-1" },
+            { text: "Shipped billing v2", bullet_id: "bullet-2", story_id: "" },
+          ],
         },
       ],
-      education: [{ title: "BSc Computer Science", org: "MIT", dates: "2016–2020", bullets: [] }],
+      education: [
+        { title: "BSc Computer Science", org: "MIT", dates: "2016–2020", entry_id: "entry-2", bullets: [] },
+      ],
     }),
   ),
   http.post(`${BASE}/api/resume/:fmt`, () =>

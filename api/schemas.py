@@ -328,13 +328,28 @@ class ContactDTO(_StrictModel):
     links: list[str] = Field(default_factory=list)
 
 
+class ResumeLineDTO(_StrictModel):
+    """One rendered résumé line, WITH its provenance (mirrors ``web.resume_builder.ResumeLine``).
+
+    ``bullet_id`` / ``story_id`` are what make the tailor preview editable-and-persistable
+    (CQ-6): the client can only offer "overwrite the original" for a line if it knows which
+    portfolio object the line came from. A line the user typed fresh into the preview carries
+    neither, and can only ever live in the exported document.
+    """
+
+    text: str
+    bullet_id: str = ""
+    story_id: str = ""
+
+
 class RoleBlockDTO(_StrictModel):
     """One experience/education entry (mirrors ``web.resume_builder.RoleBlock``)."""
 
     title: str
     org: str
     dates: str
-    bullets: list[str] = Field(default_factory=list)
+    bullets: list[ResumeLineDTO] = Field(default_factory=list)
+    entry_id: str = ""
 
 
 class StructuredResumeDTO(_StrictModel):

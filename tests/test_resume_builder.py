@@ -23,10 +23,18 @@ from schema import (
 from tests.test_integration import ScriptedNodeClient
 from web.resume_builder import (
     Contact,
+    RoleBlock,
     assemble_resume,
     master_structured_resume,
     tailor_structured_resume,
 )
+
+
+def _texts(block: RoleBlock) -> list[str]:
+    """The rendered text of a role's lines. A line is a ``ResumeLine`` (CQ-6), not a bare
+    string: it carries the identity of the bullet/story it came from, which is what lets the
+    tailor preview offer to persist an edit."""
+    return [line.text for line in block.bullets]
 
 
 @pytest.fixture(autouse=True)
@@ -95,7 +103,7 @@ class TestMasterStructuredResume:
         resume = master_structured_resume(state)
 
         assert len(resume.experience) == 1
-        assert resume.experience[0].bullets == ["Ran the platform team", "Owned CI/CD"]
+        assert _texts(resume.experience[0]) == ["Ran the platform team", "Owned CI/CD"]
 
     def test_story_bullets_come_first_then_the_users_own(self) -> None:
         """Quantified achievements lead; the user's remaining lines follow, deduped."""
@@ -108,7 +116,7 @@ class TestMasterStructuredResume:
             extracted_star_stories=[_story(job, "Cut p99 latency 40%")],
         )
 
-        bullets = master_structured_resume(state).experience[0].bullets
+        bullets = _texts(master_structured_resume(state).experience[0])
 
         # The story bullet leads. The identical entry bullet is NOT repeated, but the
         # line the story doesn't cover survives.
@@ -116,14 +124,19 @@ class TestMasterStructuredResume:
         assert "Mentored four engineers" in bullets
         assert sum(1 for b in bullets if "Cut p99 latency 40%" in b) == 1
 
-    def test_tailored_pass_still_ignores_entry_bullets(self) -> None:
-        """Only the MASTER résumé carries raw entry bullets — the JD pass selects."""
+    def test_selecting_NOTHING_yields_an_empty_resume(self) -> None:
+        """An explicit empty selection selects nothing — distinct from ``None`` (= everything).
+
+        (This test used to assert that the TAILORED pass ignores entry bullets altogether,
+        which was the bug: a user who uploaded a strong résumé and tailored it before grilling
+        got an empty document. See ``test_an_ungrilled_uploaded_resume_still_tailors``.)
+        """
         job = _job()
         job = job.model_copy(update={"bullets": _bullets("Ran the platform team")})
         state = CareerEngineState(work_timeline=[job])
 
         resume = assemble_resume(
-            state, contact=Contact(), summary="", skills=[], selected_story_ids=[]
+            state, contact=Contact(), summary="", skills=[], selected_line_ids=set()
         )
 
         assert resume.experience == []
@@ -144,7 +157,7 @@ class TestMasterStructuredResume:
             extracted_star_stories=[_story(job, "Rebuilt CI, cutting failures 40%")],
         )
 
-        bullets = master_structured_resume(state).experience[0].bullets
+        bullets = _texts(master_structured_resume(state).experience[0])
 
         assert bullets == ["Rebuilt CI, cutting failures 40%", "Mentored four engineers"]
 
@@ -175,7 +188,7 @@ class TestMasterStructuredResume:
         job = job.model_copy(update={"bullets": [original, polished]})
         state = CareerEngineState(work_timeline=[job])
 
-        bullets = master_structured_resume(state).experience[0].bullets
+        bullets = _texts(master_structured_resume(state).experience[0])
 
         assert bullets == ["Rebuilt CI, cutting deploy failures 40%"]
         assert "Ran CI" not in bullets
@@ -205,7 +218,7 @@ class TestAssembleResume:
         role = resume.experience[0]
         assert role.org == "Acme" and role.title == "Staff Engineer"
         assert role.dates == "2020 - 2023"
-        assert role.bullets == ["Cut p99 latency 40%", "Shipped billing v2"]  # under the role
+        assert _texts(role) == ["Cut p99 latency 40%", "Shipped billing v2"]  # under the role
         assert [e.org for e in resume.education] == ["MIT"]  # education separated
         assert resume.education[0].bullets == []
 
@@ -220,16 +233,17 @@ class TestAssembleResume:
         resume = assemble_resume(state, contact=Contact(), summary="", skills=[])
         # empty_job has no validated bullets → omitted; only the validated bullet shows.
         assert [r.org for r in resume.experience] == ["Acme"]
-        assert resume.experience[0].bullets == ["Cut cost 20%"]
+        assert _texts(resume.experience[0]) == ["Cut cost 20%"]
 
-    def test_selected_story_ids_filters_bullets(self) -> None:
+    def test_selected_line_ids_filters_lines(self) -> None:
         job = _job()
         s1, s2 = _story(job, "Kept"), _story(job, "Dropped")
         state = CareerEngineState(work_timeline=[job], extracted_star_stories=[s1, s2])
         resume = assemble_resume(
-            state, contact=Contact(), summary="", skills=[], selected_story_ids=[str(s1.story_id)]
+            state, contact=Contact(), summary="", skills=[],
+            selected_line_ids={f"story:{s1.story_id}"},
         )
-        assert resume.experience[0].bullets == ["Kept"]
+        assert _texts(resume.experience[0]) == ["Kept"]
 
     def test_empty_when_no_stories(self) -> None:
         resume = assemble_resume(
@@ -256,7 +270,7 @@ class TestTailorStructuredResume:
                     {
                         "tailored_summary": "Systems engineer focused on latency.",
                         "skills": ["Python", "Distributed systems"],
-                        "selected_achievement_ids": [str(s1.story_id)],
+                        "selected_achievement_ids": [f"story:{s1.story_id}"],
                     }
                 )
             }
@@ -267,7 +281,7 @@ class TestTailorStructuredResume:
         )
         assert resume.summary.startswith("Systems engineer")
         assert resume.skills == ["Python", "Distributed systems"]
-        assert resume.experience[0].bullets == ["Cut p99 latency 40%"]
+        assert _texts(resume.experience[0]) == ["Cut p99 latency 40%"]
         assert resume.education[0].org == "MIT"
 
     def test_invalid_selected_ids_fall_back_to_all_validated(self) -> None:
@@ -285,7 +299,7 @@ class TestTailorStructuredResume:
         resume = tailor_structured_resume(
             state, "JD", Contact(), client=cast(GeminiModelClient, client)
         )
-        assert resume.experience[0].bullets == ["Cut cost 20%"]  # fell back, not empty
+        assert _texts(resume.experience[0]) == ["Cut cost 20%"]  # fell back, not empty
 
     def test_highlighted_entry_stories_always_included(self) -> None:
         """A pinned (highlighted) experience's achievements survive even if the model
@@ -301,14 +315,14 @@ class TestTailorStructuredResume:
         client = ScriptedNodeClient(
             responses={
                 "tailoring a candidate's real": json.dumps(
-                    {"tailored_summary": "S", "skills": [], "selected_achievement_ids": [str(sa.story_id)]}
+                    {"tailored_summary": "S", "skills": [], "selected_achievement_ids": [f"story:{sa.story_id}"]}
                 )
             }
         )
         resume = tailor_structured_resume(
             state, "JD", Contact(), client=cast(GeminiModelClient, client)
         )
-        bullets = [b for role in resume.experience for b in role.bullets]
+        bullets = [line.text for role in resume.experience for line in role.bullets]
         assert "Cut latency 40%" in bullets
         assert "Grew revenue 3x" in bullets  # kept because job_b is highlighted
 

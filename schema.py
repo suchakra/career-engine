@@ -169,6 +169,23 @@ class Bullet(BaseModel):
             "supplied bullet without being able to trap the user in an endless loop."
         ),
     )
+    derived_from_story_id: str = Field(
+        default="",
+        description=(
+            "The story_id whose résumé line THIS BULLET IS (v2.12.0, CQ-6). Set when a "
+            "bullet is written to speak for a STAR story — by the copywriter (accepted "
+            "rewrite) or by the user overwriting a story-derived line in the tailor "
+            "preview. The assembler then renders this bullet INSTEAD of the raw "
+            "``story.result``, so approved prose reaches the résumé and the achievement "
+            "is listed once. Set only at CREATION: allowing an edit to set it would let a "
+            "bullet be pointed at any validated story and be marked covered without ever "
+            "having been grilled — a false QUANTIFIED, which is the worst error coverage "
+            "can make. NOTE this is the opposite direction from "
+            "``StarStory.answers_bullet_id`` (v2.11.0), which records which bullet a grill "
+            "QUESTION was about; a story can be *about* one bullet while its résumé line "
+            "is a different, newly written one."
+        ),
+    )
 
 
 class Entry(BaseModel):

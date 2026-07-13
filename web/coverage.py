@@ -93,6 +93,22 @@ def bullet_state(
     at prose. See the module docstring for the one honest caveat on QUANTIFIED."""
     if bullet.skipped:
         return CoverageState.SKIPPED
+    if bullet.derived_from_story_id and any(
+        s.metrics_validated and str(s.story_id) == bullet.derived_from_story_id
+        for s in stories
+    ):
+        # QUANTIFIED by the OTHER link (v2.12.0, CQ-6): this bullet was written to BE the
+        # résumé line for a validated story — by the copywriter, or by the user overwriting
+        # that line in the tailor preview. The metric belongs to the story; this is its prose.
+        #
+        # This is checked BEFORE the GRILLED rule below, and the order is the whole point.
+        # Every bullet the copywriter writes is GRILLED, so testing GRILLED first would make
+        # this branch unreachable in production — it would only ever fire for a USER-source
+        # bullet, which no write path creates. (Adversarial review caught exactly that: a
+        # green test suite over a branch that could never run, which is this codebase's
+        # signature failure.) QUANTIFIED is also the *stronger* claim of the two: we can name
+        # the validated metric this line stands on, not merely that someone rewrote it.
+        return CoverageState.QUANTIFIED
     if bullet.source is BulletSource.GRILLED:
         return CoverageState.STRENGTHENED
     if superseded is not None and str(bullet.bullet_id) in superseded:

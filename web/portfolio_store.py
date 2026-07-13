@@ -215,6 +215,14 @@ async def _adelete_star_story(
 ) -> str | None:
     """Remove the STAR story whose ``story_id`` matches from the canonical session.
 
+    Also **clears ``derived_from_story_id`` on any bullet that pointed at it** (v2.12.0,
+    CQ-6). A bullet written to voice a story outlives that story's deletion — the user keeps
+    the words they approved — but the LINK must not: a bullet claiming to be the résumé line
+    of a story that no longer exists is read by :mod:`web.coverage` as covered-by-nothing, and
+    a dangling link is exactly the kind of quiet lie the id-based design exists to prevent.
+    Clearing it leaves the line honestly UNCOVERED: the metric evidence is gone, so the grill
+    may legitimately ask about it again.
+
     Idempotent: if no story matches (or the session is empty of it), the state is
     left untouched. Returns the session_id, or ``None`` if the user has no session.
     """
@@ -230,15 +238,45 @@ async def _adelete_star_story(
     remaining = [s for s in existing.extracted_star_stories if str(s.story_id) != story_id]
     if len(remaining) == len(existing.extracted_star_stories):
         return session_id  # no-op: story_id not found
+
+    # Clear any bullet that claimed to speak for the story we are deleting.
+    timeline = [
+        entry.model_copy(
+            update={
+                "bullets": [
+                    b.model_copy(update={"derived_from_story_id": ""})
+                    if b.derived_from_story_id == story_id
+                    else b
+                    for b in entry.bullets
+                ]
+            }
+        )
+        if any(b.derived_from_story_id == story_id for b in entry.bullets)
+        else entry
+        for entry in existing.work_timeline
+    ]
+    cleared = timeline != existing.work_timeline
+
+    state_delta: dict[str, object] = {
+        "extracted_star_stories": [s.model_dump(mode="json") for s in remaining],
+        "contract_version": CONTRACT_VERSION,
+    }
+    if cleared:
+        # Only patch the timeline when a link was ACTUALLY cleared. A state_delta is applied
+        # by a plain dict.update() — last writer for a key wins WHOLESALE — so writing
+        # work_timeline on every story delete would let an ordinary story deletion silently
+        # erase a bullet a concurrent request had just added to an unrelated entry. Deleting
+        # a story usually clears no link at all; in that case this seam must keep its hands
+        # off the timeline entirely, exactly as it did before CQ-6. (Adversarial review
+        # reproduced the wipe.)
+        state_delta["work_timeline"] = [e.model_dump(mode="json") for e in timeline]
+
     await _patch_session(
         session_service,
         app_name=app_name,
         user_id=user_id,
         session_id=session_id,
-        state_delta={
-            "extracted_star_stories": [s.model_dump(mode="json") for s in remaining],
-            "contract_version": CONTRACT_VERSION,
-        },
+        state_delta=state_delta,
     )
     return session_id
 
@@ -899,6 +937,21 @@ async def _aaccept_bullets(
     new_timeline: list[Entry] = []
     for entry in existing.work_timeline:
         if str(entry.entry_id) == entry_id:
+            # A rewrite of a bullet that SPOKE FOR a story must keep speaking for it (CQ-6).
+            # The superseded original is deleted just below, so if the replacement does not
+            # inherit the link it is lost for good: the story would be orphaned and start
+            # rendering its RAW GRILL TEXT again, right next to the rewrite — the very
+            # duplicate this feature exists to kill, reintroduced by the most ordinary flow
+            # there is (polish a line, then polish it again).
+            link_of = {str(b.bullet_id): b.derived_from_story_id for b in entry.bullets}
+            bullets = [
+                b
+                if b.derived_from_story_id or b.supersedes is None
+                else b.model_copy(
+                    update={"derived_from_story_id": link_of.get(str(b.supersedes), "")}
+                )
+                for b in bullets
+            ]
             kept = [b for b in entry.bullets if str(b.bullet_id) not in superseded]
             entry = entry.model_copy(update={"bullets": [*kept, *bullets]})
             found = True
