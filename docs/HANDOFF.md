@@ -1,6 +1,6 @@
 # CareerEngine — Session Handoff / Resume Point
 
-## 👉 YOU ARE HERE (updated 2026-07-12 — **qa hardening + copy-quality build in flight**)
+## 👉 YOU ARE HERE (updated 2026-07-13 — **qa hardening + copy-quality build in flight**)
 > ▶ **ACTIVE: the Copy-quality tickets (CQ-*) in [GROOMING.md](GROOMING.md).** Build them IN ORDER.
 > Design: [ARCHITECTURE.md §18](ARCHITECTURE.md) (AD-18.1..18.5). Status: [PROGRESS.md](PROGRESS.md).
 >
