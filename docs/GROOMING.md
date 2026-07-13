@@ -241,7 +241,43 @@ Making it coherent needs answers the code cannot invent:
 Needs `Bullet.variant_of` (or a variant-group id), a render rule, a tailor-selection rule, and a coverage
 rule. **Ask the operator before building** — the master-résumé question is a product call.
 
-### ⬜ UX-1 — The app has NO navigation on mobile (+ a responsive audit)
+### ⬜ UX-2 — CI cannot verify ANY breakpoint behaviour (needs an authenticated mobile e2e lane)
+**Operator decision required — this asks for an auth bypass in the e2e build.**
+
+UX-1 shipped a mobile nav, but **nothing in CI proves it works on a phone**, and it is important to
+say so rather than let a green suite imply otherwise:
+- **jsdom has no viewport and does not evaluate CSS.** `md:hidden` / `hidden md:flex` are inert class
+  strings there, so *both* navs are in the test DOM at once. The Vitest suite proves the drawer is
+  WIRED (opens, holds the links, Escape closes, focus returns) and that the breakpoint classes are
+  still present — a token check. It cannot prove what a 360px screen actually renders.
+- **The Playwright lane cannot reach any page that has a nav.** Its fake Firebase config resolves to a
+  signed-out session (by design), so every authed route redirects to `/login`, which has no nav. And
+  its only project is `Desktop Chrome` — there is no mobile viewport anywhere in the repo.
+
+**Change:** add a mobile Playwright project (`devices["Pixel 5"]`) and an **e2e-only auth bypass** so a
+test can actually render `AppShell` at 390×844: assert the sidebar is not visible, the hamburger is,
+tapping it reveals the links, and `document.documentElement.scrollWidth <= clientWidth` on every route.
+
+**Why it needs a decision, not just a build:** an auth bypass flag is a security-relevant seam. It must
+be impossible to enable in a production build (the e2e build already uses its own fake Firebase config,
+so the precedent exists), and the deploy workflow must pin it off. **Ask before building.** The
+alternative is to accept that breakpoints are verified by hand, and record that honestly.
+
+### ✅ UX-1 — The app had NO navigation on mobile — SHIPPED (PR #102)
+Hamburger → slide-over drawer rendering the **same** `SidebarNav` (one component, so the desktop nav and
+the mobile nav — including the flagged PREPARE group, §17 — cannot drift). Radix Dialog rather than a
+hand-rolled trap: focus trapping, focus restore, Escape and body-scroll lock are each easy to get subtly
+wrong, and this component stands between a phone user and the entire product.
+
+Review found three more things that broke at 360px **independently of the nav**, all fixed:
+- **The Toast overflowed the viewport.** `w-full` on a `fixed` element is 100vw; with `right-4` its left
+  edge landed at −16px → a horizontal scrollbar on every route that toasts.
+- **The header row could not fit** — title + key chip + identity menu, no wrapping, no `min-w-0` (flex
+  will not shrink a text node below its min-content without it), and now a hamburger too.
+- **There was no `not-found.tsx`**, so a mistyped URL rendered outside the app chrome with no navigation
+  at all — the same "no way back" bug in a different place.
+
+### (superseded spec) — UX-1 — The app has NO navigation on mobile (+ a responsive audit)
 **Not polish — the app is unusable on a phone.** `AppShell` renders the nav in an
 `<aside className="hidden … md:flex">` (`frontend/src/components/AppShell.tsx`), so below 768px the sidebar
 is removed **and nothing replaces it**: no hamburger, no drawer, no bottom bar. The "CareerEngine" home link

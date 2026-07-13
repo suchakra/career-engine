@@ -1,5 +1,7 @@
 "use client";
 
+import * as Dialog from "@radix-ui/react-dialog";
+import { Menu, User } from "lucide-react";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 
@@ -44,9 +46,12 @@ function IdentityMenu(): JSX.Element {
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="flex min-h-tap items-center gap-2 rounded-card border border-border bg-surface px-3 text-sm"
+        className="flex min-h-tap items-center gap-2 rounded-card border border-border bg-surface px-2 text-sm sm:px-3"
       >
-        <span className="max-w-[16ch] truncate">{user?.email ?? "Account"}</span>
+        {/* The email is the widest thing in the header. On the narrowest phones it is dropped
+            entirely — the account is still reachable, and the popover shows the address. */}
+        <span className="hidden max-w-[16ch] truncate sm:inline">{user?.email ?? "Account"}</span>
+        <User className="h-4 w-4 sm:hidden" aria-hidden="true" />
         <span aria-hidden="true">▾</span>
       </button>
       {open && (
@@ -95,12 +100,68 @@ export interface AppShellProps {
   children: ReactNode;
 }
 
+/**
+ * The nav, for phones (UX-1).
+ *
+ * The app shipped with **no navigation at all below `md`**: the sidebar was `hidden … md:flex`
+ * and nothing replaced it — and the "CareerEngine" home link lived *inside* that hidden
+ * `<aside>`. On a phone, not one route was reachable except by typing a URL.
+ *
+ * It renders the SAME `SidebarNav` as the desktop sidebar rather than a mobile copy, so the two
+ * cannot drift — including the feature-flagged PREPARE group (AD-17.3), which a hand-maintained
+ * second nav would silently miss.
+ *
+ * A real dialog primitive, not a hand-rolled one: focus trapping, focus restore, Escape, and
+ * body-scroll lock are each individually easy to get subtly wrong (Tab wrapping, shift+Tab,
+ * iOS scroll), and this is the component standing between a phone user and the whole product.
+ */
+function MobileNav(): JSX.Element {
+  const [open, setOpen] = useState(false);
+  return (
+    <Dialog.Root open={open} onOpenChange={setOpen}>
+      <Dialog.Trigger asChild>
+        <button
+          type="button"
+          aria-label="Open menu"
+          data-testid="mobile-nav-trigger"
+          // `md:hidden` is the whole contract of this button. If it is ever dropped, the
+          // hamburger appears next to the desktop sidebar — see the class-contract test.
+          className="flex min-h-tap min-w-tap items-center justify-center rounded-card border border-border px-2 md:hidden"
+        >
+          <Menu className="h-5 w-5" aria-hidden="true" />
+        </button>
+      </Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/50 md:hidden" />
+        <Dialog.Content
+          aria-describedby={undefined}
+          className="fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col gap-6 overflow-y-auto border-r border-border bg-card px-3 py-4 md:hidden"
+        >
+          <Dialog.Title asChild>
+            <Link
+              href="/dashboard"
+              onClick={() => setOpen(false)}
+              className="px-3 text-lg font-semibold"
+            >
+              CareerEngine
+            </Link>
+          </Dialog.Title>
+          {/* Tapping a link must CLOSE the drawer — otherwise the user navigates and is left
+              staring at the menu they just used, on top of the page they asked for. */}
+          <SidebarNav label="Mobile" onNavigate={() => setOpen(false)} />
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
 /** Persistent shell: left sidebar + top bar (identity + key chips) + footer (§3). */
 export function AppShell({ title, children }: AppShellProps): JSX.Element {
   return (
     <div className="flex min-h-screen flex-col">
       <div className="flex flex-1">
         <aside
+          data-testid="desktop-sidebar"
           className={cn(
             "hidden w-60 shrink-0 flex-col gap-6 border-r border-border px-3 py-4 md:flex",
           )}
@@ -111,15 +172,22 @@ export function AppShell({ title, children }: AppShellProps): JSX.Element {
           <SidebarNav />
         </aside>
 
-        <div className="flex flex-1 flex-col">
-          <header className="flex items-center justify-between gap-3 border-b border-border px-6 py-3">
-            <h1 className="text-lg font-semibold">{title}</h1>
-            <div className="flex items-center gap-3">
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* At 360px this row has ~312px of usable width for a title, a key chip, an identity
+              menu — and now a hamburger. It has to be allowed to shrink: `min-w-0` + `truncate`
+              on the title (flex will not shrink a text node below its min-content without it),
+              a tighter gutter, and the email hidden on the narrowest screens. */}
+          <header className="flex items-center justify-between gap-2 border-b border-border px-4 py-3 md:px-6">
+            <div className="flex min-w-0 items-center gap-2">
+              <MobileNav />
+              <h1 className="min-w-0 truncate text-lg font-semibold">{title}</h1>
+            </div>
+            <div className="flex shrink-0 items-center gap-2 md:gap-3">
               <KeyChip />
               <IdentityMenu />
             </div>
           </header>
-          <main className="flex-1 px-6 py-6">{children}</main>
+          <main className="flex-1 px-4 py-6 md:px-6">{children}</main>
         </div>
       </div>
       <Footer />

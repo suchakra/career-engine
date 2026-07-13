@@ -65,7 +65,20 @@ const NAV: NavGroup[] = [
   { heading: null, items: [{ href: "/settings", label: "Settings", Icon: Settings }] },
 ];
 
-export function SidebarNav(): JSX.Element {
+export interface SidebarNavProps {
+  /**
+   * Accessible name for this nav landmark. **Two instances of this component are mounted at
+   * once** — the desktop sidebar and the mobile drawer render the SAME component so the two
+   * can never drift apart (they share the feature-flag logic and the PREPARE seam, §17). Two
+   * `<nav>` landmarks with the same name are ambiguous to a screen reader, and make every
+   * `getByRole("link", …)` in a test throw "found multiple elements". So each says who it is.
+   */
+  label?: string;
+  /** Called when a link is activated — the drawer uses it to close itself. */
+  onNavigate?: () => void;
+}
+
+export function SidebarNav({ label = "Primary", onNavigate }: SidebarNavProps = {}): JSX.Element {
   const pathname = usePathname();
   // Drop feature-flagged items that aren't enabled, then any group left empty
   // (so the PREPARE heading never renders alone in the OSS build).
@@ -75,7 +88,7 @@ export function SidebarNav(): JSX.Element {
   })).filter((group) => group.items.length > 0);
 
   return (
-    <nav aria-label="Primary" className="flex flex-col gap-4">
+    <nav aria-label={label} className="flex flex-col gap-4">
       {groups.map((group, i) => (
         <div key={group.heading ?? `top-${i}`} className="flex flex-col gap-1">
           {group.heading && (
@@ -89,6 +102,7 @@ export function SidebarNav(): JSX.Element {
               <Link
                 key={href}
                 href={href}
+                onClick={onNavigate}
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "flex min-h-tap items-center gap-3 rounded-card px-3 text-sm",
