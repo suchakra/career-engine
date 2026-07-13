@@ -61,7 +61,7 @@ first slice is **11.A — stand up a new-GCP-project `qa` env** and deploy the 1
 > throw away S/T/A at render time keeping only R. Separately, a second résumé upload **destroys** the
 > first (`create_session` is last-write-wins) — CQ-2 is a live data-loss bug.
 
-### ✅ CQ-1 — Bullet identity (`list[str]` → `list[Bullet]`), contract **v2.9.0**  *(Ready · do FIRST)*
+### ✅ CQ-1 — Bullet identity (`list[str]` → `list[Bullet]`), contract **v2.9.0**  *(SHIPPED — PR #87)*
 **Scope:** `schema.py` (new `Bullet` model + `Entry.bullets` shape + `CONTRACT_VERSION` → 2.9.0),
 a migration for persisted sessions, `web/portfolio_store.py` (address bullets by `bullet_id`, not index),
 `api/routes_portfolio.py` + `api/schemas.py` (PATCH takes `bullet_id`), `web/resume_builder.py`
@@ -77,7 +77,7 @@ a migration for persisted sessions, `web/portfolio_store.py` (address bullets by
 - An unknown MAJOR contract version is still refused (existing guard must not regress).
 - `_merge_entry_bullets` drops a bullet whose id is `supersedes`-linked, instead of guessing by text.
 
-### ⬜ CQ-2 — Résumé upload MERGES instead of clobbering  *(DATA LOSS — ship right after CQ-1)*
+### ✅ CQ-2 — Résumé upload MERGES instead of clobbering  *(SHIPPED — PR #90)*
 **Today:** `POST /api/grill/resume` → `session.create` → `cli.session.create_session`, which is
 **last-write-wins** (its own docstring says so). A second upload destroys every entry, every STAR story,
 every hour of grilling. **Decision (Sumanta, 2026-07-12): merge + dedup, never destroy.**
@@ -92,14 +92,14 @@ append genuinely-new entries as ungrilled; move the grill frontier to the new en
 `entry_id`, stories and status; the new role is appended `UNGRILLED`; **no story is ever lost** (assert
 `extracted_star_stories` is a superset of the pre-upload set).
 
-### ⬜ CQ-3 — Delete a bullet / delete an entry
+### ✅ CQ-3 — Delete a bullet / delete an entry  *(SHIPPED — PR #91)*
 The store can replace (`update_entry_bullet`) and append (`add_entry_bullet`) but not remove. Edit-only is
 half a tool, and it matters more once CQ-2 can merge in a role the user doesn't want.
 **Scope:** `delete_entry_bullet` (by `bullet_id`) + `delete_entry` seams, `DELETE
 /api/experience/{entry_id}/bullet/{bullet_id}` + `DELETE /api/experience/{entry_id}`, Portfolio UI.
 **Acceptance:** deleting an entry also drops its orphaned STAR stories (no dangling `entry_id`s).
 
-### ⬜ CQ-4 — Copywriter in the grill (AD-18.1/18.2)
+### ✅ CQ-4 — Copywriter in the grill (AD-18.1/18.2)  *(SHIPPED — PR #93)*
 A workflow **node + system prompt** — *not* an agent (no tools, no memory, no loop). Given an entry's full
 S/T/A/R stories **and** its original bullets, propose polished replacements; the user accepts / edits /
 rejects each; the accepted text persists as a `Bullet` with `source="grilled"` and `supersedes` set when it
@@ -119,7 +119,11 @@ replaces a line. Export then needs **no model call** (AD-18.2).
 does NOT; a bullet the user REJECTS leaves the original untouched; a model failure or a missing BYOK key
 degrades to today's raw bullets (never a crash, never an empty résumé).
 
-### ⬜ CQ-5 — Grill BETTER: cover what the user actually gave us
+### 🟡 CQ-5 — Grill BETTER: cover what the user actually gave us  *(HALF SHIPPED — PR #94)*
+> **Shipped:** coverage is now VISIBLE (the model, the "7 of 12 covered" label, per-bullet state,
+> Skip/Unskip, `Bullet.skipped` — contract v2.10.0). **NOT shipped:** the `QUANTIFIED` state (built,
+> then DELETED — text matching cannot decide it and a false positive silently buries the user's
+> outstanding work) and coverage STEERING the grill. Both land in **CQ-5b** below. Original spec:
 A first-class concern, not a side effect of CQ-4. Today the grill picks a frontier entry and drills for a
 metric — it will happily interrogate a "favourite project" while a dozen strong bullets from the uploaded
 résumé are never touched. If a user hands us rich source material, **coverage is the product**: every

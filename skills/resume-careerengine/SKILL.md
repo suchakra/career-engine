@@ -33,11 +33,19 @@ anything new.**
   - Find unresolved threads (GraphQL, substituting the repo you are in):
     `gh api graphql -f query='{ repository(owner:"{owner}", name:"{repo}") { pullRequest(number:{N}) { reviewThreads(first:30) { nodes { id isResolved path } } } } }'`
   - Resolve: `gh api graphql -f query='mutation { resolveReviewThread(input:{threadId:"{thread_id}"}) { thread { isResolved } } }'`
-- **Merging + deploying qa is authorized** without asking, *provided* Copilot reviewed first.
-  `gh pr edit {N} --add-reviewer copilot-pull-request-reviewer`, then **wait**. If that errors
-  (the bot's login varies), fall back to:
-  `gh api repos/{owner}/{repo}/pulls/{N}/requested_reviewers -X POST -f 'reviewers[]=copilot-pull-request-reviewer[bot]'`
-  (the `[bot]` suffix — this is the form `skills/wait-for-pr-review` documents for the API call).
+- **Merging + deploying qa is authorized** without asking, *provided the PR got an adversarial
+  review first*. The review is the CONDITION of the merge authority, not a nicety.
+  - Preferred: **Copilot** — `gh pr edit {N} --add-reviewer copilot-pull-request-reviewer`, then
+    **wait**. If that errors, use
+    `gh api repos/{owner}/{repo}/pulls/{N}/requested_reviewers -X POST -f 'reviewers[]=copilot-pull-request-reviewer[bot]'`.
+  - **If Copilot does not review** — concretely: **no review after ~3 requests over ~20 minutes**
+    (its premium quota runs out; this HAS happened) — do **not**
+    merge unreviewed, and do **not** self-review. Get the review from a **DIFFERENT MODEL** via
+    the Agent tool (`model: sonnet`, then `model: fable` for a second pass). Give it the diff, tell
+    it the author is an overconfident AI, tell it to attack specific claims, and demand concrete
+    failing inputs. This is not a formality — on PR #94 the two of them found a false-positive
+    that silently HID the user's outstanding work, a fix that broke the opposite case, and three
+    tests passing for the wrong reason. Treat every finding as real until you disprove it.
   (`{N}` = the PR number; `{owner}`/`{repo}` = the repo you are in — substitute, don't run literally.)
 - **`dev` is BLOCKADED.** Never deploy there without an explicit go-ahead
   (`-f confirm_dev_cutover=true`). It is Kaggle-visible and holds real user data.
@@ -47,7 +55,7 @@ anything new.**
 - Gate everything: **`make check`** (ruff + mypy --strict + pytest) **and** **`make frontend-check`**
   (npm ci → lint → typecheck → vitest → build → bundle budget). Use the make targets, not ad-hoc
   `npx` calls — the make lane is what CI runs, and it checks more (the bundle budget in particular).
-  Docs-only changes skip the local gate but still go through PR + Copilot.
+  Docs-only changes skip the local gate but still go through PR + an adversarial review (§2).
 
 ## 3. Build loop (repeat until the ticket list is done)
 
@@ -59,7 +67,10 @@ For each ticket, in GROOMING order:
 3. Gate (both lanes). Fix everything.
 4. Commit with a message that explains **why**, not just what. Push, open a PR whose body
    states the failure being fixed.
-5. Request Copilot. **Wait.** Address every comment. Reply. Resolve.
+5. **Get an adversarial review and WAIT for it.** Request Copilot; if no review lands after ~3
+   requests over ~20 minutes, fall back to a **different-model** review via the Agent tool (§2).
+   Address every comment, reply on each thread, resolve them. **Never merge with an open thread,
+   and never self-review.**
 6. Merge when CI is green *and* zero threads are unresolved.
 7. Deploy qa: `gh workflow run deploy.yml --ref master -f environment=qa`, wait, verify
    `/api/health` and the new routes in the served `/openapi.json`.
