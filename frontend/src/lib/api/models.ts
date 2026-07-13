@@ -24,6 +24,8 @@ export type TailorRequest = Schemas["TailorRequest"];
 export type StructuredResume = Schemas["StructuredResumeDTO"];
 export type Contact = Schemas["ContactDTO"];
 export type RoleBlock = Schemas["RoleBlockDTO"];
+/** One rendered résumé line, carrying the identity of the bullet/story it came from (CQ-6). */
+export type ResumeLine = Schemas["ResumeLineDTO"];
 
 // Applications (parity P4)
 export type ApplicationWriteRequest = Schemas["ApplicationWriteRequest"];

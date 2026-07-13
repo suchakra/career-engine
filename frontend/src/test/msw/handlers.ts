@@ -149,7 +149,11 @@ export const handlers = [
   http.post(`${BASE}/api/jobs/discover`, () => HttpResponse.json({ ...mockJobs, ran: true })),
   http.post(`${BASE}/api/jobs/dismiss`, () => new HttpResponse(null, { status: 204 })),
   http.patch(`${BASE}/api/experience/:id/bullet`, () => new HttpResponse(null, { status: 204 })),
-  http.post(`${BASE}/api/experience/:id/bullet`, () => new HttpResponse(null, { status: 204 })),
+  // 201 + the new bullet's id (CQ-6b): the client must be able to re-identify the line it
+  // just overwrote as this bullet, or its next edit is refused as a duplicate.
+  http.post(`${BASE}/api/experience/:id/bullet`, () =>
+    HttpResponse.json({ bullet_id: "bullet-new" }, { status: 201 }),
+  ),
   http.delete(`${BASE}/api/experience/:id/bullet/:bid`, () => new HttpResponse(null, { status: 204 })),
   http.delete(`${BASE}/api/experience/:id`, () => new HttpResponse(null, { status: 204 })),
   http.post(`${BASE}/api/experience/:id/copywrite`, () =>

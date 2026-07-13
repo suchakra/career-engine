@@ -235,6 +235,42 @@ class TestCoverageDoesNotReopenFinishedWork:
         assert bullet_state(polished, [story]) is CoverageState.QUANTIFIED
         assert entry_coverage(entry, [story]).is_complete
 
+    def test_NEITHER_persist_destination_re_opens_a_finished_entry_AT_THE_ROUTER(self) -> None:
+        """Drive the ROUTER, not the pure helper. This is the CQ-5b lesson, literally.
+
+        CQ-5b was green across 839 tests while the feature did nothing, because coverage was
+        wired into the grill node but NOT into `discovery_graph._has_pending_work` — the gate
+        that actually decides whether the run goes back to the grill or finalizes. A coverage
+        rule that only the unit tests exercise proves nothing about what the user experiences.
+        """
+        from workflows.discovery_graph import _has_pending_work
+        from workflows.nodes import entry_still_needs_grilling
+
+        original = Bullet(text="Managed CI for 40 services")
+        entry = _job(bullets=[original])  # _job() is already GRILLED
+        story = _story(entry, "Managed CI for 40 services, cutting build 35%",
+                       answers=str(original.bullet_id))
+        state = CareerEngineState(work_timeline=[entry], extracted_star_stories=[story])
+        assert not entry_still_needs_grilling(entry, [story])  # finished, before any edit
+
+        # (a) OVERWRITE an existing bullet: in place, so the id — and every link to it — holds.
+        original.text = "Ran CI for 40 services, cutting build time 35%"
+        original.source = BulletSource.USER
+        assert not entry_still_needs_grilling(entry, [story])
+        assert not _has_pending_work(state)
+
+        # (b) OVERWRITE a story-only line: a NEW bullet, which is exactly the shape that
+        #     re-opened finished portfolios in CQ-5b — unless it carries the story link.
+        second = _story(entry, "Cut cloud spend 30%")
+        state.extracted_star_stories.append(second)
+        entry.bullets.append(
+            Bullet(text="Cut cloud spend 30% by right-sizing", source=BulletSource.USER,
+                   derived_from_story_id=str(second.story_id))
+        )
+        stories = state.extracted_star_stories
+        assert not entry_still_needs_grilling(entry, stories)
+        assert not _has_pending_work(state)
+
     def test_a_DANGLING_link_does_not_silently_cover_a_bullet(self) -> None:
         """The story was deleted. A bullet claiming to speak for it is covered by nothing.
 
@@ -246,6 +282,82 @@ class TestCoverageDoesNotReopenFinishedWork:
                         derived_from_story_id=str(uuid4()))
 
         assert bullet_state(orphan, []) is CoverageState.UNCOVERED
+
+
+class TestOverwritingALineActuallyChangesTheResume:
+    """CQ-6b. The CQ-5b lesson: assert the DOCUMENT changed, never that the endpoint said 204.
+
+    A persist that returns success while the résumé keeps rendering the old text is precisely
+    the failure this codebase has shipped three times.
+    """
+
+    def test_overwriting_a_STORY_line_replaces_it_in_the_rendered_resume(self) -> None:
+        """No bullet existed: the grill wrote this line and the copywriter never polished it.
+
+        The user's text is stored as a bullet that SPEAKS FOR the story, and the assembler
+        renders it INSTEAD of the raw grill text — in the master and in the tailored résumé.
+        """
+        entry = _job()
+        story = _story(entry, "Cut deploy failures 40%")
+        state = CareerEngineState(work_timeline=[entry], extracted_star_stories=[story])
+        assert _texts(state) == ["Cut deploy failures 40%"]  # before
+
+        # …the user overwrites it in the tailor preview (what the route persists):
+        entry.bullets = [
+            Bullet(
+                text="Rebuilt CI end to end, cutting deploy failures 40%",
+                source=BulletSource.USER,
+                derived_from_story_id=str(story.story_id),
+            )
+        ]
+
+        assert _texts(state) == ["Rebuilt CI end to end, cutting deploy failures 40%"]
+        assert _tailored(state) == ["Rebuilt CI end to end, cutting deploy failures 40%"]
+        # …and the entry did NOT re-open: the bullet borrows the story's validated metric.
+        assert entry_coverage(entry, [story]).is_complete
+
+    def test_UNDOING_a_story_line_overwrite_restores_the_original(self) -> None:
+        """Overwrite is destructive, so undo must be real.
+
+        Deleting the bullet we created makes the assembler fall back to the story's own text —
+        which is exactly the line that was there before. (Without this, a user who reworded a
+        line to echo one company's vocabulary has permanently degraded every future résumé and
+        has NO way back: the in-place edit destroys the old wording in the store.)
+        """
+        entry = _job()
+        story = _story(entry, "Cut deploy failures 40%")
+        state = CareerEngineState(work_timeline=[entry], extracted_star_stories=[story])
+        entry.bullets = [
+            Bullet(text="A JD-flavoured rewording", source=BulletSource.USER,
+                   derived_from_story_id=str(story.story_id))
+        ]
+        assert _texts(state) == ["A JD-flavoured rewording"]
+
+        entry.bullets = []  # what DELETE /bullet/{id} does
+
+        assert _texts(state) == ["Cut deploy failures 40%"]
+
+    def test_overwriting_a_BULLET_line_keeps_its_id_and_its_coverage(self) -> None:
+        """In-place, so every link that pointed at this line still does.
+
+        A `supersedes` overwrite would mint a NEW bullet that no story names → UNCOVERED →
+        the grill re-opens a finished entry and demands a number for the line the user just
+        polished. Keeping the id means `answers_bullet_id`, coverage and the dedup all stay
+        pointed at the right thing.
+        """
+        bullet = Bullet(text="Managed CI for 40 services")
+        entry = _job(bullets=[bullet])
+        story = _story(entry, "Managed CI for 40 services, cutting build time 35%",
+                       answers=str(bullet.bullet_id))
+        before = entry_coverage(entry, [story])
+
+        bullet.text = "Managed CI for 40 services"  # in-place edit (same bullet_id)
+        bullet.source = BulletSource.USER
+
+        after = entry_coverage(entry, [story])
+        assert after.is_complete is before.is_complete
+        assert after.label == before.label  # coverage did NOT regress
+        assert bullet_state(bullet, [story]) is CoverageState.QUANTIFIED
 
 
 def test_the_resume_lines_of_an_entry_are_the_tailors_catalog() -> None:

@@ -29,6 +29,15 @@ import api.routes_portfolio as routes_portfolio
 from api.deps import get_auth_provider, get_session_service
 from api.main import app
 from auth.firebase_auth import FirebaseAuthProvider
+from schema import (
+    Bullet,
+    BulletSource,
+    CareerEngineState,
+    Entry,
+    ExperienceType,
+    StarStory,
+)
+from web.portfolio_store import AddedBullet
 
 _GOOGLE_ISSUER = "https://accounts.google.com"
 _USER_ID = "user-123"
@@ -163,15 +172,28 @@ def test_highlight_entry_401_without_token(client: TestClient) -> None:
 # ── POST /api/experience/{id}/bullet — append a bullet ────────────────────────
 
 
-def test_add_bullet_204(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Happy path: forwards user_id, entry_id and the new bullet text to the bridge."""
+def test_add_bullet_201_returns_the_new_bullet_id(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Happy path: forwards the text to the bridge and RETURNS the new bullet's id.
+
+    The id is not a nicety (CQ-6b): a client that overwrote a story-derived résumé line must
+    re-identify that line as the bullet it just created, or its next edit tries to create a
+    second bullet for the same story and is refused.
+    """
     calls: dict[str, Any] = {}
 
     def _fake(
-        session_service: Any, *, app_name: str, user_id: str, entry_id: str, text: str
-    ) -> str:
+        session_service: Any,
+        *,
+        app_name: str,
+        user_id: str,
+        entry_id: str,
+        text: str,
+        derived_from_story_id: str = "",
+    ) -> AddedBullet:
         calls.update(user_id=user_id, entry_id=entry_id, text=text)
-        return entry_id
+        return AddedBullet("sid", "b-99")
 
     monkeypatch.setattr(routes_portfolio, "add_entry_bullet", _fake)
     resp = client.post(
@@ -179,7 +201,8 @@ def test_add_bullet_204(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> 
         json={"text": "Shipped billing v2"},
         headers=_auth_headers(),
     )
-    assert resp.status_code == 204
+    assert resp.status_code == 201
+    assert resp.json() == {"bullet_id": "b-99"}
     assert calls == {"user_id": _USER_ID, "entry_id": "e4", "text": "Shipped billing v2"}
 
 
@@ -205,6 +228,129 @@ def test_add_bullet_422_on_blank_text(client: TestClient) -> None:
 
 def test_add_bullet_401_without_token(client: TestClient) -> None:
     assert client.post("/api/experience/e4/bullet", json={"text": "x"}).status_code == 401
+
+
+# ── CQ-6b: overwriting a story-derived line ──────────────────────────────────
+
+
+def _state_with_a_story(*, validated: bool = True) -> tuple[CareerEngineState, Entry, StarStory]:
+    entry = Entry(type=ExperienceType.FULL_TIME, title="Staff Engineer", org="Acme")
+    story = StarStory(
+        entry_id=str(entry.entry_id), pillar="delivery",
+        result="Cut deploy failures 40%", metrics_validated=validated,
+    )
+    return (
+        CareerEngineState(work_timeline=[entry], extracted_star_stories=[story]),
+        entry,
+        story,
+    )
+
+
+def _fake_load(state: CareerEngineState) -> Any:
+    async def _load(*a: Any, **k: Any) -> CareerEngineState:
+        return state
+
+    return _load
+
+
+def test_overwriting_a_story_line_persists_a_bullet_that_SPEAKS_FOR_it(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The whole destination. Without the link the POST is an orphan bullet: the story keeps
+    rendering its raw grill text and the résumé gains a DUPLICATE."""
+    state, entry, story = _state_with_a_story()
+    calls: dict[str, Any] = {}
+
+    def _fake(session_service: Any, **kw: Any) -> AddedBullet:
+        calls.update(kw)
+        return AddedBullet("sid", "b-1")
+
+    monkeypatch.setattr(routes_portfolio, "atry_load_latest_discovery_state", _fake_load(state))
+    monkeypatch.setattr(routes_portfolio, "add_entry_bullet", _fake)
+
+    resp = client.post(
+        f"/api/experience/{entry.entry_id}/bullet",
+        json={"text": "Rebuilt CI, cutting deploy failures 40%",
+              "derived_from_story_id": str(story.story_id)},
+        headers=_auth_headers(),
+    )
+
+    assert resp.status_code == 201
+    assert calls["derived_from_story_id"] == str(story.story_id)
+
+
+def test_a_story_on_ANOTHER_entry_is_422(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A cross-entry link would let a bullet borrow a metric it never earned."""
+    state, _entry, story = _state_with_a_story()
+    other = Entry(type=ExperienceType.FULL_TIME, title="Lead", org="BitCrafty")
+    state = state.model_copy(update={"work_timeline": [*state.work_timeline, other]})
+    monkeypatch.setattr(routes_portfolio, "atry_load_latest_discovery_state", _fake_load(state))
+
+    resp = client.post(
+        f"/api/experience/{other.entry_id}/bullet",
+        json={"text": "x", "derived_from_story_id": str(story.story_id)},
+        headers=_auth_headers(),
+    )
+    assert resp.status_code == 422
+
+
+def test_an_UNVALIDATED_story_is_422(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The link BORROWS the story's metric — so the story must actually have one.
+
+    Otherwise a bullet is born marked-as-covered without ever having been grilled: the false
+    QUANTIFIED that AD-18.5 calls the worst error coverage can make.
+    """
+    state, entry, story = _state_with_a_story(validated=False)
+    monkeypatch.setattr(routes_portfolio, "atry_load_latest_discovery_state", _fake_load(state))
+
+    resp = client.post(
+        f"/api/experience/{entry.entry_id}/bullet",
+        json={"text": "x", "derived_from_story_id": str(story.story_id)},
+        headers=_auth_headers(),
+    )
+    assert resp.status_code == 422
+
+
+def test_a_SECOND_bullet_for_the_same_story_is_409(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Stale preview: someone polished this line elsewhere while the tab was open.
+
+    Minting a second bullet claiming the same story would put the achievement on the résumé
+    twice. The client is told to reload rather than silently duplicating it.
+    """
+    state, entry, story = _state_with_a_story()
+    entry.bullets = [
+        Bullet(text="Rebuilt CI, cutting failures 40%", source=BulletSource.GRILLED,
+               derived_from_story_id=str(story.story_id))
+    ]
+    monkeypatch.setattr(routes_portfolio, "atry_load_latest_discovery_state", _fake_load(state))
+
+    resp = client.post(
+        f"/api/experience/{entry.entry_id}/bullet",
+        json={"text": "Something else", "derived_from_story_id": str(story.story_id)},
+        headers=_auth_headers(),
+    )
+    assert resp.status_code == 409
+
+
+def test_the_EDIT_route_cannot_set_the_story_link(client: TestClient) -> None:
+    """The link is settable only at CREATION (schema.py).
+
+    If an edit could set it, a client could point an UNTOUCHED, ungrilled bullet at any
+    validated story on the entry and have it marked covered — burying work the user still
+    owes. The strict DTO rejects the field outright.
+    """
+    resp = client.patch(
+        "/api/experience/e4/bullet",
+        json={"bullet_id": "b1", "new_text": "x", "derived_from_story_id": "s1"},
+        headers=_auth_headers(),
+    )
+    assert resp.status_code == 422
 
 
 # ── PATCH /api/experience/{id}/bullet (parity P5) ─────────────────────────────
