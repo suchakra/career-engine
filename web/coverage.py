@@ -5,35 +5,37 @@ STAR story and move the frontier on — so a user who uploaded a résumé with a
 bullets would have one of them interrogated and the other eleven silently ignored. It would
 happily drill a "favourite project" while the material they actually gave us went untouched.
 
-A bullet reaches a **terminal** state when we can say, RELIABLY, that it has been dealt with:
+A bullet reaches a **terminal** state when we can say — from a FACT, never a guess — that it
+has been dealt with:
 
-- ``STRENGTHENED`` — reworded and the user accepted it (``source="grilled"``), or superseded
-  by such a rewrite. Deterministic: we know, because they clicked Keep.
-- ``SKIPPED``      — the user explicitly said it does not matter. Deterministic.
+- ``QUANTIFIED``   — a validated STAR story records this bullet's id in ``answers_bullet_id``.
+  The grill was asking about THIS line and the user answered it. A **link**, not a text match.
+- ``STRENGTHENED`` — reworded and the user accepted it (``source="grilled"``), or superseded by
+  such a rewrite. We know, because they clicked Keep.
+- ``SKIPPED``      — the user explicitly said it does not matter.
 
-Anything else is ``UNCOVERED``.
+Anything else is ``UNCOVERED``, and an entry with an uncovered bullet is **not done**.
 
-**There is deliberately no QUANTIFIED state yet.** The obvious one — "a validated STAR story's
-result text covers this bullet" — was implemented and then REMOVED, because text matching
-cannot decide it and a wrong answer here is the worst thing this module can do: a false
-QUANTIFIED tells the user a line is handled when it was never grilled, silently burying the
-work that coverage exists to surface. Two adversarial reviews demolished every heuristic tried:
+**QUANTIFIED is decided by a link because every text heuristic failed.** The obvious version —
+"does a story's result text cover this bullet?" — was built, reviewed, and DELETED. A false
+QUANTIFIED is the worst error this module can make: it tells the user a line is handled when it
+was never grilled, silently burying the work coverage exists to surface. What broke:
 
-- Bidirectional substring containment marked an untouched "Ran CI" as covered because a
-  *different* story in the same entry said "...so teams ran CI/CD 50% faster".
-- A minimum-length floor did not close it either: "Improved the release process" (4 words) still
-  rode on "Automated deployments in a way that improved the release process, cutting lead 35%".
-- Making it one-directional then permanently un-covered the opposite, equally real case (a
-  terse grilled result can never contain a verbose résumé line).
+- Substring containment marked an untouched "Ran CI" covered, because a *different* story in the
+  same entry said "...so teams ran CI/CD 50% faster".
+- A 4-word floor did not close it: "Improved the release process" still rode on "Automated
+  deployments in a way that improved the release process, cutting lead time 35%".
+- Making it one-directional then permanently un-covered the opposite, equally real case (a terse
+  grilled result can never contain a verbose résumé line).
 - Trailing punctuation — standard résumé style — defeats an exact compare outright.
 
-So coverage under-reports rather than lies: an UNCOVERED bullet may in fact have been grilled.
-That is the honest failure direction, and Skip is always available. **CQ-5b** adds the real fix
-— the grill recording WHICH bullet a story answers — and QUANTIFIED returns with it, decided by
-a link rather than by guessing at prose.
+The link (v2.11.0) ends the guessing, and it is what makes it SAFE for coverage to steer the
+grill: every successful turn retires exactly the bullet the grill was asking about, so progress
+is monotonic **by construction**. Without it, holding an entry until it is covered could loop
+forever — a story worded so as to match no bullet would advance nothing.
 
-``SKIPPED`` is the escape hatch: it is what will let the grill (once CQ-5b steers it) insist on
-coverage without being able to trap a user on a line they never cared about.
+``SKIPPED`` is the escape hatch: it lets the grill be demanding without ever being able to trap
+a user on a line they never cared about.
 """
 
 from __future__ import annotations
@@ -45,14 +47,17 @@ from schema import Bullet, BulletSource, Entry, StarStory
 
 
 class CoverageState(StrEnum):
-    """What has become of one bullet. The first two are terminal."""
+    """What has become of one bullet. The first three are terminal."""
 
+    QUANTIFIED = "quantified"
     STRENGTHENED = "strengthened"
     SKIPPED = "skipped"
     UNCOVERED = "uncovered"
 
 
-_TERMINAL = frozenset({CoverageState.STRENGTHENED, CoverageState.SKIPPED})
+_TERMINAL = frozenset(
+    {CoverageState.QUANTIFIED, CoverageState.STRENGTHENED, CoverageState.SKIPPED}
+)
 
 
 @dataclass(frozen=True)
@@ -79,11 +84,7 @@ class EntryCoverage:
 def bullet_state(
     bullet: Bullet, stories: list[StarStory], *, superseded: set[str] | None = None
 ) -> CoverageState:
-    """Classify ONE bullet. Only states we can determine RELIABLY are reported.
-
-    ``stories`` is accepted (and currently unused) so the signature is ready for CQ-5b, which
-    adds the story→bullet link that makes a trustworthy QUANTIFIED possible.
-    """
+    """Classify ONE bullet. Every state here is determined by a FACT, never by a guess."""
     if bullet.skipped:
         return CoverageState.SKIPPED
     if bullet.source is BulletSource.GRILLED:
@@ -91,6 +92,13 @@ def bullet_state(
     if superseded is not None and str(bullet.bullet_id) in superseded:
         # Replaced by an accepted rewrite — the achievement survives in that bullet.
         return CoverageState.STRENGTHENED
+    if any(
+        s.metrics_validated and s.answers_bullet_id == str(bullet.bullet_id)
+        for s in stories
+    ):
+        # QUANTIFIED by a LINK (v2.11.0, CQ-5b) — the grill recorded which bullet it was
+        # asking about, and this story is the answer. No text comparison anywhere.
+        return CoverageState.QUANTIFIED
     return CoverageState.UNCOVERED
 
 

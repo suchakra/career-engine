@@ -265,6 +265,15 @@ class StarStory(BaseModel):
     task: str = Field(default="", description="Task or responsibility (T in STAR)")
     action: str = Field(default="", description="Actions taken (A in STAR)")
     result: str = Field(default="", description="Quantified outcome (R in STAR; must contain a metric)")
+    answers_bullet_id: str = Field(
+        default="",
+        description=(
+            "The Bullet.bullet_id this story was grilled OUT OF (v2.11.0, CQ-5b). This link is "
+            "what makes coverage trustworthy: it says which line the story answers, instead of "
+            "guessing by comparing prose. Empty when the story came from a free-form turn with "
+            "no bullet targeted."
+        ),
+    )
     metrics_validated: bool = Field(
         default=False,
         description="True only when result contains at least one concrete numeric metric",
@@ -313,6 +322,15 @@ class CareerEngineState(BaseModel):
         description=(
             "ISO date (YYYY-MM-DD) injected by the CLI/entry layer as the 'now' clock. "
             "Nodes must NEVER call datetime.now(); use this field instead."
+        ),
+    )
+    grill_bullet_frontier: str = Field(
+        default="",
+        description=(
+            "The Bullet.bullet_id the grill is CURRENTLY asking about (v2.11.0, CQ-5b). The "
+            "answer's StarStory records it as `answers_bullet_id`, which retires exactly that "
+            "bullet — so every successful turn makes progress BY CONSTRUCTION, and the frontier "
+            "can safely hold an entry until it is covered without risking an endless loop."
         ),
     )
     grill_frontier: str = Field(

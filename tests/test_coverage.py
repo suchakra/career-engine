@@ -39,18 +39,37 @@ class TestBulletState:
     def test_an_untouched_bullet_is_UNCOVERED(self) -> None:
         assert bullet_state(Bullet(text="Ran the platform"), []) is CoverageState.UNCOVERED
 
-    def test_a_grilled_story_does_NOT_mark_a_bullet_covered_by_TEXT(self) -> None:
-        """There is deliberately no QUANTIFIED-by-text-matching state — it lied.
+    def test_a_story_QUANTIFIES_the_bullet_it_says_it_answers(self) -> None:
+        """CQ-5b: coverage is decided by a LINK, not by comparing prose."""
+        entry = _entry(Bullet(text="Ran CI"))
+        story = _story(entry, "Cut deploy failures 40%")  # wording matches NOTHING
+        story = story.model_copy(
+            update={"answers_bullet_id": str(entry.bullets[0].bullet_id)}
+        )
 
-        Two adversarial reviews broke every heuristic: bidirectional containment let an
-        untouched "Ran CI" ride on a *different* story ("...teams ran CI/CD 50% faster"); a
-        4-word floor still let "Improved the release process" ride on a story containing that
-        phrase; going one-directional then permanently un-covered verbose bullets. A false
-        QUANTIFIED buries work the user still has to do, so coverage now UNDER-reports instead
-        of lying. CQ-5b brings QUANTIFIED back, decided by a link rather than by prose.
+        assert bullet_state(entry.bullets[0], [story]) is CoverageState.QUANTIFIED
+
+    def test_TEXT_alone_never_marks_a_bullet_covered(self) -> None:
+        """The heuristic that lied stays dead.
+
+        Two adversarial reviews broke every version of it: containment let an untouched "Ran CI"
+        ride on a *different* story ("...teams ran CI/CD 50% faster"); a 4-word floor still let
+        "Improved the release process" ride on a story containing that phrase; going
+        one-directional then permanently un-covered verbose bullets. A false QUANTIFIED buries
+        work the user still has to do. Only the link counts.
         """
         entry = _entry(Bullet(text="Ran CI"))
+        # Same words, but the story does NOT claim to answer this bullet.
         story = _story(entry, "Rebuilt releases so teams ran CI/CD 50% faster")
+
+        assert bullet_state(entry.bullets[0], [story]) is CoverageState.UNCOVERED
+
+    def test_an_UNVALIDATED_story_does_not_quantify_even_with_the_link(self) -> None:
+        """No metric was actually extracted — the line is still outstanding."""
+        entry = _entry(Bullet(text="Ran CI"))
+        story = _story(entry, "Ran CI", validated=False).model_copy(
+            update={"answers_bullet_id": str(entry.bullets[0].bullet_id)}
+        )
 
         assert bullet_state(entry.bullets[0], [story]) is CoverageState.UNCOVERED
 
@@ -120,17 +139,11 @@ class TestEntryNeedsWork:
         assert entry_needs_work(_entry(), []) is False
 
 
-class TestFrontierIsNotYetCoverageDriven:
-    """CQ-5b, deliberately NOT shipped here — see the note in ``_next_frontier``.
+class TestFrontierIsSteeredByCoverage:
+    """CQ-5b: the grill no longer abandons an entry it has barely touched."""
 
-    Re-selecting an entry while it has uncovered bullets can trap the grill in an INFINITE
-    LOOP: coverage is detected by TEXT CONTAINMENT, so a story worded differently enough to
-    match no bullet leaves coverage unchanged, the frontier stays put, and the grill asks
-    forever. This test pins the CURRENT (safe) behaviour so the gap is visible rather than
-    silently assumed fixed.
-    """
-
-    def test_a_grilled_entry_is_still_left_behind_today(self) -> None:
+    def test_a_GRILLED_entry_with_uncovered_lines_is_NOT_abandoned(self) -> None:
+        """THE bug. One validated story used to be enough to walk away from 11 more lines."""
         from schema import EntryStatus
         from workflows.nodes import _next_frontier
 
@@ -139,10 +152,53 @@ class TestFrontierIsNotYetCoverageDriven:
         )
         other = Entry(type=ExperienceType.PROJECT, title="Side project")
 
-        # The rich entry has 12 uncovered lines, yet the frontier moves on. That is the
-        # bug CQ-5b closes; coverage is currently VISIBLE (the user can see and act on it)
-        # but does not yet steer the grill.
+        # Old (status-only) rule: the rich entry looks done and is abandoned.
         assert _next_frontier([rich, other], "") == str(other.entry_id)
+        # With coverage: it still has 12 untouched lines, so it is kept.
+        assert _next_frontier([rich, other], "", []) == str(rich.entry_id)
+
+    def test_a_fully_covered_entry_IS_left_behind(self) -> None:
+        """Coverage steering must terminate — a finished entry is released."""
+        from schema import EntryStatus
+        from workflows.nodes import _next_frontier
+
+        done = _entry(Bullet(text="Ran CI", skipped=True)).model_copy(
+            update={"status": EntryStatus.GRILLED}
+        )
+
+        assert _next_frontier([done], "", []) == ""
+
+    def test_every_successful_turn_retires_exactly_one_bullet(self) -> None:
+        """The MONOTONICITY guarantee — this is what makes steering safe.
+
+        Text matching could not promise it: a story worded to match nothing advanced nothing,
+        so the frontier would hold the entry and the grill would ask forever. The link means
+        each answered question retires the bullet it was asked about, so an entry with N
+        uncovered bullets is finished in at most N successful turns.
+        """
+        from workflows.nodes import _next_uncovered_bullet
+
+        entry = _entry(*[Bullet(text=f"line {i}") for i in range(3)])
+        stories: list[StarStory] = []
+
+        seen: list[str] = []
+        for _ in range(3):
+            target = _next_uncovered_bullet(entry, stories)
+            assert target is not None
+            seen.append(str(target.bullet_id))
+            stories.append(
+                StarStory(
+                    entry_id=str(entry.entry_id),
+                    pillar="delivery",
+                    result="some metric 40%",
+                    metrics_validated=True,
+                    answers_bullet_id=str(target.bullet_id),
+                )
+            )
+
+        assert len(set(seen)) == 3  # a DIFFERENT bullet each turn — no spinning
+        assert _next_uncovered_bullet(entry, stories) is None
+        assert entry_coverage(entry, stories).is_complete
 
 
 def test_a_legacy_document_defaults_skipped_to_False() -> None:
