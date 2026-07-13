@@ -283,9 +283,13 @@ def _grilled_before_the_link_existed(entry: Entry, stories: list[StarStory]) -> 
     left alone by the AUTOMATIC gates. The user can still aim the grill at it explicitly with
     "Grill me about this" — see ``entry_still_needs_grilling(..., explicit=True)``.
     """
-    return entry.status is EntryStatus.GRILLED and any(
-        s.metrics_validated and not s.answers_bullet_id for s in stories
-    )
+    if entry.status is not EntryStatus.GRILLED:
+        return False
+    # Legacy = NOTHING on this entry carries a link. Requiring a link-less STORY to exist was
+    # not enough: a GRILLED entry with no stories at all (they exist in the live data) fell
+    # through and was re-opened. Once the grill has recorded even one link on an entry, we are
+    # in v2.11.0 territory and coverage can be trusted to judge it.
+    return not any(s.answers_bullet_id for s in stories)
 
 
 def entry_still_needs_grilling(
