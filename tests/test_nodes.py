@@ -1554,6 +1554,43 @@ class TestCoverageSteersTheGrill:
 
         assert _has_pending_work(state) is False  # left alone, not re-grilled
 
+    def test_a_legacy_entry_with_NO_stories_is_also_left_alone(self) -> None:
+        """The dry-run against the REAL live data caught this one.
+
+        The first grandfather required a link-less STORY to exist, so a GRILLED entry carrying
+        no stories at all fell through and was re-opened. Those exist in the live data: across
+        the three real portfolios, 8 finished entries would have been re-opened. Legacy means
+        NOTHING on the entry carries a link.
+        """
+        from workflows.discovery_graph import _has_pending_work
+
+        entry = Entry(
+            title="Staff Engineer",
+            status=EntryStatus.GRILLED,
+            bullets=[Bullet(text="line")],
+        )
+        state = CareerEngineState(work_timeline=[entry])  # GRILLED, zero stories
+
+        assert _has_pending_work(state) is False
+
+    def test_once_the_grill_records_a_link_coverage_judges_the_entry(self) -> None:
+        """The grandfather must not become a permanent amnesty."""
+        from workflows.discovery_graph import _has_pending_work
+
+        entry = Entry(
+            title="Staff Engineer",
+            status=EntryStatus.GRILLED,
+            bullets=[Bullet(text="line 1"), Bullet(text="line 2")],
+        )
+        linked = StarStory(
+            entry_id=str(entry.entry_id), pillar="delivery", result="Cut costs 30%",
+            metrics_validated=True,
+            answers_bullet_id=str(entry.bullets[0].bullet_id),  # v2.11.0 grilling
+        )
+        state = CareerEngineState(work_timeline=[entry], extracted_star_stories=[linked])
+
+        assert _has_pending_work(state) is True  # line 2 is still outstanding
+
     def test_but_the_user_can_still_PIN_a_legacy_entry_and_be_grilled_on_it(self) -> None:
         """The grandfather must not take the choice away from them."""
         from workflows.nodes import _get_frontier_entry
