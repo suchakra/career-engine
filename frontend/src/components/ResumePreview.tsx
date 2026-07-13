@@ -16,8 +16,11 @@ function Roles({ roles }: { roles: RoleBlock[] }): JSX.Element {
             {role.dates ? <span className="text-muted"> · {role.dates}</span> : null}
           </p>
           <ul className="ml-4 list-disc text-sm text-muted">
-            {(role.bullets ?? []).map((b, j) => (
-              <li key={`${b}-${j}`}>{b}</li>
+            {(role.bullets ?? []).map((line, j) => (
+              // A line carries the identity of the bullet/story it came from (CQ-6), which is
+              // what will let the user persist an edit made here. Falling back to the index
+              // keeps a freshly-typed line (no id yet) keyed stably.
+              <li key={line.bullet_id || line.story_id || `new-${j}`}>{line.text}</li>
             ))}
           </ul>
         </div>

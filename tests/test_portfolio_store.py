@@ -293,6 +293,42 @@ class TestDeleteStarStory:
         remaining = [str(s.story_id) for s in state.extracted_star_stories]
         assert remaining == [str(story_b.story_id)]
 
+    def test_deleting_a_story_CLEARS_the_link_of_bullets_written_for_it(self) -> None:
+        """A bullet may outlive the story it speaks for — its LINK must not (CQ-6).
+
+        (Adversarial review.) The user overwrites a story's line in the tailor preview, which
+        persists a bullet with ``derived_from_story_id`` set. Later they delete that STAR story
+        from Portfolio. If the link survives, it points at nothing: the résumé assembler would
+        still render the bullet (fine — they keep their words) but coverage would read a link
+        to a story it cannot find. Clearing it leaves the line honestly UNCOVERED, which is the
+        truth: the metric evidence is gone.
+        """
+        service = _service()
+        story = StarStory(pillar="delivery", result="cut latency 40%", metrics_validated=True)
+        bullet = Bullet(
+            text="Rebuilt the pipeline, cutting latency 40%",
+            source=BulletSource.USER,
+            derived_from_story_id=str(story.story_id),
+        )
+        keep = Bullet(text="Mentored six engineers")
+        entry = Entry(type=ExperienceType.PROJECT, title="Billing rewrite", bullets=[bullet, keep])
+        story = story.model_copy(update={"entry_id": str(entry.entry_id)})
+        _seed(
+            service,
+            CareerEngineState(
+                reference_date=_REF, work_timeline=[entry], extracted_star_stories=[story]
+            ),
+        )
+
+        delete_star_story(service, app_name=_APP, user_id=_UID, story_id=str(story.story_id))
+
+        bullets = _read_latest(service).work_timeline[0].bullets
+        assert [b.text for b in bullets] == [  # the user KEEPS the words they wrote
+            "Rebuilt the pipeline, cutting latency 40%",
+            "Mentored six engineers",
+        ]
+        assert bullets[0].derived_from_story_id == ""  # …but the dangling link is gone
+
     def test_delete_star_story_idempotent(self) -> None:
         service = _service()
         story = StarStory(pillar="delivery", result="did a thing")

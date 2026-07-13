@@ -105,6 +105,19 @@ def bullet_state(
         # QUANTIFIED by a LINK (v2.11.0, CQ-5b) — the grill recorded which bullet it was
         # asking about, and this story is the answer. No text comparison anywhere.
         return CoverageState.QUANTIFIED
+    if bullet.derived_from_story_id and any(
+        s.metrics_validated and str(s.story_id) == bullet.derived_from_story_id
+        for s in stories
+    ):
+        # QUANTIFIED by the OTHER link (v2.12.0, CQ-6): this bullet was written to BE the
+        # résumé line for a validated story — by the copywriter, or by the user overwriting
+        # that line in the tailor preview. The metric is the story's; this is its prose.
+        #
+        # Without this, polishing a line would UN-cover it: a rewrite is stored as a new
+        # bullet, no story would name it, and the entry would drop back to "needs work" —
+        # so the grill would march the user back to put a number on the line they just
+        # perfected. That is the CQ-5b failure exactly, and this is the gate that prevents it.
+        return CoverageState.QUANTIFIED
     return CoverageState.UNCOVERED
 
 

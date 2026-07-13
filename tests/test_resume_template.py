@@ -11,7 +11,7 @@ import pathlib
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from web.resume_builder import Contact, RoleBlock, StructuredResume
+from web.resume_builder import Contact, ResumeLine, RoleBlock, StructuredResume
 
 _TEMPLATE_DIR = pathlib.Path(__file__).parent.parent / "templates"
 
@@ -54,7 +54,7 @@ _FIXTURE_RESUME = StructuredResume(
             title="Senior Engineer",
             org="TechCorp",
             dates="2021 - present",
-            bullets=["Reduced deploy time by 60% via CI/CD overhaul."],
+            bullets=[ResumeLine(text="Reduced deploy time by 60% via CI/CD overhaul.")],
         )
     ],
     education=[
@@ -71,8 +71,11 @@ def test_resume_template_has_experience_section() -> None:
     """Rendered HTML contains the employer name and bullet text inside a <li>."""
     html = _render_template(_FIXTURE_RESUME)
     assert "TechCorp" in html
-    assert "<li>" in html
-    assert "Reduced deploy time by 60% via CI/CD overhaul." in html
+    assert "<li>Reduced deploy time by 60% via CI/CD overhaul.</li>" in html
+    # A bullet is a ResumeLine (CQ-6), not a string. A template that renders the object
+    # itself would emit "ResumeLine(text='Reduced deploy time…')" — which still CONTAINS the
+    # bullet text, so a substring assertion passed happily while the PDF was garbage.
+    assert "ResumeLine(" not in html
 
 
 def test_resume_template_has_skills_section() -> None:

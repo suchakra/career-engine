@@ -215,6 +215,14 @@ async def _adelete_star_story(
 ) -> str | None:
     """Remove the STAR story whose ``story_id`` matches from the canonical session.
 
+    Also **clears ``derived_from_story_id`` on any bullet that pointed at it** (v2.12.0,
+    CQ-6). A bullet written to voice a story outlives that story's deletion — the user keeps
+    the words they approved — but the LINK must not: a bullet claiming to be the résumé line
+    of a story that no longer exists is read by :mod:`web.coverage` as covered-by-nothing, and
+    a dangling link is exactly the kind of quiet lie the id-based design exists to prevent.
+    Clearing it leaves the line honestly UNCOVERED: the metric evidence is gone, so the grill
+    may legitimately ask about it again.
+
     Idempotent: if no story matches (or the session is empty of it), the state is
     left untouched. Returns the session_id, or ``None`` if the user has no session.
     """
@@ -230,6 +238,13 @@ async def _adelete_star_story(
     remaining = [s for s in existing.extracted_star_stories if str(s.story_id) != story_id]
     if len(remaining) == len(existing.extracted_star_stories):
         return session_id  # no-op: story_id not found
+
+    timeline = existing.work_timeline
+    for entry in timeline:
+        for bullet in entry.bullets:
+            if bullet.derived_from_story_id == story_id:
+                bullet.derived_from_story_id = ""
+
     await _patch_session(
         session_service,
         app_name=app_name,
@@ -237,6 +252,7 @@ async def _adelete_star_story(
         session_id=session_id,
         state_delta={
             "extracted_star_stories": [s.model_dump(mode="json") for s in remaining],
+            "work_timeline": [e.model_dump(mode="json") for e in timeline],
             "contract_version": CONTRACT_VERSION,
         },
     )

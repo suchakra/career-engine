@@ -10,7 +10,7 @@ import json
 
 from schema import Application, ApplicationStatus, PendingAction, UserWorkspace
 from web.application_store import build_application, save_tailored_application
-from web.resume_builder import Contact, RoleBlock, StructuredResume
+from web.resume_builder import Contact, ResumeLine, RoleBlock, StructuredResume
 
 
 class _FakeStore:
@@ -88,7 +88,7 @@ def test_saves_real_structured_resume_json() -> None:
         contact=Contact(name="Ada", email="ada@example.com", links=["https://x/ada"]),
         summary="Fractional CTO.",
         skills=["AWS", "MCP"],
-        experience=[RoleBlock(title="CTO", org="Acme", dates="2020 - present", bullets=["Led X."])],
+        experience=[RoleBlock(title="CTO", org="Acme", dates="2020 - present", bullets=[ResumeLine(text="Led X.")])],
         education=[],
     )
     store = _FakeStore()

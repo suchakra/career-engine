@@ -168,17 +168,30 @@ def accept(proposal: Proposal) -> Bullet:
     """Turn an ACCEPTED proposal into the bullet that will be persisted.
 
     A rewrite of an existing bullet ``supersedes`` it — so the original stops appearing on the
-    résumé, resolved **by id** rather than by guessing at text similarity. A proposal derived
-    from a STAR story supersedes nothing: it adds a bullet the entry did not have.
+    résumé, resolved **by id** rather than by guessing at text similarity.
+
+    A proposal derived from a STAR story supersedes nothing (the entry had no such bullet);
+    instead it records ``derived_from_story_id`` — *this bullet is that story's résumé line*
+    (v2.12.0, CQ-6). Until CQ-6 that provenance was dropped on the floor, with two consequences:
+    the assembler had no way to know the approved rewrite and the raw ``story.result`` were the
+    same achievement, so the master résumé **listed it twice**; and the tailored résumé, which
+    renders stories, shipped the **raw grill text** even though the user had approved better
+    prose — making a liar of CQ-4's promise that no unreviewed text reaches a PDF.
     """
     from uuid import UUID
 
     from schema import BulletSource
 
+    story_id = (
+        proposal.source_id.split(":", 1)[1]
+        if proposal.source_id.startswith("story:")
+        else ""
+    )
     return Bullet(
         text=proposal.text,
         source=BulletSource.GRILLED,
         supersedes=UUID(proposal.source_bullet_id) if proposal.source_bullet_id else None,
+        derived_from_story_id=story_id,
     )
 
 

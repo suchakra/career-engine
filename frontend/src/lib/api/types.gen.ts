@@ -877,6 +877,12 @@ export interface components {
              * @default false
              */
             skipped: boolean;
+            /**
+             * Derived From Story Id
+             * @description The story_id whose résumé line THIS BULLET IS (v2.12.0, CQ-6). Set when a bullet is written to speak for a STAR story — by the copywriter (accepted rewrite) or by the user overwriting a story-derived line in the tailor preview. The assembler then renders this bullet INSTEAD of the raw ``story.result``, so approved prose reaches the résumé and the achievement is listed once. Set only at CREATION: allowing an edit to set it would let a bullet be pointed at any validated story and be marked covered without ever having been grilled — a false QUANTIFIED, which is the worst error coverage can make. NOTE this is the opposite direction from ``StarStory.answers_bullet_id`` (v2.11.0), which records which bullet a grill QUESTION was about; a story can be *about* one bullet while its résumé line is a different, newly written one.
+             * @default
+             */
+            derived_from_story_id: string;
         };
         /**
          * BulletAddRequest
@@ -1341,6 +1347,29 @@ export interface components {
             is_empty: boolean;
         };
         /**
+         * ResumeLineDTO
+         * @description One rendered résumé line, WITH its provenance (mirrors ``web.resume_builder.ResumeLine``).
+         *
+         *     ``bullet_id`` / ``story_id`` are what make the tailor preview editable-and-persistable
+         *     (CQ-6): the client can only offer "overwrite the original" for a line if it knows which
+         *     portfolio object the line came from. A line the user typed fresh into the preview carries
+         *     neither, and can only ever live in the exported document.
+         */
+        ResumeLineDTO: {
+            /** Text */
+            text: string;
+            /**
+             * Bullet Id
+             * @default
+             */
+            bullet_id: string;
+            /**
+             * Story Id
+             * @default
+             */
+            story_id: string;
+        };
+        /**
          * RoleBlockDTO
          * @description One experience/education entry (mirrors ``web.resume_builder.RoleBlock``).
          */
@@ -1352,7 +1381,12 @@ export interface components {
             /** Dates */
             dates: string;
             /** Bullets */
-            bullets?: string[];
+            bullets?: components["schemas"]["ResumeLineDTO"][];
+            /**
+             * Entry Id
+             * @default
+             */
+            entry_id: string;
         };
         /**
          * SessionPreferences
@@ -1380,7 +1414,7 @@ export interface components {
             nice_to_haves?: string[];
             /**
              * Contract Version
-             * @default 2.10.0
+             * @default 2.12.0
              */
             contract_version: string;
         };
@@ -1477,7 +1511,7 @@ export interface components {
             links?: string[];
             /**
              * Contract Version
-             * @default 2.10.0
+             * @default 2.12.0
              */
             contract_version: string;
         };

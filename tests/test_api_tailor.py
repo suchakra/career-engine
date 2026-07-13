@@ -31,7 +31,7 @@ from api.deps import get_auth_provider, get_discovery_session, get_session_servi
 from api.main import app
 from auth.firebase_auth import FirebaseAuthProvider
 from schema import CareerEngineState, Entry, EntryStatus, ExperienceType, StarStory
-from web.resume_builder import Contact, RoleBlock, StructuredResume
+from web.resume_builder import Contact, ResumeLine, RoleBlock, StructuredResume
 
 _GOOGLE_ISSUER = "https://accounts.google.com"
 _USER_ID = "user-123"
@@ -82,7 +82,8 @@ _SAMPLE = StructuredResume(
     contact=Contact(name="Jane Doe", email="jane@example.com", location="Berlin"),
     summary="Staff engineer with a distributed-systems focus.",
     skills=["Python", "Distributed Systems"],
-    experience=[RoleBlock(title="Senior Engineer", org="Acme", dates="2022-now", bullets=["Cut p95 40%"])],
+    experience=[RoleBlock(title="Senior Engineer", org="Acme", dates="2022-now",
+                          bullets=[ResumeLine(text="Cut p95 40%")])],
     education=[],
 )
 
@@ -99,7 +100,8 @@ def _resume_body() -> dict[str, Any]:
         "summary": "Staff engineer with a distributed-systems focus.",
         "skills": ["Python", "Distributed Systems"],
         "experience": [
-            {"title": "Senior Engineer", "org": "Acme", "dates": "2022-now", "bullets": ["Cut p95 40%"]}
+            {"title": "Senior Engineer", "org": "Acme", "dates": "2022-now",
+             "bullets": [{"text": "Cut p95 40%"}]}
         ],
         "education": [],
     }

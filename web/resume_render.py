@@ -45,7 +45,7 @@ def structured_to_markdown(resume: StructuredResume) -> str:
             lines += ["", f"### {header}"]
             if role.dates:
                 lines.append(f"*{role.dates}*")
-            lines += [f"- {b}" for b in role.bullets]
+            lines += [f"- {b.text}" for b in role.bullets]
     if resume.education:
         lines += ["", "## Education"]
         for role in resume.education:
@@ -83,7 +83,7 @@ _PDF_TEMPLATE_SRC = """<!DOCTYPE html>
   {% for role in r.experience %}<div class="role">
     <div class="role-head">{{ [role.title, role.org] | select | join(" — ") }}
       {% if role.dates %}<span class="dates">{{ role.dates }}</span>{% endif %}</div>
-    {% if role.bullets %}<ul>{% for b in role.bullets %}<li>{{ b }}</li>{% endfor %}</ul>{% endif %}
+    {% if role.bullets %}<ul>{% for b in role.bullets %}<li>{{ b.text }}</li>{% endfor %}</ul>{% endif %}
   </div>{% endfor %}{% endif %}
   {% if r.education %}<h2>Education</h2>
   {% for role in r.education %}<div class="role">
@@ -130,7 +130,7 @@ def structured_to_docx_bytes(resume: StructuredResume) -> bytes:
             if role.dates:
                 para.add_run(f"   {role.dates}").italic = True
             for bullet in role.bullets:
-                doc.add_paragraph(bullet, style="List Bullet")
+                doc.add_paragraph(bullet.text, style="List Bullet")
     if resume.education:
         doc.add_heading("Education", level=1)
         for role in resume.education:

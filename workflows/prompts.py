@@ -248,8 +248,17 @@ job is selection, a summary, and skills.
 
 You are given:
   1. A JOB DESCRIPTION.
-  2. A CATALOG of the candidate's achievements — each has an "id", the "role" it
-     came from, and the quantified "achievement" text.
+  2. A CATALOG of the candidate's résumé lines — each has an "id", the "role" it
+     came from, and the "achievement" text.
+
+     The catalog is MIXED, and the difference matters. Some lines are grilled and
+     QUANTIFIED (a validated metric). Others are lines the candidate wrote or uploaded
+     that have not been through that process: they may carry no number at all. Both are
+     the candidate's real, claimed experience — an unquantified line is not a weaker
+     claim, it is simply one we have not yet put a number on, and dropping every such
+     line is how a candidate who uploaded a strong résumé ends up with an empty one.
+     Prefer a quantified line when two say the same thing; never discard a role's only
+     evidence just because it lacks a metric.
 
 Return EXACTLY this JSON shape (valid JSON — no line breaks inside string values):
 
@@ -265,8 +274,9 @@ Where:
   - skills: 8-14 concrete skills/technologies the candidate DEMONSTRABLY has
     (supported by the catalog) that match the JD — use the JD's own keywords where
     the catalog backs them up (for ATS keyword matching).
-  - selected_achievement_ids: the ids of the 5-10 most relevant achievements, most
-    relevant first.
+  - selected_achievement_ids: the ids of the 5-10 most relevant lines, most relevant
+    first. Copy each "id" from the catalog VERBATIM (they look like "story:<uuid>" or
+    "bullet:<uuid>"); an id you did not receive is discarded.
 
 Rules:
   - Select achievements that map to the JD's functional requirements; prioritize
