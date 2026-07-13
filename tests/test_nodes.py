@@ -1453,13 +1453,25 @@ class TestCoverageSteersTheGrill:
         )
 
     def test_the_router_does_not_FINALIZE_an_entry_with_uncovered_lines(self) -> None:
-        """The gate that made the whole feature inert."""
+        """The gate that made the whole feature inert.
+
+        The entry must carry a LINKED story — i.e. it was grilled under v2.11.0 — or the legacy
+        grandfather (rightly) leaves it alone.
+        """
         from workflows.discovery_graph import _has_pending_work
 
         entry = self._entry_with(3)
-        state = CareerEngineState(work_timeline=[entry], current_phase=PhaseStatus.GRILLING)
+        linked = StarStory(
+            entry_id=str(entry.entry_id), pillar="delivery", result="Cut costs 30%",
+            metrics_validated=True, answers_bullet_id=str(entry.bullets[0].bullet_id),
+        )
+        state = CareerEngineState(
+            work_timeline=[entry],
+            extracted_star_stories=[linked],
+            current_phase=PhaseStatus.GRILLING,
+        )
 
-        assert _has_pending_work(state) is True  # 3 lines nobody has dealt with
+        assert _has_pending_work(state) is True  # 2 lines nobody has dealt with
 
     def test_the_router_DOES_finalize_once_every_line_is_dealt_with(self) -> None:
         """Steering must terminate."""

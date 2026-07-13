@@ -151,11 +151,17 @@ class TestFrontierIsSteeredByCoverage:
             update={"status": EntryStatus.GRILLED}
         )
         other = Entry(type=ExperienceType.PROJECT, title="Side project")
+        # A LINKED story — i.e. grilled under v2.11.0, so coverage may judge it. (A GRILLED
+        # entry with no links at all is legacy and is deliberately left alone.)
+        linked = StarStory(
+            entry_id=str(rich.entry_id), pillar="delivery", result="Cut costs 30%",
+            metrics_validated=True, answers_bullet_id=str(rich.bullets[0].bullet_id),
+        )
 
         # Old (status-only) rule: the rich entry looks done and is abandoned.
         assert _next_frontier([rich, other], "") == str(other.entry_id)
-        # With coverage: it still has 12 untouched lines, so it is kept.
-        assert _next_frontier([rich, other], "", []) == str(rich.entry_id)
+        # With coverage: 11 lines are still untouched, so it is kept.
+        assert _next_frontier([rich, other], "", [linked]) == str(rich.entry_id)
 
     def test_a_fully_covered_entry_IS_left_behind(self) -> None:
         """Coverage steering must terminate — a finished entry is released."""
