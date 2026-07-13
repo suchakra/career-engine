@@ -66,13 +66,28 @@ def _source_items(entry: Entry, stories: list[StarStory]) -> list[dict[str, str]
     bullets. A bullet already covered by a story is NOT sent twice: the story carries the
     same achievement with more context, so rewriting both would propose two bullets for one
     thing. Matching is by containment, the same conservative rule the résumé assembler uses.
+
+    **A story whose résumé line is already a bullet is offered as that BULLET, not as the
+    story** (CQ-6). Once the user has approved prose for a story, that prose — not the grill's
+    raw ``result`` — is the thing to polish further. Without this the second copywriter pass
+    re-proposes an achievement the user already approved, and accepting it mints a *second*
+    bullet claiming to speak for the same story: the loop never converges, and coverage counts
+    the achievement twice. (The write side recorded the link from the start; this is the read
+    side finally using it.)
+
+    Superseded bullets are never offered — they are not on the résumé, and proposing a rewrite
+    of a line the user has already replaced is noise at best.
     """
+    superseded = {str(b.supersedes) for b in entry.bullets if b.supersedes is not None}
+    live = [b for b in entry.bullets if str(b.bullet_id) not in superseded]
+    spoken_for = {b.derived_from_story_id for b in live if b.derived_from_story_id}
+
     items: list[dict[str, str]] = []
     covered: set[str] = set()
 
     for story in stories:
         result = story.result.strip()
-        if not result:
+        if not result or str(story.story_id) in spoken_for:
             continue
         items.append(
             {
@@ -85,7 +100,7 @@ def _source_items(entry: Entry, stories: list[StarStory]) -> list[dict[str, str]
         )
         covered.add(" ".join(result.split()).casefold())
 
-    for bullet in entry.bullets:
+    for bullet in live:
         text = bullet.text.strip()
         if not text:
             continue

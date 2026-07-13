@@ -242,9 +242,15 @@ def _entry_lines(entry: Entry, stories: list[StarStory]) -> list[ResumeLine]:
     for story in stories:
         story_id = str(story.story_id)
         bullet = derived.get(story_id)
-        text = bullet.text.strip() if bullet is not None else _bullet_for(story)
+        # A blank derived bullet must fall back to the story, not delete it. Losing the polish
+        # is a cosmetic regression; losing the ACHIEVEMENT is data disappearing off a résumé.
+        # Unreachable today (accepted text is min_length=1 and blank edits are refused), which
+        # is precisely why it is worth a fallback rather than a trusted invariant.
+        text = (bullet.text.strip() if bullet is not None else "") or _bullet_for(story)
         if not text:
             continue
+        if bullet is not None and not bullet.text.strip():
+            bullet = None  # the line is the story's, so it must not claim the bullet's id
         lines.append(
             ResumeLine(
                 text=text,

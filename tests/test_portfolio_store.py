@@ -867,6 +867,41 @@ class TestAcceptBullets:
         assert texts == ["Hired six engineers", "Rebuilt CI, cutting deploy failures 40%"]
         assert bullets[-1].source is BulletSource.GRILLED
 
+    def test_POLISHING_TWICE_keeps_the_line_speaking_for_its_story(self) -> None:
+        """A rewrite of a story's line must INHERIT the link to that story (CQ-6).
+
+        (Adversarial review — the most ordinary flow there is, and it broke.) The user polishes
+        a story's line (bullet R1, ``derived_from_story_id=S``), then polishes it again: R2
+        supersedes R1, and R1 is DELETED by this seam. If R2 does not inherit the link, story S
+        is orphaned — so the résumé renders S's RAW GRILL TEXT again, right beside R2. The
+        duplicate this whole feature exists to kill, back via "polish, then polish again",
+        with nothing to warn the user (coverage stays complete either way).
+        """
+        service = _service()
+        story_id = str(uuid4())
+        r1 = Bullet(
+            text="Rebuilt CI, cutting failures 40%",
+            source=BulletSource.GRILLED,
+            derived_from_story_id=story_id,
+        )
+        entry = Entry(type=ExperienceType.PROJECT, title="Platform", bullets=[r1])
+        _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
+
+        r2 = Bullet(  # the second pass rewrites R1 — and knows nothing of the story
+            text="Re-architected CI end to end, eliminating 40% of deploy failures",
+            source=BulletSource.GRILLED,
+            supersedes=r1.bullet_id,
+        )
+        accept_bullets(
+            service, app_name=_APP, user_id=_UID, entry_id=str(entry.entry_id), bullets=[r2]
+        )
+
+        bullets = _read_latest(service).work_timeline[0].bullets
+        assert [b.text for b in bullets] == [
+            "Re-architected CI end to end, eliminating 40% of deploy failures"
+        ]
+        assert bullets[0].derived_from_story_id == story_id  # the link SURVIVED the rewrite
+
     def test_a_story_derived_bullet_is_ADDED_without_removing_anything(self) -> None:
         service = _service()
         entry = Entry(

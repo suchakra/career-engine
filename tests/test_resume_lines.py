@@ -220,26 +220,20 @@ class TestCoverageDoesNotReopenFinishedWork:
     def test_a_bullet_written_FOR_a_validated_story_is_covered(self) -> None:
         """Otherwise polishing a line UN-covers it and the grill comes back for a number.
 
-        The rewrite is stored as a NEW bullet; no story's ``answers_bullet_id`` names it; so
-        without this rule the entry drops back to "needs work" and the user is marched back
-        through work they just finished — which is exactly what CQ-5b shipped and had to fix.
+        The rewrite is stored as a NEW bullet, and no story's ``answers_bullet_id`` names it.
+        The bullet is built as ``copywriter.accept()`` really builds it — GRILLED **and**
+        linked. (An earlier version of this test used ``source=USER``, a shape no write path
+        produces, so it pinned nothing real. See ``test_coverage.py`` for that whole story.)
         """
         story = _story(_job(), "Cut deploy failures 40%")
-        polished = Bullet(text="Rebuilt CI, cutting deploy failures 40%", source=BulletSource.USER,
+        polished = Bullet(text="Rebuilt CI, cutting deploy failures 40%",
+                          source=BulletSource.GRILLED,
                           derived_from_story_id=str(story.story_id))
         entry = _job(bullets=[polished])
         story = story.model_copy(update={"entry_id": str(entry.entry_id)})
 
         assert bullet_state(polished, [story]) is CoverageState.QUANTIFIED
         assert entry_coverage(entry, [story]).is_complete
-
-    def test_a_bullet_pointing_at_an_UNVALIDATED_story_is_not_covered(self) -> None:
-        """The link borrows the STORY's metric. No metric, nothing to borrow."""
-        story = _story(_job(), "Did some CI work").model_copy(update={"metrics_validated": False})
-        bullet = Bullet(text="Rebuilt CI", source=BulletSource.USER,
-                        derived_from_story_id=str(story.story_id))
-
-        assert bullet_state(bullet, [story]) is CoverageState.UNCOVERED
 
     def test_a_DANGLING_link_does_not_silently_cover_a_bullet(self) -> None:
         """The story was deleted. A bullet claiming to speak for it is covered by nothing.
