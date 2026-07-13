@@ -338,10 +338,21 @@ async def _aupdate_entry_bullet(
                     entry_id,
                 )
                 return session_id  # no-op: no such bullet
-            # Edit in place: the bullet keeps its id (so anything that supersedes it, or
-            # is superseded by it, stays linked) but is now the user's own wording.
-            updated_bullets[match] = updated_bullets[match].model_copy(
-                update={"text": clean_text, "source": BulletSource.USER}
+            # Edit in place: the bullet keeps its id (so anything that supersedes it, or is
+            # superseded by it, stays linked).
+            #
+            # Provenance is only downgraded to USER if it was not already GRILLED. Fixing a
+            # typo in a rewrite the user ALREADY accepted must not un-deal-with it: stamping
+            # USER there flipped the bullet's coverage back to UNCOVERED and the entry from
+            # "1 of 1 covered" to "0 of 1", so correcting a comma looked like losing progress.
+            current_bullet = updated_bullets[match]
+            source = (
+                BulletSource.GRILLED
+                if current_bullet.source is BulletSource.GRILLED
+                else BulletSource.USER
+            )
+            updated_bullets[match] = current_bullet.model_copy(
+                update={"text": clean_text, "source": source}
             )
             entry = entry.model_copy(update={"bullets": updated_bullets})
             found = True
@@ -910,5 +921,92 @@ def accept_bullets(
             user_id=user_id,
             entry_id=entry_id,
             bullets=bullets,
+        )
+    )
+
+
+async def _aset_bullet_skipped(
+    session_service: BaseSessionService,
+    *,
+    app_name: str,
+    user_id: str,
+    entry_id: str,
+    bullet_id: str,
+    skipped: bool,
+) -> str | None:
+    """Mark a bullet as explicitly skipped, or un-skip it (CQ-5).
+
+    ``skipped`` is one of the three TERMINAL coverage states, and it is the escape hatch that
+    lets the grill insist on covering every supplied bullet without being able to trap the
+    user in an endless loop over a line they never cared about.
+
+    Idempotent: an unknown entry or bullet is a logged no-op. Returns the session_id, or
+    ``None`` if the user has no session.
+    """
+    session_id = web_session_id(user_id)
+    existing = await session_helpers.get_session_state_if_exists(
+        session_service=session_service,
+        app_name=app_name,
+        user_id=user_id,
+        session_id=session_id,
+    )
+    if existing is None:
+        return None
+    found = False
+    new_timeline: list[Entry] = []
+    for entry in existing.work_timeline:
+        if str(entry.entry_id) == entry_id:
+            # Detect "not found" by ID, not by comparing the resulting lists: skipping an
+            # ALREADY-skipped bullet is a legitimate idempotent replay that produces an
+            # identical list, and the old comparison logged it as "bullet not found" — poisoning
+            # the very signal used to debug a real id mismatch.
+            if not any(str(b.bullet_id) == bullet_id for b in entry.bullets):
+                logger.warning(
+                    "set_bullet_skipped: bullet %s not found on entry %s", bullet_id, entry_id
+                )
+                return session_id
+            updated = [
+                b.model_copy(update={"skipped": skipped})
+                if str(b.bullet_id) == bullet_id
+                else b
+                for b in entry.bullets
+            ]
+            entry = entry.model_copy(update={"bullets": updated})
+            found = True
+        new_timeline.append(entry)
+    if not found:
+        logger.warning("set_bullet_skipped: entry %s not found", entry_id)
+        return session_id
+    await _patch_session(
+        session_service,
+        app_name=app_name,
+        user_id=user_id,
+        session_id=session_id,
+        state_delta={
+            "work_timeline": [e.model_dump(mode="json") for e in new_timeline],
+            "contract_version": CONTRACT_VERSION,
+        },
+    )
+    return session_id
+
+
+def set_bullet_skipped(
+    session_service: BaseSessionService,
+    *,
+    app_name: str,
+    user_id: str,
+    entry_id: str,
+    bullet_id: str,
+    skipped: bool,
+) -> str | None:
+    """Sync bridge over :func:`_aset_bullet_skipped`."""
+    return run_async(
+        _aset_bullet_skipped(
+            session_service,
+            app_name=app_name,
+            user_id=user_id,
+            entry_id=entry_id,
+            bullet_id=bullet_id,
+            skipped=skipped,
         )
     )

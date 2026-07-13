@@ -316,16 +316,32 @@ def _frontier_sort_key(entry: Entry) -> tuple[int, int, int]:
     return (end_year, _TYPE_WEIGHT.get(entry.type, 1), start_year)
 
 
-def _next_frontier(timeline: list[Entry], current_frontier_id: str) -> str:
+def _next_frontier(
+    timeline: list[Entry],
+    current_frontier_id: str,
+    stories: list[StarStory] | None = None,
+) -> str:
     """Return the next entry_id to grill (most-recent + most-substantive first).
 
-    Strategy: among entries that still need work (NEEDS_QUANTIFYING or DOCUMENTED),
-    skipping the currently-grilled one, pick the highest-ranked by
-    :func:`_frontier_sort_key` — current/recent substantive roles before older or
-    trivial ones. Returns "" if no more entries need grilling.
+    Strategy: among entries that still need work, skipping the currently-grilled one, pick
+    the highest-ranked by :func:`_frontier_sort_key` — current/recent substantive roles
+    before older or trivial ones. Returns "" if nothing is left to grill.
+
+    **Coverage (CQ-5) is NOT yet wired in here — deliberately.** An entry stops needing work
+    the moment its status becomes GRILLED, which happens after ONE validated story, so a
+    résumé with a dozen bullets gets one interrogated and eleven ignored. The fix is tracked
+    as **CQ-5b** in GROOMING, and it is *not* a one-line change: re-selecting an entry while
+    it has uncovered bullets can trap the grill in an INFINITE LOOP, because coverage is
+    detected by TEXT CONTAINMENT (``web.coverage._covers``). A story worded differently enough
+    to match no bullet would leave coverage unchanged, the frontier would stay put, and the
+    grill would ask forever. CQ-5b needs the grill to record WHICH bullet a story answers, so
+    progress is monotonic by construction rather than by string matching.
+
+    ``stories`` is accepted (and currently unused) so the signature is ready for that work.
     """
     needs_work = [
-        e for e in timeline
+        e
+        for e in timeline
         if e.status in (EntryStatus.NEEDS_QUANTIFYING, EntryStatus.DOCUMENTED)
         and str(e.entry_id) != current_frontier_id
     ]
@@ -763,7 +779,10 @@ def execute_grill_turn_node(
             )
             new_timeline = _update_entry_in_timeline(state.work_timeline, grilled_entry)
 
-            # Advance frontier to next entry needing work (backward-chronological)
+            # Advance the frontier to the next entry needing work.
+            # NOTE: coverage does NOT steer this yet — one validated story is still enough to
+            # leave an entry carrying a dozen untouched lines. That is CQ-5b, and it is not a
+            # one-liner: see _next_frontier's docstring for why the naive wiring loops forever.
             next_fid = _next_frontier(new_timeline, frontier_id)
 
             # Clear this entry's failed-attempt counter + answer memory on success.

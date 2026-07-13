@@ -17,6 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from schema import CareerEngineState, Entry, StarStory, UserProfile
+from web.coverage import bullet_state, entry_coverage
 
 _EMPTY_TEXT = (
     "Nothing recorded yet. Start a **Grill** and your experiences — and the "
@@ -59,6 +60,8 @@ class BulletCard:
 
     bullet_id: str
     text: str
+    state: str = "uncovered"
+    """Coverage state (CQ-5): quantified | strengthened | skipped | uncovered."""
 
 
 @dataclass(frozen=True)
@@ -72,6 +75,9 @@ class EntryCard:
     type_label: str
     status_label: str
     bullets: list[BulletCard] = field(default_factory=list)
+    coverage_label: str = ""
+    """e.g. "7 of 12 covered" — so the user knows what is LEFT rather than guessing (CQ-5)."""
+    is_covered: bool = True
     stories: list[StoryCard] = field(default_factory=list)
     highlighted: bool = False
     story_count: int = 0
@@ -122,8 +128,15 @@ def _label(value: str) -> str:
     return value.replace("_", " ").capitalize()
 
 
+def _superseded(entry: Entry) -> set[str]:
+    """Bullet ids replaced by an accepted rewrite — they no longer show as their own line."""
+    return {str(b.supersedes) for b in entry.bullets if b.supersedes is not None}
+
+
 def _entry_card(entry: Entry, stories: list[StarStory]) -> EntryCard:
     """Map one Entry + its stories into a display-ready EntryCard."""
+    superseded = _superseded(entry)
+    coverage = entry_coverage(entry, stories)
     return EntryCard(
         entry_id=str(entry.entry_id),
         title=entry.title,
@@ -131,7 +144,17 @@ def _entry_card(entry: Entry, stories: list[StarStory]) -> EntryCard:
         dates=_dates(entry),
         type_label=_label(str(entry.type.value)),
         status_label=_label(str(entry.status.value)),
-        bullets=[BulletCard(bullet_id=str(b.bullet_id), text=b.text) for b in entry.bullets],
+        bullets=[
+            BulletCard(
+                bullet_id=str(b.bullet_id),
+                text=b.text,
+                state=str(bullet_state(b, stories, superseded=superseded).value),
+            )
+            for b in entry.bullets
+            if str(b.bullet_id) not in superseded
+        ],
+        coverage_label=coverage.label,
+        is_covered=coverage.is_complete,
         stories=[
             StoryCard(
                 situation=s.situation,

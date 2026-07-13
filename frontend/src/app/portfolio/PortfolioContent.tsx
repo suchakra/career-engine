@@ -15,6 +15,7 @@ import {
   useDeleteBullet,
   useDeleteEntry,
   useDeleteStory,
+  useSkipBullet,
   useEditBullet,
   useGrillEntry,
   useHighlightEntry,
@@ -43,14 +44,17 @@ function EditableBullet({
   bulletId,
   index,
   text,
+  state,
 }: {
   entryId: string;
   bulletId: string;
   index: number;
   text: string;
+  state: string;
 }): JSX.Element {
   const edit = useEditBullet();
   const remove = useDeleteBullet();
+  const skip = useSkipBullet();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(text);
 
@@ -60,8 +64,28 @@ function EditableBullet({
     return (
       <li>
         <div className="flex items-start justify-between gap-2">
-          <span>{text}</span>
+          <span className={state === "skipped" ? "text-muted line-through" : undefined}>
+            {text}
+            {/* Coverage (CQ-5): the user must be able to SEE what is still outstanding
+                rather than guess. An uncovered line is material we have not dealt with. */}
+            {state === "uncovered" && (
+              <span className="ml-2 text-xs text-muted">· not covered yet</span>
+            )}
+          </span>
           <span className="flex shrink-0 gap-2">
+            <button
+              type="button"
+              aria-label={
+                state === "skipped" ? `Unskip bullet: ${text}` : `Skip bullet: ${text}`
+              }
+              disabled={skip.isPending}
+              onClick={() =>
+                skip.mutate({ entryId, bulletId, skipped: state !== "skipped" })
+              }
+              className="text-xs text-muted hover:text-text disabled:opacity-50"
+            >
+              {state === "skipped" ? "Unskip" : "Skip"}
+            </button>
             <button
               type="button"
               aria-label={`Edit bullet: ${text}`}
@@ -207,7 +231,16 @@ function EntryCard({ entry }: { entry: EntryCardResponse }): JSX.Element {
     <ActionCard
       title={`${entry.title} — ${entry.org}`}
       headerRight={
-        <StatusBadge status={statusKind(entry.status_label)} label={entry.status_label} />
+        <span className="flex items-center gap-2">
+          {entry.coverage_label && (
+            <span
+              className={`text-xs ${entry.is_covered ? "text-muted" : "font-medium text-text"}`}
+            >
+              {entry.coverage_label}
+            </span>
+          )}
+          <StatusBadge status={statusKind(entry.status_label)} label={entry.status_label} />
+        </span>
       }
     >
       <p className="mb-2 text-sm text-muted">
@@ -222,6 +255,7 @@ function EntryCard({ entry }: { entry: EntryCardResponse }): JSX.Element {
               bulletId={b.bullet_id}
               index={i}
               text={b.text}
+              state={b.state}
             />
           ))}
         </ul>

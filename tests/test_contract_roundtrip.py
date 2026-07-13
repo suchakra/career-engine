@@ -232,11 +232,11 @@ class TestCareerEngineStateRoundTrip:
         reconstructed = _roundtrip(original)
         assert original == reconstructed
 
-    def test_state_carries_contract_version_290(self) -> None:
-        """CareerEngineState must be stamped with CONTRACT_VERSION == "2.9.0"."""
+    def test_state_carries_contract_version_2100(self) -> None:
+        """CareerEngineState must be stamped with CONTRACT_VERSION == "2.10.0"."""
         state = CareerEngineState()
         assert state.contract_version == CONTRACT_VERSION
-        assert CONTRACT_VERSION == "2.9.0"
+        assert CONTRACT_VERSION == "2.10.0"
 
     def test_coverage_confirmed_defaults_false_and_roundtrips(self) -> None:
         """coverage_confirmed (v2.1.0) defaults to False and round-trips."""
@@ -653,9 +653,9 @@ class TestCapabilityEnum:
 class TestContractVersion:
     """Tests to ensure CONTRACT_VERSION is semver-formatted and consistent."""
 
-    def test_contract_version_is_290(self) -> None:
-        """CONTRACT_VERSION must be exactly "2.9.0" (Entry.bullets list[str] → list[Bullet])."""
-        assert CONTRACT_VERSION == "2.9.0"
+    def test_contract_version_is_2100(self) -> None:
+        """CONTRACT_VERSION must be exactly "2.10.0" (Bullet.skipped, additive — CQ-5 coverage)."""
+        assert CONTRACT_VERSION == "2.10.0"
 
     def test_contract_version_is_semver(self) -> None:
         """CONTRACT_VERSION must be a valid semver string (MAJOR.MINOR.PATCH)."""

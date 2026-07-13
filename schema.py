@@ -160,6 +160,15 @@ class Bullet(BaseModel):
             "at text similarity."
         ),
     )
+    skipped: bool = Field(
+        default=False,
+        description=(
+            "The user explicitly said this line does not matter (v2.10.0, CQ-5). It is one "
+            "of the three TERMINAL coverage states — quantified, strengthened, or skipped — "
+            "and it is the escape hatch that lets the grill insist on covering every "
+            "supplied bullet without being able to trap the user in an endless loop."
+        ),
+    )
 
 
 class Entry(BaseModel):

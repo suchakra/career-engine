@@ -26,6 +26,7 @@ from api.schemas import (
     AcceptBulletsRequest,
     BulletAddRequest,
     BulletEditRequest,
+    BulletSkipRequest,
     CopyProposalResponse,
     CopyProposalsResponse,
     HighlightRequest,
@@ -37,6 +38,7 @@ from web.copywriter import accept as accept_proposal
 from web.copywriter import copywrite_entry
 from web.portfolio_store import (
     accept_bullets,
+    set_bullet_skipped,
     add_entry_bullet,
     delete_entry,
     delete_entry_bullet,
@@ -320,6 +322,38 @@ async def accept_copywritten_bullets(
         user_id=user_id,
         entry_id=entry_id,
         bullets=bullets,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="No active session.")
+    return Response(status_code=204)
+
+
+@router.post("/api/experience/{entry_id}/bullet/{bullet_id}/skip", status_code=204)
+async def skip_bullet(
+    entry_id: str,
+    bullet_id: str,
+    body: BulletSkipRequest,
+    session_service: FirestoreSessionService = Depends(get_session_service),
+    user_id: str = Depends(get_current_user_id),
+) -> Response:
+    """Mark a bullet as explicitly skipped, or un-skip it (CQ-5).
+
+    ``skipped`` is one of the three TERMINAL coverage states (quantified / strengthened /
+    skipped). It is the escape hatch: it lets the grill insist on covering every bullet the
+    user supplied without being able to trap them in an endless loop over a line they never
+    cared about.
+
+    Idempotent: an unknown entry or bullet is a no-op (204). The 404 fires only when there is
+    no session at all.
+    """
+    result = await run_in_threadpool(
+        set_bullet_skipped,
+        session_service,
+        app_name=get_settings().app_name,
+        user_id=user_id,
+        entry_id=entry_id,
+        bullet_id=bullet_id,
+        skipped=body.skipped,
     )
     if result is None:
         raise HTTPException(status_code=404, detail="No active session.")

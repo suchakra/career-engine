@@ -108,10 +108,11 @@ class StoryCardResponse(_StrictModel):
 
 
 class BulletCardResponse(_StrictModel):
-    """Mirror of :class:`web.portfolio.BulletCard` — a bullet WITH its id (v2.9.0)."""
+    """Mirror of :class:`web.portfolio.BulletCard` — a bullet with its id + coverage state."""
 
     bullet_id: str
     text: str
+    state: str
 
 
 class EntryCardResponse(_StrictModel):
@@ -124,6 +125,8 @@ class EntryCardResponse(_StrictModel):
     type_label: str
     status_label: str
     bullets: list[BulletCardResponse]
+    coverage_label: str
+    is_covered: bool
     stories: list[StoryCardResponse]
     highlighted: bool
     story_count: int
@@ -139,7 +142,12 @@ class EntryCardResponse(_StrictModel):
             dates=card.dates,
             type_label=card.type_label,
             status_label=card.status_label,
-            bullets=[BulletCardResponse(bullet_id=b.bullet_id, text=b.text) for b in card.bullets],
+            bullets=[
+                BulletCardResponse(bullet_id=b.bullet_id, text=b.text, state=b.state)
+                for b in card.bullets
+            ],
+            coverage_label=card.coverage_label,
+            is_covered=card.is_covered,
             stories=[StoryCardResponse.from_card(s) for s in card.stories],
             highlighted=card.highlighted,
             story_count=card.story_count,
@@ -417,6 +425,12 @@ class AcceptBulletsRequest(_StrictModel):
     """
 
     accepted: list[AcceptedBullet]
+
+
+class BulletSkipRequest(_StrictModel):
+    """Request body for ``POST /api/experience/{entry_id}/bullet/{bullet_id}/skip`` (CQ-5)."""
+
+    skipped: bool
 
 
 class BulletAddRequest(_StrictModel):

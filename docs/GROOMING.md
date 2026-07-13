@@ -131,6 +131,32 @@ supplied bullet should end in one of three terminal states — *quantified* (a m
 bullet is in none of the three terminal states; the Portfolio shows per-entry coverage (e.g. "7 of 12
 covered"), so the user knows what is left rather than guessing.
 
+### ⬜ CQ-5b — Make coverage STEER the grill (the half CQ-5 deliberately did not ship)
+CQ-5 made coverage **visible** (the model, the "7 of 12 covered" label, per-bullet state, and
+the Skip escape hatch) but did **not** wire it into frontier selection. That was not an
+oversight — the obvious wiring is unsafe:
+
+> `_next_frontier` re-selecting an entry while it has uncovered bullets can trap the grill in
+> an **INFINITE LOOP**. Coverage is detected by TEXT CONTAINMENT (`web.coverage._covers`). A
+> grilled story worded differently enough to match no bullet leaves coverage unchanged, so the
+> frontier stays put, the grill asks again, produces another non-matching story, and repeats.
+> The user's only exit would be skipping every line by hand.
+
+**The fix must make progress monotonic BY CONSTRUCTION, not by string matching.** The grill has
+to record WHICH bullet a story answers.
+
+**Scope:** the grill targets a specific uncovered bullet (put its `bullet_id` in the question
+context), and on a validated answer the resulting `StarStory` records the `bullet_id` it
+answered (additive contract field, e.g. `StarStory.answers_bullet_id: UUID | None`). Coverage
+then reads that link instead of guessing at text. Only then can `_next_frontier` keep an entry
+while `entry_needs_work(...)` — because every successful turn is guaranteed to retire exactly
+one bullet.
+
+**Acceptance:** a grilled story whose wording matches NO bullet still advances coverage (the
+link, not the text, decides); an entry with N uncovered bullets is retired after at most N
+successful turns; the existing `test_a_grilled_entry_is_still_left_behind_today` in
+`tests/test_coverage.py` is inverted to assert the entry is KEPT.
+
 ### ⬜ CQ-6 — Post-tailor, pre-render editing — and the choice to PERSIST it
 Let the user edit bullets after tailoring but before export, and decide what that edit *means*. This is the
 step where people actually notice the wording is wrong — the JD is in front of them.

@@ -34,6 +34,7 @@ from web.portfolio_store import (
     delete_entry_bullet,
     delete_star_story,
     merge_work_timeline,
+    set_bullet_skipped,
     set_entry_highlight,
     set_grill_frontier,
     update_entry_bullet,
@@ -784,3 +785,92 @@ class TestAcceptBullets:
             accept_bullets(service, app_name=_APP, user_id=_UID, entry_id="x", bullets=[])
             is None
         )
+
+
+class TestSetBulletSkipped:
+    def test_skipping_and_unskipping_a_bullet(self) -> None:
+        service = _service()
+        entry = Entry(type=ExperienceType.PROJECT, title="P", bullets=[Bullet(text="Standups")])
+        _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
+        bid = str(entry.bullets[0].bullet_id)
+
+        set_bullet_skipped(
+            service, app_name=_APP, user_id=_UID, entry_id=str(entry.entry_id),
+            bullet_id=bid, skipped=True,
+        )
+        assert _read_latest(service).work_timeline[0].bullets[0].skipped is True
+
+        set_bullet_skipped(
+            service, app_name=_APP, user_id=_UID, entry_id=str(entry.entry_id),
+            bullet_id=bid, skipped=False,
+        )
+        assert _read_latest(service).work_timeline[0].bullets[0].skipped is False
+
+    def test_re_skipping_an_already_skipped_bullet_is_a_clean_no_op(self) -> None:
+        """Regression (adversarial review): "not found" was detected by comparing the RESULTING
+        lists, so an idempotent replay produced an identical list and was logged as
+        'bullet not found' — poisoning the signal used to debug a real id mismatch.
+        """
+        service = _service()
+        entry = Entry(
+            type=ExperienceType.PROJECT, title="P",
+            bullets=[Bullet(text="Standups", skipped=True)],
+        )
+        _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
+
+        sid = set_bullet_skipped(
+            service, app_name=_APP, user_id=_UID, entry_id=str(entry.entry_id),
+            bullet_id=str(entry.bullets[0].bullet_id), skipped=True,
+        )
+
+        assert sid is not None
+        assert _read_latest(service).work_timeline[0].bullets[0].skipped is True
+
+    def test_returns_none_when_no_session(self) -> None:
+        service = _service()
+        assert (
+            set_bullet_skipped(
+                service, app_name=_APP, user_id=_UID, entry_id="x",
+                bullet_id=str(uuid4()), skipped=True,
+            )
+            is None
+        )
+
+
+class TestEditingDoesNotDemoteAnAcceptedRewrite:
+    def test_fixing_a_typo_in_an_accepted_rewrite_keeps_it_STRENGTHENED(self) -> None:
+        """Adversarial review: correcting a comma looked like LOSING progress.
+
+        update_entry_bullet stamped every edit source=USER, so editing a bullet the user had
+        already accepted from the copywriter flipped its coverage from STRENGTHENED back to
+        UNCOVERED — the entry went from "1 of 1 covered" to "0 of 1" and the "not covered yet"
+        tag reappeared, for a typo fix.
+        """
+        from web.coverage import CoverageState, bullet_state
+
+        service = _service()
+        accepted = Bullet(text="Rebuilt CI, cutting failures 40%", source=BulletSource.GRILLED)
+        entry = Entry(type=ExperienceType.PROJECT, title="P", bullets=[accepted])
+        _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
+
+        update_entry_bullet(
+            service, app_name=_APP, user_id=_UID, entry_id=str(entry.entry_id),
+            bullet_id=str(accepted.bullet_id), new_text="Rebuilt CI, cutting failures 40%.",
+        )
+
+        edited = _read_latest(service).work_timeline[0].bullets[0]
+        assert edited.source is BulletSource.GRILLED  # provenance survives a typo fix
+        assert bullet_state(edited, []) is CoverageState.STRENGTHENED
+
+    def test_editing_a_plain_bullet_still_marks_it_as_the_users_own(self) -> None:
+        service = _service()
+        parsed = Bullet(text="Ran CI", source=BulletSource.PARSED)
+        entry = Entry(type=ExperienceType.PROJECT, title="P", bullets=[parsed])
+        _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
+
+        update_entry_bullet(
+            service, app_name=_APP, user_id=_UID, entry_id=str(entry.entry_id),
+            bullet_id=str(parsed.bullet_id), new_text="Ran the CI pipeline",
+        )
+
+        assert _read_latest(service).work_timeline[0].bullets[0].source is BulletSource.USER

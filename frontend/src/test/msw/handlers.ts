@@ -37,7 +37,9 @@ export const mockPortfolio: PortfolioResponse = {
       dates: "2022–present",
       type_label: "role",
       status_label: "DOCUMENTED",
-      bullets: [{ bullet_id: "bullet-1", text: "Cut p95 latency 40%" }],
+      bullets: [{ bullet_id: "bullet-1", text: "Cut p95 latency 40%", state: "uncovered" }],
+      coverage_label: "0 of 1 covered",
+      is_covered: false,
       stories: [
         {
           situation: "Latency spikes on checkout",
@@ -162,6 +164,7 @@ export const handlers = [
     }),
   ),
   http.post(`${BASE}/api/experience/:id/bullets/accept`, () => new HttpResponse(null, { status: 204 })),
+  http.post(`${BASE}/api/experience/:id/bullet/:bid/skip`, () => new HttpResponse(null, { status: 204 })),
   http.get(`${BASE}/api/key`, () => HttpResponse.json({ has_key: false })),
   http.post(`${BASE}/api/key`, () => new HttpResponse(null, { status: 204 })),
   http.delete(`${BASE}/api/key`, () => new HttpResponse(null, { status: 204 })),
