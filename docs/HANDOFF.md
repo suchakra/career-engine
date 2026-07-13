@@ -26,18 +26,37 @@
 > user still has to do. Coverage now under-reports rather than lies. QUANTIFIED returns in CQ-5b,
 > decided by a LINK, not by prose.
 >
-> ⚠️ **REVIEW RULE UPDATE (2026-07-13): Copilot's premium review quota ran out.** Do NOT merge
-> unreviewed and do NOT self-review — get the adversarial review from a **DIFFERENT MODEL** via the
-> Agent tool (`model: sonnet`, then `model: fable`). On #94 they caught a false-positive that hid
-> the user's outstanding work, a "fix" that broke the opposite case, an edit path that demoted an
-> accepted rewrite, and three tests passing for the wrong reason. See the skill for how to brief them.
+> ✅ **CQ-5b coverage STEERS the grill — SHIPPED + deployed** (#97/#98, contract **v2.11.0**).
+> The grill now aims at a specific uncovered bullet, records which bullet it asked about, and the
+> answer's story records which bullet it ANSWERS. Coverage is decided by that LINK, never by text.
+> Every gate shares one predicate, `entry_still_needs_grilling`. **Pre-v2.11.0 entries are
+> grandfathered** (no linked story = left alone by the automatic gates; an explicit "Grill me about
+> this" still overrides). **The pre-deploy dry-run against the LIVE documents caught this:** without
+> the grandfather, **8 finished entries across the three real portfolios would have been re-opened**
+> and those users marched back through work they had already done. After the fix: 0.
 >
-> 🔴 **THEN, IN ORDER — CQ-5b, then CQ-6** (full specs in [GROOMING.md](GROOMING.md)):
-> - **CQ-5b** — make coverage STEER the grill, safely: the grill must record WHICH bullet a story
->   answers (an additive `StarStory` link), so progress is monotonic BY CONSTRUCTION rather than by
->   string matching. Only then may `_next_frontier` hold an entry until it is covered.
-> - **CQ-6** — post-tailor, pre-render editing with the 3-way persist choice.
-> - ⬜ **CLEAN-1** (non-blocking): rename the store's `a`-prefixed async fns to a `_async` suffix.
+> 🔴 **NEXT — CQ-6** (spec in [GROOMING.md](GROOMING.md)): post-tailor, pre-render editing with the
+> 3-way persist choice (this-résumé-only / new variant / overwrite). Then ⬜ **CLEAN-1** (rename the
+> store's `a`-prefixed async fns to a `_async` suffix).
+>
+> ⚠️ **PLAN REVIEW BEFORE YOU BUILD (Sumanta, 2026-07-13 — "it will save rework").** Hand the plan
+> to a **different model** (`Agent(model="fable")`) for an adversarial pre-execution review *before*
+> writing code — see [the skill](../skills/resume-careerengine/SKILL.md) §3 step 0. On CQ-5b, review
+> came only after the build and found the feature was **completely inert** (coverage was wired into
+> the grill node but not the ROUTER) and that it would have **re-opened every returning user's
+> finished portfolio**. Both were visible in the DESIGN. Reviewing the diff caught them; reviewing
+> the plan would have caught them for free.
+>
+> ⚠️ **REVIEW RULE — Copilot's premium quota is exhausted.** Do NOT merge unreviewed, and do NOT
+> self-review: get the adversarial review from a **DIFFERENT MODEL** via the Agent tool
+> (`model: sonnet`, then `model: fable`) — see [the skill](../skills/resume-careerengine/SKILL.md) §2
+> for how to brief them. **This is not ceremony.** On CQ-5 they found a false positive that silently
+> BURIED the user's outstanding work, a "fix" for it that broke the opposite case, an edit path that
+> demoted an accepted rewrite, and three tests passing for the wrong reason. On CQ-5b they proved the
+> feature was **completely inert** — the grill node held its frontier, but the ROUTER still abandoned
+> the entry — and caught a cross-entry corruption that filed a user's answer under the **WRONG JOB**.
+> The whole suite was green over a feature that did nothing: **green CI proves nothing about a gate
+> the tests never drive.**
 >
 > (superseded list below) — CQ-4, then CQ-5, then CQ-6 (full specs in [GROOMING.md](GROOMING.md)):
 > - **CQ-4 copywriter in the grill.** THE point of all of the above. A résumé bullet is `story.result`

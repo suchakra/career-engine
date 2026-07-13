@@ -61,6 +61,18 @@ anything new.**
 
 For each ticket, in GROOMING order:
 
+0. **PLAN REVIEW FIRST — before you write a line of code.** Write the plan (what you will change,
+   in which files, what each gate/invariant must hold, what could go wrong) and hand it to a
+   **different model** for an adversarial pre-execution review:
+   `Agent(subagent_type="general-purpose", model="fable", run_in_background=false)`.
+   Tell it: the plan's author is an overconfident AI; find the assumption that is false, the code
+   path the plan forgets, and the existing data the plan will break. Demand concrete failure
+   sequences, not opinions.
+   **Why (Sumanta, 2026-07-13 — "it will save rework"):** on CQ-5b the plan was reviewed only
+   AFTER it was built, and the review found the feature was **completely inert** (I wired coverage
+   into the grill node but not into the ROUTER, which still abandoned the entry) and that it would
+   have **re-opened every returning user's finished portfolio**. Both were plan-level errors —
+   visible in the design, not just the diff — and cost a full rebuild. Ask *before* building.
 1. `git checkout master && git pull && git checkout -b feat/<slug>`
 2. Build it. Backend seam → API route → frontend → tests, each with a test that would have
    caught the bug the ticket describes.

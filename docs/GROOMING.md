@@ -135,7 +135,15 @@ supplied bullet should end in one of three terminal states — *quantified* (a m
 bullet is in none of the three terminal states; the Portfolio shows per-entry coverage (e.g. "7 of 12
 covered"), so the user knows what is left rather than guessing.
 
-### ⬜ CQ-5b — Make coverage STEER the grill (the half CQ-5 deliberately did not ship)
+### ✅ CQ-5b — Make coverage STEER the grill  *(SHIPPED — PR #97/#98, contract v2.11.0)*
+> **Shipped:** the grill AIMS at a specific uncovered bullet (the vague "describe a project"
+> opener was the origin of the bug), `grill_bullet_frontier` records which bullet is being asked
+> about, and `StarStory.answers_bullet_id` records which bullet the answer ANSWERS. Coverage's
+> QUANTIFIED is decided by that LINK — no text matching anywhere. Every gate (the router,
+> `_get_frontier_entry`, `_next_frontier`) now shares ONE predicate, `entry_still_needs_grilling`.
+> **Legacy grandfather:** an entry with no linked story predates v2.11.0 and is left alone by the
+> automatic gates (an explicit "Grill me about this" still overrides) — without it, coverage
+> steering would have re-opened every returning user's finished portfolio. Original spec:
 CQ-5 made coverage **visible** (the model, the "7 of 12 covered" label, per-bullet state, and
 the Skip escape hatch) but did **not** wire it into frontier selection. That was not an
 oversight — the obvious wiring is unsafe:
