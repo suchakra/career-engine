@@ -1,9 +1,9 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import { Menu, User } from "lucide-react";
+import { Menu, User, X } from "lucide-react";
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { SidebarNav } from "@/components/SidebarNav";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -117,6 +117,27 @@ export interface AppShellProps {
  */
 function MobileNav(): JSX.Element {
   const [open, setOpen] = useState(false);
+
+  // CLOSE THE DRAWER WHEN THE VIEWPORT CROSSES `md` — do not leave it to CSS.
+  //
+  // `md:hidden` hides the drawer, but hiding is not closing: `open` is React state, and a
+  // modal Radix dialog that is still OPEN keeps `body { pointer-events: none }`, the
+  // body-scroll lock, the focus trap, and `aria-hidden` on the rest of the app. So a phone user
+  // who opens the menu and ROTATES TO LANDSCAPE (every mainstream phone crosses 768px there —
+  // iPhone 14 is 844px on its side) would find the drawer gone and the app visible, scroll
+  // locked, and completely unclickable: the backdrop that dismisses it is now `display:none`,
+  // and there is no keyboard to press Escape. The only way out would be to reload the page —
+  // worse than the bug this component exists to fix, which at least let you type a URL.
+  useEffect(() => {
+    const mql = window.matchMedia("(min-width: 768px)");
+    const sync = (e: MediaQueryListEvent | MediaQueryList): void => {
+      if (e.matches) setOpen(false);
+    };
+    sync(mql); // also covers mounting at desktop width with stale state
+    mql.addEventListener("change", sync);
+    return () => mql.removeEventListener("change", sync);
+  }, []);
+
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger asChild>
@@ -137,15 +158,28 @@ function MobileNav(): JSX.Element {
           aria-describedby={undefined}
           className="fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col gap-6 overflow-y-auto border-r border-border bg-card px-3 py-4 md:hidden"
         >
-          <Dialog.Title asChild>
-            <Link
-              href="/dashboard"
-              onClick={() => setOpen(false)}
-              className="px-3 text-lg font-semibold"
-            >
-              CareerEngine
-            </Link>
-          </Dialog.Title>
+          <div className="flex items-center justify-between gap-2">
+            <Dialog.Title asChild>
+              <Link
+                href="/dashboard"
+                onClick={() => setOpen(false)}
+                className="px-3 text-lg font-semibold"
+              >
+                CareerEngine
+              </Link>
+            </Dialog.Title>
+            {/* A visible way out. Escape needs a keyboard, and the backdrop is an invisible
+                affordance — on a 360px screen it is a 72px strip the user has to guess at. */}
+            <Dialog.Close asChild>
+              <button
+                type="button"
+                aria-label="Close menu"
+                className="flex min-h-tap min-w-tap items-center justify-center rounded-card border border-border"
+              >
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </Dialog.Close>
+          </div>
           {/* Tapping a link must CLOSE the drawer — otherwise the user navigates and is left
               staring at the menu they just used, on top of the page they asked for. */}
           <SidebarNav label="Mobile" onNavigate={() => setOpen(false)} />
