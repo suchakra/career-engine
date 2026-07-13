@@ -39,6 +39,14 @@
 > 3-way persist choice (this-résumé-only / new variant / overwrite). Then ⬜ **CLEAN-1** (rename the
 > store's `a`-prefixed async fns to a `_async` suffix).
 >
+> ⚠️ **PLAN REVIEW BEFORE YOU BUILD (Sumanta, 2026-07-13 — "it will save rework").** Hand the plan
+> to a **different model** (`Agent(model="fable")`) for an adversarial pre-execution review *before*
+> writing code — see [the skill](../skills/resume-careerengine/SKILL.md) §3 step 0. On CQ-5b, review
+> came only after the build and found the feature was **completely inert** (coverage was wired into
+> the grill node but not the ROUTER) and that it would have **re-opened every returning user's
+> finished portfolio**. Both were visible in the DESIGN. Reviewing the diff caught them; reviewing
+> the plan would have caught them for free.
+>
 > ⚠️ **REVIEW RULE — Copilot's premium quota is exhausted.** Do NOT merge unreviewed, and do NOT
 > self-review: get the adversarial review from a **DIFFERENT MODEL** via the Agent tool
 > (`model: sonnet`, then `model: fable`) — see [the skill](../skills/resume-careerengine/SKILL.md) §2
