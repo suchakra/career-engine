@@ -65,7 +65,10 @@ export function ToastProvider({ children }: { children: ReactNode }): JSX.Elemen
       <div
         aria-live="polite"
         aria-atomic="true"
-        className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-full max-w-sm flex-col gap-2"
+        // `w-full` on a FIXED element is 100vw — so with `right-4` the left edge landed at
+        // −16px and every route that toasts had a horizontal scrollbar on a phone, with the
+        // toast itself clipped. Pin both edges instead and let it shrink.
+        className="pointer-events-none fixed inset-x-4 bottom-4 z-50 flex flex-col gap-2 sm:left-auto sm:right-4 sm:w-full sm:max-w-sm"
       >
         {toasts.map((toast) => (
           <div

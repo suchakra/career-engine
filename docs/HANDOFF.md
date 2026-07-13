@@ -76,7 +76,15 @@
 > [GROOMING.md](GROOMING.md). Then ⬜ **CLEAN-2** (`make check` never lints `api/` — the layer where the
 > contract lives, and where the #87 stale-contract bug shipped).
 >
-> Then: ⬜ **CQ-7** bullet variants — **BLOCKED ON A PRODUCT DECISION (ask Sumanta).** GROOMING's third
+> Then: ⬜ **CQ-7** bullet variants — **UNBLOCKED, spec is READY** (Sumanta decided 2026-07-13): an
+> **accordion on the master portfolio** — the master shows only the **Primary** phrasing so the document
+> stays a clean résumé; a bullet with saved variants gets a **▶ and a count badge**; expanding reveals the
+> alternates indented, with **Promote** to make one the new Primary. Full spec + the four rules in
+> [GROOMING.md](GROOMING.md). **The trap to avoid:** a variant must NOT count as its own uncovered bullet,
+> or adding one to a finished entry re-opens it and the grill demands a metric for a line the user just
+> wrote — the CQ-5b failure, and the likeliest way to get this ticket wrong.
+>
+> (superseded) ⬜ **CQ-7** bullet variants — **BLOCKED ON A PRODUCT DECISION (ask Sumanta).** GROOMING's third
 > destination ("persist as a new variant, original kept") is underspecified: a variant is an *alternate
 > phrasing of an existing line*, and there is no model for alternates — so as written it is a button that
 > makes the master list one achievement twice (the exact bug CQ-6a just fixed). **Which phrasing the master

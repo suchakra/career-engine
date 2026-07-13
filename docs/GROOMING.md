@@ -225,23 +225,90 @@ destination, applied to a fully-covered entry, leaves `entry_still_needs_grillin
 False** (drive the ROUTER, not just the pure helper — the CQ-5b lesson); `Track as application` serializes
 the EDITED résumé, not the pre-edit one.
 
-### ⬜ CQ-7 — Bullet VARIANTS (alternate phrasings) — needs a product decision first
-CQ-6 originally had a third destination: *"persist as a new variant — original kept, both available to the
-tailor."* **Deliberately not built**, because as written it is a button that makes the master résumé list the
-same achievement twice — i.e. the exact bug CQ-6a just fixed — and re-opens the entry in the grill.
+### ⬜ CQ-7 — Bullet VARIANTS (alternate phrasings) — READY (product decision made 2026-07-13)
+The third destination CQ-6b deliberately did **not** ship: *"Keep both phrasings."* Building it naively
+would have made the master résumé list the same achievement twice — the exact bug CQ-6a had just fixed —
+and re-opened the entry in the grill. It needed a product decision, and here it is.
 
-A variant is an **alternate phrasing of a line that already exists**, and there is no model for alternates.
-Making it coherent needs answers the code cannot invent:
-- **Which phrasing does the MASTER show?** (Both = redundant. One = which, and how does the user change it?)
-- How does the tailor **choose among alternates** for a given JD? (This is the actual value: let the
-  JD-aware model pick the phrasing that fits *this* posting.)
-- How does **coverage inherit** through the variant link, so adding a variant of a covered line doesn't
-  re-open the entry?
+**The decision (Sumanta, 2026-07-13) — an accordion/folder on the master portfolio:**
+> By default, display the **Primary** (original) phrasing so the document remains readable as a clean
+> résumé. If a bullet has saved variations from *"Keep both phrasings"*, show an expandable arrow ▶ and a
+> small **variant-count badge**. Expanding reveals the alternate phrasings indented underneath, with an
+> option to **promote** any variant to the new Primary.
 
-Needs `Bullet.variant_of` (or a variant-group id), a render rule, a tailor-selection rule, and a coverage
-rule. **Ask the operator before building** — the master-résumé question is a product call.
+This settles the question that blocked it: **the master shows exactly ONE line per achievement — the
+Primary** — so it never gets redundant, and the alternates are discoverable rather than lost.
 
-### ⬜ UX-1 — The app has NO navigation on mobile (+ a responsive audit)
+**Contract (additive, v2.13.0):** `Bullet.variant_of: str = ""` — the `bullet_id` of the Primary this is an
+alternate phrasing OF. A bullet with `variant_of` set is a *variant*; one without is a *Primary*.
+(Distinct from `supersedes`, which REPLACES a line — the original stops existing. A variant coexists.)
+
+**The four rules, so no future change re-litigates them:**
+1. **Render (master + tailored default):** only Primaries. `_entry_lines` filters out any bullet with
+   `variant_of` set. That is what keeps the document clean.
+2. **Promote:** swap the link — the promoted bullet's `variant_of` clears; the old Primary gets
+   `variant_of = <promoted id>`. **Resolved by id**, and it must be *one* store seam so the two writes
+   cannot half-apply. Everything pointing at the achievement (`answers_bullet_id`,
+   `derived_from_story_id`) stays pointed at whichever bullet holds it — so **check what promotion does to
+   those links before building.** (Likely: the group's links live on the Primary and must move with it.)
+3. **Coverage INHERITS through the link.** A variant is an alternate phrasing of an *existing* line, not
+   new material, so it must **not** be counted as its own uncovered bullet — otherwise adding a variant to
+   a finished entry re-opens it and the grill demands a metric for a line the user just wrote. This is the
+   CQ-5b failure and it is the single most likely way to get this ticket wrong. `entry_coverage` counts
+   Primaries only; `bullet_state` on a variant defers to its Primary.
+4. **Tailor:** the catalog offers the Primary *and* its variants as **alternatives for the same
+   achievement** (the actual value of the feature: let the JD-aware model pick the phrasing that fits
+   *this* posting), and the assembler emits **at most one line per variant group** — never a Primary and
+   its variant side by side.
+
+**Scope:** contract v2.13.0 · store seams (add-variant, promote) · `_entry_lines` filter · coverage
+deferral · tailor catalog + one-per-group assembly · Portfolio accordion UI (▶ + count badge + Promote) ·
+re-enable the third destination in the Tailor preview's persist choice (`ResumePreview` currently offers
+two, deliberately — a greyed-out third would have been a promise we hadn't shipped).
+
+**Acceptance:** the master renders ONE line per achievement (the Primary) no matter how many variants
+exist; adding a variant to a fully-covered entry leaves `entry_still_needs_grilling` AND
+`_has_pending_work` **False** (drive the ROUTER, per CQ-5b); promoting swaps Primary/variant by id and the
+master immediately renders the new Primary; the tailored résumé never emits two lines from one variant
+group; a variant's existence never changes the coverage label.
+
+### ⬜ UX-2 — CI cannot verify ANY breakpoint behaviour (needs an authenticated mobile e2e lane)
+**Operator decision required — this asks for an auth bypass in the e2e build.**
+
+UX-1 shipped a mobile nav, but **nothing in CI proves it works on a phone**, and it is important to
+say so rather than let a green suite imply otherwise:
+- **jsdom has no viewport and does not evaluate CSS.** `md:hidden` / `hidden md:flex` are inert class
+  strings there, so *both* navs are in the test DOM at once. The Vitest suite proves the drawer is
+  WIRED (opens, holds the links, Escape closes, focus returns) and that the breakpoint classes are
+  still present — a token check. It cannot prove what a 360px screen actually renders.
+- **The Playwright lane cannot reach any page that has a nav.** Its fake Firebase config resolves to a
+  signed-out session (by design), so every authed route redirects to `/login`, which has no nav. And
+  its only project is `Desktop Chrome` — there is no mobile viewport anywhere in the repo.
+
+**Change:** add a mobile Playwright project (`devices["Pixel 5"]`) and an **e2e-only auth bypass** so a
+test can actually render `AppShell` at 390×844: assert the sidebar is not visible, the hamburger is,
+tapping it reveals the links, and `document.documentElement.scrollWidth <= clientWidth` on every route.
+
+**Why it needs a decision, not just a build:** an auth bypass flag is a security-relevant seam. It must
+be impossible to enable in a production build (the e2e build already uses its own fake Firebase config,
+so the precedent exists), and the deploy workflow must pin it off. **Ask before building.** The
+alternative is to accept that breakpoints are verified by hand, and record that honestly.
+
+### ✅ UX-1 — The app had NO navigation on mobile — SHIPPED (PR #102)
+Hamburger → slide-over drawer rendering the **same** `SidebarNav` (one component, so the desktop nav and
+the mobile nav — including the flagged PREPARE group, §17 — cannot drift). Radix Dialog rather than a
+hand-rolled trap: focus trapping, focus restore, Escape and body-scroll lock are each easy to get subtly
+wrong, and this component stands between a phone user and the entire product.
+
+Review found three more things that broke at 360px **independently of the nav**, all fixed:
+- **The Toast overflowed the viewport.** `w-full` on a `fixed` element is 100vw; with `right-4` its left
+  edge landed at −16px → a horizontal scrollbar on every route that toasts.
+- **The header row could not fit** — title + key chip + identity menu, no wrapping, no `min-w-0` (flex
+  will not shrink a text node below its min-content without it), and now a hamburger too.
+- **There was no `not-found.tsx`**, so a mistyped URL rendered outside the app chrome with no navigation
+  at all — the same "no way back" bug in a different place.
+
+### (superseded spec) — UX-1 — The app has NO navigation on mobile (+ a responsive audit)
 **Not polish — the app is unusable on a phone.** `AppShell` renders the nav in an
 `<aside className="hidden … md:flex">` (`frontend/src/components/AppShell.tsx`), so below 768px the sidebar
 is removed **and nothing replaces it**: no hamburger, no drawer, no bottom bar. The "CareerEngine" home link
