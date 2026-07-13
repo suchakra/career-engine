@@ -338,10 +338,21 @@ async def _aupdate_entry_bullet(
                     entry_id,
                 )
                 return session_id  # no-op: no such bullet
-            # Edit in place: the bullet keeps its id (so anything that supersedes it, or
-            # is superseded by it, stays linked) but is now the user's own wording.
-            updated_bullets[match] = updated_bullets[match].model_copy(
-                update={"text": clean_text, "source": BulletSource.USER}
+            # Edit in place: the bullet keeps its id (so anything that supersedes it, or is
+            # superseded by it, stays linked).
+            #
+            # Provenance is only downgraded to USER if it was not already GRILLED. Fixing a
+            # typo in a rewrite the user ALREADY accepted must not un-deal-with it: stamping
+            # USER there flipped the bullet's coverage back to UNCOVERED and the entry from
+            # "1 of 1 covered" to "0 of 1", so correcting a comma looked like losing progress.
+            current_bullet = updated_bullets[match]
+            source = (
+                BulletSource.GRILLED
+                if current_bullet.source is BulletSource.GRILLED
+                else BulletSource.USER
+            )
+            updated_bullets[match] = current_bullet.model_copy(
+                update={"text": clean_text, "source": source}
             )
             entry = entry.model_copy(update={"bullets": updated_bullets})
             found = True

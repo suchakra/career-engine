@@ -835,3 +835,42 @@ class TestSetBulletSkipped:
             )
             is None
         )
+
+
+class TestEditingDoesNotDemoteAnAcceptedRewrite:
+    def test_fixing_a_typo_in_an_accepted_rewrite_keeps_it_STRENGTHENED(self) -> None:
+        """Adversarial review: correcting a comma looked like LOSING progress.
+
+        update_entry_bullet stamped every edit source=USER, so editing a bullet the user had
+        already accepted from the copywriter flipped its coverage from STRENGTHENED back to
+        UNCOVERED — the entry went from "1 of 1 covered" to "0 of 1" and the "not covered yet"
+        tag reappeared, for a typo fix.
+        """
+        from web.coverage import CoverageState, bullet_state
+
+        service = _service()
+        accepted = Bullet(text="Rebuilt CI, cutting failures 40%", source=BulletSource.GRILLED)
+        entry = Entry(type=ExperienceType.PROJECT, title="P", bullets=[accepted])
+        _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
+
+        update_entry_bullet(
+            service, app_name=_APP, user_id=_UID, entry_id=str(entry.entry_id),
+            bullet_id=str(accepted.bullet_id), new_text="Rebuilt CI, cutting failures 40%.",
+        )
+
+        edited = _read_latest(service).work_timeline[0].bullets[0]
+        assert edited.source is BulletSource.GRILLED  # provenance survives a typo fix
+        assert bullet_state(edited, []) is CoverageState.STRENGTHENED
+
+    def test_editing_a_plain_bullet_still_marks_it_as_the_users_own(self) -> None:
+        service = _service()
+        parsed = Bullet(text="Ran CI", source=BulletSource.PARSED)
+        entry = Entry(type=ExperienceType.PROJECT, title="P", bullets=[parsed])
+        _seed(service, CareerEngineState(reference_date=_REF, work_timeline=[entry]))
+
+        update_entry_bullet(
+            service, app_name=_APP, user_id=_UID, entry_id=str(entry.entry_id),
+            bullet_id=str(parsed.bullet_id), new_text="Ran the CI pipeline",
+        )
+
+        assert _read_latest(service).work_timeline[0].bullets[0].source is BulletSource.USER

@@ -5,18 +5,35 @@ STAR story and move the frontier on — so a user who uploaded a résumé with a
 bullets would have one of them interrogated and the other eleven silently ignored. It would
 happily drill a "favourite project" while the material they actually gave us went untouched.
 
-Every supplied bullet must reach one of three **terminal** states:
+A bullet reaches a **terminal** state when we can say, RELIABLY, that it has been dealt with:
 
-- ``QUANTIFIED``   — a validated STAR story covers it (we got a metric out of it).
-- ``STRENGTHENED`` — it was reworded and the user accepted it (``source="grilled"``), or it
-  was superseded by such a rewrite.
-- ``SKIPPED``      — the user explicitly said it does not matter.
+- ``STRENGTHENED`` — reworded and the user accepted it (``source="grilled"``), or superseded
+  by such a rewrite. Deterministic: we know, because they clicked Keep.
+- ``SKIPPED``      — the user explicitly said it does not matter. Deterministic.
 
-Anything else is ``UNCOVERED``, and an entry with an uncovered bullet is **not done**.
+Anything else is ``UNCOVERED``.
 
-``SKIPPED`` is not a nicety: it is the escape hatch. Without it, insisting on coverage could
-trap a user in an endless grill over a line they never cared about. With it, the grill can be
-demanding *and* always leave them a way out.
+**There is deliberately no QUANTIFIED state yet.** The obvious one — "a validated STAR story's
+result text covers this bullet" — was implemented and then REMOVED, because text matching
+cannot decide it and a wrong answer here is the worst thing this module can do: a false
+QUANTIFIED tells the user a line is handled when it was never grilled, silently burying the
+work that coverage exists to surface. Two adversarial reviews demolished every heuristic tried:
+
+- Bidirectional substring containment marked an untouched "Ran CI" as covered because a
+  *different* story in the same entry said "...so teams ran CI/CD 50% faster".
+- A minimum-length floor did not close it either: "Improved the release process" (4 words) still
+  rode on "Automated deployments in a way that improved the release process, cutting lead 35%".
+- Making it one-directional then permanently un-covered the opposite, equally real case (a
+  terse grilled result can never contain a verbose résumé line).
+- Trailing punctuation — standard résumé style — defeats an exact compare outright.
+
+So coverage under-reports rather than lies: an UNCOVERED bullet may in fact have been grilled.
+That is the honest failure direction, and Skip is always available. **CQ-5b** adds the real fix
+— the grill recording WHICH bullet a story answers — and QUANTIFIED returns with it, decided by
+a link rather than by guessing at prose.
+
+``SKIPPED`` is the escape hatch: it is what will let the grill (once CQ-5b steers it) insist on
+coverage without being able to trap a user on a line they never cared about.
 """
 
 from __future__ import annotations
@@ -28,17 +45,14 @@ from schema import Bullet, BulletSource, Entry, StarStory
 
 
 class CoverageState(StrEnum):
-    """What has become of one bullet. The first three are terminal."""
+    """What has become of one bullet. The first two are terminal."""
 
-    QUANTIFIED = "quantified"
     STRENGTHENED = "strengthened"
     SKIPPED = "skipped"
     UNCOVERED = "uncovered"
 
 
-_TERMINAL = frozenset(
-    {CoverageState.QUANTIFIED, CoverageState.STRENGTHENED, CoverageState.SKIPPED}
-)
+_TERMINAL = frozenset({CoverageState.STRENGTHENED, CoverageState.SKIPPED})
 
 
 @dataclass(frozen=True)
@@ -62,56 +76,21 @@ class EntryCoverage:
         return f"{self.covered} of {self.total} covered"
 
 
-_MIN_TOKENS_FOR_CONTAINMENT = 4
-"""A bullet must be this substantial before substring containment is trusted.
-
-Short, generic lines ("Ran CI", "Led hiring", "Python") turn up as substrings of unrelated
-prose all the time. Without this floor, an entry's OTHER story ("...ran CI/CD pipelines 50%
-faster...") silently marks an untouched "Ran CI" bullet as QUANTIFIED — telling the user a line
-is covered when it was never grilled. A false QUANTIFIED is the worst error this module can
-make: it HIDES outstanding work, which is the very thing coverage exists to surface.
-"""
-
-
-def _covers(story_result: str, bullet_text: str) -> bool:
-    """Does a validated story's result already account for this bullet?
-
-    Exact match always counts. Substring containment only counts for a bullet substantial
-    enough (>= ``_MIN_TOKENS_FOR_CONTAINMENT`` words) that an accidental match is implausible.
-
-    This is deliberately biased toward UNDER-reporting coverage: a false UNCOVERED merely asks
-    the user about something already handled (annoying, recoverable), while a false QUANTIFIED
-    hides work they still need to do (silent, and the opposite of this module's purpose).
-
-    Text matching is a stopgap. **CQ-5b** replaces it with a real link — the grill recording
-    WHICH bullet a story answers — at which point this heuristic goes away entirely.
-    """
-    a = " ".join(story_result.split()).casefold()
-    b = " ".join(bullet_text.split()).casefold()
-    if not a or not b:
-        return False
-    if a == b:
-        return True
-    if len(b.split()) < _MIN_TOKENS_FOR_CONTAINMENT:
-        return False  # too short to trust a substring hit
-    return b in a
-
-
 def bullet_state(
     bullet: Bullet, stories: list[StarStory], *, superseded: set[str] | None = None
 ) -> CoverageState:
-    """Classify ONE bullet. See the module docstring for what each state means."""
+    """Classify ONE bullet. Only states we can determine RELIABLY are reported.
+
+    ``stories`` is accepted (and currently unused) so the signature is ready for CQ-5b, which
+    adds the story→bullet link that makes a trustworthy QUANTIFIED possible.
+    """
     if bullet.skipped:
         return CoverageState.SKIPPED
     if bullet.source is BulletSource.GRILLED:
         return CoverageState.STRENGTHENED
     if superseded is not None and str(bullet.bullet_id) in superseded:
-        # It was replaced by an accepted rewrite — the achievement survives in that bullet.
+        # Replaced by an accepted rewrite — the achievement survives in that bullet.
         return CoverageState.STRENGTHENED
-    if any(
-        s.metrics_validated and _covers(s.result, bullet.text) for s in stories
-    ):
-        return CoverageState.QUANTIFIED
     return CoverageState.UNCOVERED
 
 

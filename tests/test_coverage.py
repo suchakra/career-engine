@@ -23,24 +23,7 @@ def _story(entry: Entry, result: str, *, validated: bool = True) -> StarStory:
 
 
 class TestBulletState:
-    def test_a_bullet_a_validated_story_covers_is_QUANTIFIED(self) -> None:
-        entry = _entry(Bullet(text="Rebuilt the CI pipeline on Kubernetes"))
-        story = _story(
-            entry, "Rebuilt the CI pipeline on Kubernetes, cutting deploy failures 40%"
-        )
 
-        assert bullet_state(entry.bullets[0], [story]) is CoverageState.QUANTIFIED
-
-    def test_an_UNVALIDATED_story_does_not_count_as_quantified(self) -> None:
-        """No metric was actually extracted — the line is still outstanding."""
-        entry = _entry(Bullet(text="Rebuilt the CI pipeline on Kubernetes"))
-        story = _story(
-            entry,
-            "Rebuilt the CI pipeline on Kubernetes, cutting failures 40%",
-            validated=False,
-        )
-
-        assert bullet_state(entry.bullets[0], [story]) is CoverageState.UNCOVERED
 
     def test_an_accepted_rewrite_is_STRENGTHENED(self) -> None:
         bullet = Bullet(text="Rebuilt CI, cutting failures 40%", source=BulletSource.GRILLED)
@@ -56,48 +39,36 @@ class TestBulletState:
     def test_an_untouched_bullet_is_UNCOVERED(self) -> None:
         assert bullet_state(Bullet(text="Ran the platform"), []) is CoverageState.UNCOVERED
 
-    def test_a_SHORT_bullet_is_not_falsely_marked_covered_by_an_unrelated_story(self) -> None:
-        """A false QUANTIFIED is the worst error this module can make — it HIDES work.
+    def test_a_grilled_story_does_NOT_mark_a_bullet_covered_by_TEXT(self) -> None:
+        """There is deliberately no QUANTIFIED-by-text-matching state — it lied.
 
-        Regression (adversarial review): containment was trusted at any length, so a short,
-        generic line was a substring of unrelated prose and got marked covered. Here the entry
-        has a DIFFERENT achievement that was genuinely grilled, whose result happens to contain
-        the words "ran ci" — the untouched "Ran CI" bullet must NOT ride on it.
+        Two adversarial reviews broke every heuristic: bidirectional containment let an
+        untouched "Ran CI" ride on a *different* story ("...teams ran CI/CD 50% faster"); a
+        4-word floor still let "Improved the release process" ride on a story containing that
+        phrase; going one-directional then permanently un-covered verbose bullets. A false
+        QUANTIFIED buries work the user still has to do, so coverage now UNDER-reports instead
+        of lying. CQ-5b brings QUANTIFIED back, decided by a link rather than by prose.
         """
         entry = _entry(Bullet(text="Ran CI"))
-        unrelated = _story(entry, "Rebuilt the release process so teams ran CI/CD 50% faster")
+        story = _story(entry, "Rebuilt releases so teams ran CI/CD 50% faster")
 
-        assert bullet_state(entry.bullets[0], [unrelated]) is CoverageState.UNCOVERED
+        assert bullet_state(entry.bullets[0], [story]) is CoverageState.UNCOVERED
 
-    def test_a_SUBSTANTIAL_bullet_is_still_matched_by_containment(self) -> None:
-        """The floor must not break the case containment exists for."""
-        entry = _entry(Bullet(text="Rebuilt the CI pipeline on Kubernetes"))
-        story = _story(
-            entry, "Rebuilt the CI pipeline on Kubernetes, cutting deploy failures 40%"
-        )
 
-        assert bullet_state(entry.bullets[0], [story]) is CoverageState.QUANTIFIED
 
-    def test_an_exact_match_counts_however_short(self) -> None:
-        entry = _entry(Bullet(text="Ran CI"))
-
-        assert bullet_state(entry.bullets[0], [_story(entry, "Ran CI")]) is CoverageState.QUANTIFIED
 
 
 class TestEntryCoverage:
     def test_the_label_tells_the_user_what_is_LEFT(self) -> None:
         entry = _entry(
-            Bullet(text="Rebuilt the CI pipeline on Kubernetes"),
+            Bullet(text="Rebuilt CI, cutting failures 40%", source=BulletSource.GRILLED),
             Bullet(text="Hired and mentored six platform engineers"),
             Bullet(text="Attended standups", skipped=True),
         )
-        story = _story(
-            entry, "Rebuilt the CI pipeline on Kubernetes, cutting deploy failures 40%"
-        )
 
-        coverage = entry_coverage(entry, [story])
+        coverage = entry_coverage(entry, [])
 
-        assert coverage.label == "2 of 3 covered"  # quantified + skipped; one left
+        assert coverage.label == "2 of 3 covered"  # strengthened + skipped; one left
         assert not coverage.is_complete
         assert coverage.uncovered_bullet_ids == [str(entry.bullets[1].bullet_id)]
 
@@ -125,26 +96,19 @@ class TestEntryNeedsWork:
     def test_a_GRILLED_entry_with_untouched_bullets_STILL_needs_work(self) -> None:
         """THE bug. One story used to be enough to abandon an entry with 11 lines left."""
         entry = _entry(
-            Bullet(text="Rebuilt the CI pipeline on Kubernetes"),
-            *[Bullet(text=f"Untouched line number {i} of the résumé") for i in range(11)],
-        )
-        story = _story(
-            entry, "Rebuilt the CI pipeline on Kubernetes, cutting deploy failures 40%"
+            Bullet(text="Rebuilt CI 40% faster", source=BulletSource.GRILLED),
+            *[Bullet(text=f"Untouched line number {i}") for i in range(11)],
         )
 
-        assert entry_needs_work(entry, [story]) is True
+        assert entry_needs_work(entry, []) is True
 
     def test_an_entry_whose_every_bullet_is_terminal_is_done(self) -> None:
         entry = _entry(
-            Bullet(text="Rebuilt the CI pipeline on Kubernetes"),
+            Bullet(text="Rebuilt CI 40% faster", source=BulletSource.GRILLED),
             Bullet(text="Attended standups", skipped=True),
-            Bullet(text="Hired six", source=BulletSource.GRILLED),
-        )
-        story = _story(
-            entry, "Rebuilt the CI pipeline on Kubernetes, cutting deploy failures 40%"
         )
 
-        assert entry_needs_work(entry, [story]) is False
+        assert entry_needs_work(entry, []) is False
 
     def test_an_entry_with_no_bullets_has_nothing_to_COVER(self) -> None:
         """Coverage is strictly about supplied material.
@@ -181,8 +145,8 @@ class TestFrontierIsNotYetCoverageDriven:
         assert _next_frontier([rich, other], "") == str(other.entry_id)
 
 
-def test_coverage_survives_a_state_round_trip() -> None:
-    """`skipped` is additive (v2.10.0) — a document without it defaults to False."""
+def test_a_legacy_document_defaults_skipped_to_False() -> None:
+    """`skipped` is additive (v2.10.0) — a document without the key must still load."""
     legacy = {
         "reference_date": "2026-07-12",
         "work_timeline": [
@@ -193,6 +157,22 @@ def test_coverage_survives_a_state_round_trip() -> None:
             }
         ],
     }
+
     state = CareerEngineState.model_validate(legacy)
 
     assert state.work_timeline[0].bullets[0].skipped is False
+
+
+def test_skipped_actually_SURVIVES_a_dump_and_reload() -> None:
+    """The previous version of this test never round-tripped — it only checked a default.
+
+    (Adversarial review.) What matters is that a skip the user made is still there after the
+    state is persisted and read back; otherwise the escape hatch quietly leaks.
+    """
+    entry = _entry(Bullet(text="Attended standups", skipped=True), Bullet(text="Ran CI"))
+    state = CareerEngineState(reference_date="2026-07-12", work_timeline=[entry])
+
+    reloaded = CareerEngineState.model_validate(state.model_dump(mode="json"))
+
+    assert [b.skipped for b in reloaded.work_timeline[0].bullets] == [True, False]
+    assert entry_coverage(reloaded.work_timeline[0], []).label == "1 of 2 covered"

@@ -135,6 +135,8 @@ def _superseded(entry: Entry) -> set[str]:
 
 def _entry_card(entry: Entry, stories: list[StarStory]) -> EntryCard:
     """Map one Entry + its stories into a display-ready EntryCard."""
+    superseded = _superseded(entry)
+    coverage = entry_coverage(entry, stories)
     return EntryCard(
         entry_id=str(entry.entry_id),
         title=entry.title,
@@ -146,13 +148,13 @@ def _entry_card(entry: Entry, stories: list[StarStory]) -> EntryCard:
             BulletCard(
                 bullet_id=str(b.bullet_id),
                 text=b.text,
-                state=str(bullet_state(b, stories, superseded=_superseded(entry)).value),
+                state=str(bullet_state(b, stories, superseded=superseded).value),
             )
             for b in entry.bullets
-            if str(b.bullet_id) not in _superseded(entry)
+            if str(b.bullet_id) not in superseded
         ],
-        coverage_label=entry_coverage(entry, stories).label,
-        is_covered=entry_coverage(entry, stories).is_complete,
+        coverage_label=coverage.label,
+        is_covered=coverage.is_complete,
         stories=[
             StoryCard(
                 situation=s.situation,
