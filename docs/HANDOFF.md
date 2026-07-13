@@ -15,7 +15,33 @@
 >   per-entry grill buffers, and clears `pending_user_answer` (else the next turn attaches a story to the
 >   WRONG role). UI arms a confirm first. (#91)
 >
-> 🔴 **NEXT — CQ-4, then CQ-5, then CQ-6** (full specs in [GROOMING.md](GROOMING.md)):
+> 🟡 **PR #94 (CQ-5) IS OPEN AND AWAITING COPILOT REVIEW — finish it FIRST.**
+> CI is green (830 backend / 38 frontend). It was NOT merged because **Copilot never reviewed it**
+> (three requests over ~20 min returned nothing — almost certainly the premium-review quota was
+> exhausted). The merge rule is absolute: no merge without a Copilot review. **Re-request
+> (`gh pr edit 94 --add-reviewer copilot-pull-request-reviewer`), wait, address every comment,
+> resolve the threads, merge, then deploy qa.**
+>
+> ✅ **CQ-4 copywriter — SHIPPED + deployed** (PR #93). Bullets are now WRITTEN, not scraped from
+> `story.result`. One model call per entry; the prompt carries the full S/T/A/R; rule #1 is NEVER
+> INVENT. Proposals are shown against their originals and the user accepts / edits / rejects each —
+> so no unreviewed prose can reach a PDF, and because accepted text PERSISTS, résumé export needs
+> **no model call at all**. An accepted rewrite supersedes its original by id.
+>
+> 🟡 **CQ-5 coverage — HALF shipped in #94 (open).** It makes coverage VISIBLE (the model, the
+> "7 of 12 covered" label, per-bullet state, and the Skip escape hatch; `Bullet.skipped`, additive,
+> **contract v2.10.0**). It deliberately does NOT let coverage steer the grill —
+> **see CQ-5b: doing that naively traps the grill in an INFINITE LOOP**, because coverage is matched
+> by TEXT CONTAINMENT and a story worded differently enough to match no bullet never advances it.
+>
+> 🔴 **THEN, IN ORDER — CQ-5b, then CQ-6** (full specs in [GROOMING.md](GROOMING.md)):
+> - **CQ-5b** — make coverage STEER the grill, safely: the grill must record WHICH bullet a story
+>   answers (an additive `StarStory` link), so progress is monotonic BY CONSTRUCTION rather than by
+>   string matching. Only then may `_next_frontier` hold an entry until it is covered.
+> - **CQ-6** — post-tailor, pre-render editing with the 3-way persist choice.
+> - ⬜ **CLEAN-1** (non-blocking): rename the store's `a`-prefixed async fns to a `_async` suffix.
+>
+> (superseded list below) — CQ-4, then CQ-5, then CQ-6 (full specs in [GROOMING.md](GROOMING.md)):
 > - **CQ-4 copywriter in the grill.** THE point of all of the above. A résumé bullet is `story.result`
 >   VERBATIM (`web/resume_builder._bullet_for`) — there is **no copywriting stage at all**, and we collect
 >   full S/T/A/R then discard S, T and A at render. It is a missing STAGE: a prompt + workflow node, NOT an
