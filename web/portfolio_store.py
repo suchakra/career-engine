@@ -22,6 +22,7 @@ async clients). Do NOT call these from an async context.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 
 from google.adk.events import Event, EventActions
 from google.adk.sessions import BaseSessionService
@@ -281,6 +282,21 @@ async def _adelete_star_story(
     return session_id
 
 
+@dataclass(frozen=True)
+class AddedBullet:
+    """What an add produced. ``bullet_id`` is ``""`` when the add was a no-op.
+
+    The caller needs the id, not just "it worked" (CQ-6b): a client that overwrites a
+    story-derived résumé line must be able to RE-IDENTIFY that line as the bullet it just
+    created. Without the id it still believes the line is story-backed, so the user's *next*
+    edit of their own text takes the create path again — and is rejected as a duplicate. They
+    would be locked out of fixing a typo they had just introduced.
+    """
+
+    session_id: str
+    bullet_id: str = ""
+
+
 async def _aadd_entry_bullet(
     session_service: BaseSessionService,
     *,
@@ -288,20 +304,28 @@ async def _aadd_entry_bullet(
     user_id: str,
     entry_id: str,
     text: str,
-) -> str | None:
+    derived_from_story_id: str = "",
+) -> AddedBullet | None:
     """Append a new bullet to an entry on the canonical session.
 
     The twin of :func:`_aupdate_entry_bullet` (which only REPLACES an existing bullet):
     lets the user add a line to an experience they already have, without re-grilling it.
     An empty/whitespace-only ``text`` is a no-op so we never persist a blank bullet, and
-    a missing entry logs a warning rather than raising. Returns the session_id, or
-    ``None`` if the user has no session.
+    a missing entry logs a warning rather than raising. Returns ``None`` if the user has no
+    session.
+
+    ``derived_from_story_id`` (v2.12.0, CQ-6) marks the new bullet as *the résumé line for
+    that story*, so the assembler renders it INSTEAD of the raw ``story.result``. This is how
+    the user overwrites a line the grill wrote but the copywriter never polished. **The caller
+    must validate the story** (exists, belongs to this entry, is metrics_validated) — an
+    unvalidated link would let any bullet be born marked-as-covered, which is the false
+    QUANTIFIED that AD-18.5 calls the worst error coverage can make.
     """
     clean_text = text.strip()
+    session_id = web_session_id(user_id)
     if not clean_text:
         logger.warning("add_entry_bullet: empty bullet for entry %s ignored", entry_id)
-        return web_session_id(user_id)  # no-op: refuse to persist a blank bullet
-    session_id = web_session_id(user_id)
+        return AddedBullet(session_id)  # no-op: refuse to persist a blank bullet
     existing = await session_helpers.get_session_state_if_exists(
         session_service=session_service,
         app_name=app_name,
@@ -310,17 +334,21 @@ async def _aadd_entry_bullet(
     )
     if existing is None:
         return None
+    new_bullet = Bullet(
+        text=clean_text,
+        source=BulletSource.USER,
+        derived_from_story_id=derived_from_story_id,
+    )
     found = False
     new_timeline: list[Entry] = []
     for entry in existing.work_timeline:
         if str(entry.entry_id) == entry_id:
-            new_bullet = Bullet(text=clean_text, source=BulletSource.USER)
             entry = entry.model_copy(update={"bullets": [*entry.bullets, new_bullet]})
             found = True
         new_timeline.append(entry)
     if not found:
         logger.warning("add_entry_bullet: entry %s not found", entry_id)
-        return session_id  # no-op: entry not found
+        return AddedBullet(session_id)  # no-op: entry not found
     await _patch_session(
         session_service,
         app_name=app_name,
@@ -331,7 +359,7 @@ async def _aadd_entry_bullet(
             "contract_version": CONTRACT_VERSION,
         },
     )
-    return session_id
+    return AddedBullet(session_id, str(new_bullet.bullet_id))
 
 
 async def _aupdate_entry_bullet(
@@ -544,12 +572,14 @@ def add_entry_bullet(
     user_id: str,
     entry_id: str,
     text: str,
-) -> str | None:
+    derived_from_story_id: str = "",
+) -> AddedBullet | None:
     """Append a new bullet to an experience (sync bridge).
 
     The twin of :func:`update_entry_bullet`, which can only replace an existing one. An
     empty/whitespace-only ``text`` or a missing entry is a logged no-op (never raises).
-    Returns the session_id, or ``None`` if the user has no session.
+    Returns the :class:`AddedBullet` (session_id + the new bullet's id), or ``None`` if the
+    user has no session.
     """
     return run_async(
         _aadd_entry_bullet(
@@ -558,6 +588,7 @@ def add_entry_bullet(
             user_id=user_id,
             entry_id=entry_id,
             text=text,
+            derived_from_story_id=derived_from_story_id,
         )
     )
 

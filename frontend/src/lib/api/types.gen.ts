@@ -499,6 +499,16 @@ export interface paths {
          *
          *     Like the PATCH twin below, the bridge treats a missing entry as a logged no-op, so
          *     the 404 fires only when the user has no discovery session at all.
+         *
+         *     With ``derived_from_story_id`` (CQ-6b) the new bullet becomes *the résumé line for that
+         *     story*, and the assembler renders it instead of the raw ``story.result``. That link is
+         *     validated HERE, because the store cannot: the story must exist, **belong to this entry**,
+         *     and be ``metrics_validated`` (422 otherwise) — a bullet born with an unearned link would
+         *     read as covered without ever having been grilled, the false QUANTIFIED that AD-18.5 calls
+         *     the worst error coverage can make. And a story that ALREADY has a live bullet speaking for
+         *     it is a **409**: the client is acting on a stale preview (someone accepted a copywriter
+         *     rewrite of this very line meanwhile), and minting a second bullet claiming the same story
+         *     would put the achievement on the résumé twice.
          */
         post: operations["add_bullet_api_experience__entry_id__bullet_post"];
         delete?: never;
@@ -895,6 +905,25 @@ export interface components {
         BulletAddRequest: {
             /** Text */
             text: string;
+            /**
+             * Derived From Story Id
+             * @default
+             */
+            derived_from_story_id: string;
+        };
+        /**
+         * BulletAddResponse
+         * @description The id of the bullet just created.
+         *
+         *     The client NEEDS this, not merely a 204 (CQ-6b). After overwriting a story-derived
+         *     résumé line, the client must re-identify that line as the bullet it just created —
+         *     otherwise it still thinks the line is story-backed, the user's *next* edit takes the
+         *     create path again, and it is rejected as a duplicate. They would be locked out of fixing
+         *     a typo they had just introduced.
+         */
+        BulletAddResponse: {
+            /** Bullet Id */
+            bullet_id: string;
         };
         /**
          * BulletCardResponse
@@ -2311,11 +2340,13 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            204: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["BulletAddResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

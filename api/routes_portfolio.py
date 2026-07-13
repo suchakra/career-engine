@@ -18,6 +18,8 @@ missing story is an idempotent no-op that still returns the session id → 204.
 
 from __future__ import annotations
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, Response
 from starlette.concurrency import run_in_threadpool
 
@@ -25,6 +27,7 @@ from api.deps import get_current_user_id, get_discovery_session, get_session_ser
 from api.schemas import (
     AcceptBulletsRequest,
     BulletAddRequest,
+    BulletAddResponse,
     BulletEditRequest,
     BulletSkipRequest,
     CopyProposalResponse,
@@ -47,6 +50,7 @@ from web.portfolio_store import (
     set_grill_frontier,
     update_entry_bullet,
 )
+from web.session_loader import atry_load_latest_discovery_state
 
 router = APIRouter()
 
@@ -93,19 +97,61 @@ async def highlight_entry(
     return Response(status_code=204)
 
 
-@router.post("/api/experience/{entry_id}/bullet", status_code=204)
+@router.post("/api/experience/{entry_id}/bullet", status_code=201)
 async def add_bullet(
     entry_id: str,
     body: BulletAddRequest,
     session_service: FirestoreSessionService = Depends(get_session_service),
     user_id: str = Depends(get_current_user_id),
-) -> Response:
+) -> BulletAddResponse:
     """Append a new bullet to an experience — add a line without re-grilling the entry.
 
     Like the PATCH twin below, the bridge treats a missing entry as a logged no-op, so
     the 404 fires only when the user has no discovery session at all.
+
+    With ``derived_from_story_id`` (CQ-6b) the new bullet becomes *the résumé line for that
+    story*, and the assembler renders it instead of the raw ``story.result``. That link is
+    validated HERE, because the store cannot: the story must exist, **belong to this entry**,
+    and be ``metrics_validated`` (422 otherwise) — a bullet born with an unearned link would
+    read as covered without ever having been grilled, the false QUANTIFIED that AD-18.5 calls
+    the worst error coverage can make. And a story that ALREADY has a live bullet speaking for
+    it is a **409**: the client is acting on a stale preview (someone accepted a copywriter
+    rewrite of this very line meanwhile), and minting a second bullet claiming the same story
+    would put the achievement on the résumé twice.
     """
     app_name = get_settings().app_name
+    if body.derived_from_story_id:
+        state = await atry_load_latest_discovery_state(
+            session_service,
+            app_name=app_name,
+            user_id=user_id,
+            reference_date=date.today().isoformat(),
+        )
+        entry = next(
+            (e for e in state.work_timeline if str(e.entry_id) == entry_id), None
+        )
+        story = next(
+            (
+                s
+                for s in state.extracted_star_stories
+                if str(s.story_id) == body.derived_from_story_id
+            ),
+            None,
+        )
+        if entry is None or story is None or story.entry_id != entry_id:
+            raise HTTPException(
+                status_code=422, detail="Unknown story for this experience."
+            )
+        if not story.metrics_validated:
+            raise HTTPException(
+                status_code=422, detail="That story has no validated metric."
+            )
+        if any(b.derived_from_story_id == body.derived_from_story_id for b in entry.bullets):
+            raise HTTPException(
+                status_code=409,
+                detail="This line has already been rewritten elsewhere. Reload to see it.",
+            )
+
     result = await run_in_threadpool(
         add_entry_bullet,
         session_service,
@@ -113,10 +159,17 @@ async def add_bullet(
         user_id=user_id,
         entry_id=entry_id,
         text=body.text,
+        derived_from_story_id=body.derived_from_story_id,
     )
     if result is None:
         raise HTTPException(status_code=404, detail="No active session.")
-    return Response(status_code=204)
+    if not result.bullet_id:
+        # The store treats an unknown entry as a logged no-op. Reporting that as 201-with-an-
+        # empty-id would tell the client its overwrite succeeded: it would show "saved to
+        # portfolio", offer an Undo that deletes nothing, and hide the fact that the entry had
+        # been removed in another tab — exactly the stale-preview case the 409 exists for.
+        raise HTTPException(status_code=404, detail="No such experience.")
+    return BulletAddResponse(bullet_id=result.bullet_id)
 
 
 @router.patch("/api/experience/{entry_id}/bullet", status_code=204)

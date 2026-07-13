@@ -51,13 +51,30 @@
 > **defined as "the lines the master would render"** — one function, so it cannot drift from the document.
 > Design: [ARCHITECTURE §18.7 (AD-18.6)](ARCHITECTURE.md).
 >
-> 🔴 **NEXT — CQ-6b** (spec in [GROOMING.md](GROOMING.md)): the editable Tailor preview itself, with a
-> **2-way** persist choice — *this résumé only* (client-side; also the only home for edits to the
-> model-written summary/skills) and *overwrite* (in-place `PATCH` when the line has a `bullet_id`;
-> otherwise POST a bullet carrying `derived_from_story_id`).
-> **Do NOT use `supersedes` for overwrite** — it mints a new `source=USER` bullet, which coverage reads as
-> UNCOVERED, so the router **re-opens the finished entry** and the grill demands a number for the line the
-> user just polished. GROOMING/AD-18.4 originally prescribed `supersedes`; both are now amended.
+> ✅ **CQ-6b — the Tailor preview is EDITABLE — SHIPPED** (PR #101). Each edit carries a destination:
+> *this résumé only* (client-side — export and track-as-application both serialize the résumé held in
+> `useTailor`, so editing that object IS the implementation; also the only home for an edit to the
+> model-written summary) and *overwrite* (in-place `PATCH` when the line has a `bullet_id`; otherwise
+> POST a bullet carrying `derived_from_story_id`). **`supersedes` is NOT used** — it mints a new
+> `source=USER` bullet, which coverage reads as UNCOVERED, so the router re-opens the finished entry and
+> the grill demands a number for the line the user just polished. GROOMING/AD-18.4 originally prescribed
+> `supersedes`; both are amended.
+>
+> ⚠️ **The undo nearly shipped as a LIE.** Two reviews independently found it: `previous` was read off the
+> *preview* line, which a "this résumé only" edit has already changed. So reword-for-the-JD → later
+> overwrite → undo would **write the JD-specific wording into the master résumé**, with the true original
+> gone. Undo left the user *worse off than not undoing*. Also: the line key was identity-derived
+> (`bullet_id || story_id`), so it CHANGED the moment a line adopted its new bullet id — the rollback then
+> matched no line (while the toast claimed success), and the line kept pointing at a **deleted** bullet, so
+> every later overwrite silently PATCHed a dead id and wrote nothing, forever. Fixed with a server-truth
+> snapshot, **positional** line keys, and an undo **per line** (not one page-level slot).
+>
+> 🔴 **NEXT — ⬜ UX-1: the app has NO navigation on mobile.** Reported from the field
+> (*"in mobile the left menu never shows up"*). `AppShell`'s sidebar is `hidden … md:flex` with **nothing**
+> replacing it below 768px — no hamburger, no drawer — and the home link lives *inside* that hidden
+> `<aside>`. On a phone **no route is reachable at all** except by typing a URL. Spec in
+> [GROOMING.md](GROOMING.md). Then ⬜ **CLEAN-2** (`make check` never lints `api/` — the layer where the
+> contract lives, and where the #87 stale-contract bug shipped).
 >
 > Then: ⬜ **CQ-7** bullet variants — **BLOCKED ON A PRODUCT DECISION (ask Sumanta).** GROOMING's third
 > destination ("persist as a new variant, original kept") is underspecified: a variant is an *alternate

@@ -459,6 +459,30 @@ class BulletAddRequest(_StrictModel):
     text: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)
     ]
+    derived_from_story_id: str = ""
+    """Mark the new bullet as the résumé line FOR this story (v2.12.0, CQ-6b).
+
+    Set when the user overwrites a line the grill wrote but the copywriter never polished:
+    the assembler then renders this bullet instead of the raw ``story.result``. The route
+    validates the story (exists · belongs to this entry · ``metrics_validated``) — an
+    unvalidated link would let a bullet be born marked-as-covered without ever having been
+    grilled, which is the false QUANTIFIED that AD-18.5 calls coverage's worst error.
+
+    Deliberately absent from ``BulletEditRequest``: the link is settable only at CREATION.
+    """
+
+
+class BulletAddResponse(_StrictModel):
+    """The id of the bullet just created.
+
+    The client NEEDS this, not merely a 204 (CQ-6b). After overwriting a story-derived
+    résumé line, the client must re-identify that line as the bullet it just created —
+    otherwise it still thinks the line is story-backed, the user's *next* edit takes the
+    create path again, and it is rejected as a duplicate. They would be locked out of fixing
+    a typo they had just introduced.
+    """
+
+    bullet_id: str
 
 
 class BulletEditRequest(_StrictModel):

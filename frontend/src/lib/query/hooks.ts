@@ -294,22 +294,33 @@ export function useHighlightEntry(): UseMutationResult<
   });
 }
 
-/** Append a new bullet to an experience — add a line without re-grilling the entry. */
+/** Append a new bullet to an experience — add a line without re-grilling the entry.
+ *
+ * Returns the new bullet's id. The caller needs it when the bullet was created to speak for
+ * a STAR story (`derived_from_story_id`, CQ-6b): the line it just overwrote is now backed by
+ * this bullet, and a client that doesn't adopt the id would try to create a *second* bullet
+ * for the same story on the user's next edit — and be refused.
+ */
 export function useAddBullet(): UseMutationResult<
-  void,
+  { bullet_id: string },
   unknown,
-  { entryId: string; text: string }
+  { entryId: string; text: string; derivedFromStoryId?: string }
 > {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   return useMutation({
-    mutationFn: ({ entryId, text }) =>
-      apiFetch<void>(`/api/experience/${entryId}/bullet`, {
+    mutationFn: ({ entryId, text, derivedFromStoryId }) =>
+      apiFetch<{ bullet_id: string }>(`/api/experience/${entryId}/bullet`, {
         method: "POST",
-        body: { text },
+        // Only send the link when there is one — an ordinary "add a line" must not claim to
+        // speak for a story it knows nothing about.
+        body: derivedFromStoryId
+          ? { text, derived_from_story_id: derivedFromStoryId }
+          : { text },
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.portfolio });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
       showToast("Bullet added.", "success");
     },
     onError: () => showToast("Couldn't add that bullet — try again.", "error"),
