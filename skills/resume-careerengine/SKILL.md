@@ -33,11 +33,18 @@ anything new.**
   - Find unresolved threads (GraphQL, substituting the repo you are in):
     `gh api graphql -f query='{ repository(owner:"{owner}", name:"{repo}") { pullRequest(number:{N}) { reviewThreads(first:30) { nodes { id isResolved path } } } } }'`
   - Resolve: `gh api graphql -f query='mutation { resolveReviewThread(input:{threadId:"{thread_id}"}) { thread { isResolved } } }'`
-- **Merging + deploying qa is authorized** without asking, *provided* Copilot reviewed first.
-  `gh pr edit {N} --add-reviewer copilot-pull-request-reviewer`, then **wait**. If that errors
-  (the bot's login varies), fall back to:
-  `gh api repos/{owner}/{repo}/pulls/{N}/requested_reviewers -X POST -f 'reviewers[]=copilot-pull-request-reviewer[bot]'`
-  (the `[bot]` suffix — this is the form `skills/wait-for-pr-review` documents for the API call).
+- **Merging + deploying qa is authorized** without asking, *provided the PR got an adversarial
+  review first*. The review is the CONDITION of the merge authority, not a nicety.
+  - Preferred: **Copilot** — `gh pr edit {N} --add-reviewer copilot-pull-request-reviewer`, then
+    **wait**. If that errors, use
+    `gh api repos/{owner}/{repo}/pulls/{N}/requested_reviewers -X POST -f 'reviewers[]=copilot-pull-request-reviewer[bot]'`.
+  - **If Copilot does not review** (its premium quota runs out — this HAS happened): do **not**
+    merge unreviewed, and do **not** self-review. Get the review from a **DIFFERENT MODEL** via
+    the Agent tool (`model: sonnet`, then `model: fable` for a second pass). Give it the diff, tell
+    it the author is an overconfident AI, tell it to attack specific claims, and demand concrete
+    failing inputs. This is not a formality — on PR #94 the two of them found a false-positive
+    that silently HID the user's outstanding work, a fix that broke the opposite case, and three
+    tests passing for the wrong reason. Treat every finding as real until you disprove it.
   (`{N}` = the PR number; `{owner}`/`{repo}` = the repo you are in — substitute, don't run literally.)
 - **`dev` is BLOCKADED.** Never deploy there without an explicit go-ahead
   (`-f confirm_dev_cutover=true`). It is Kaggle-visible and holds real user data.

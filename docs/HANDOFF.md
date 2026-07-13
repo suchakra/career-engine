@@ -15,24 +15,22 @@
 >   per-entry grill buffers, and clears `pending_user_answer` (else the next turn attaches a story to the
 >   WRONG role). UI arms a confirm first. (#91)
 >
-> 🟡 **PR #94 (CQ-5) IS OPEN AND AWAITING COPILOT REVIEW — finish it FIRST.**
-> CI is green (830 backend / 38 frontend). It was NOT merged because **Copilot never reviewed it**
-> (three requests over ~20 min returned nothing — almost certainly the premium-review quota was
-> exhausted). The merge rule is absolute: no merge without a Copilot review. **Re-request
-> (`gh pr edit 94 --add-reviewer copilot-pull-request-reviewer`), wait, address every comment,
-> resolve the threads, merge, then deploy qa.**
+> ✅ **CQ-4 copywriter — SHIPPED + deployed** (#93). Bullets are WRITTEN, not scraped from
+> `story.result`. Human-validated, so export needs **no model call**.
 >
-> ✅ **CQ-4 copywriter — SHIPPED + deployed** (PR #93). Bullets are now WRITTEN, not scraped from
-> `story.result`. One model call per entry; the prompt carries the full S/T/A/R; rule #1 is NEVER
-> INVENT. Proposals are shown against their originals and the user accepts / edits / rejects each —
-> so no unreviewed prose can reach a PDF, and because accepted text PERSISTS, résumé export needs
-> **no model call at all**. An accepted rewrite supersedes its original by id.
+> ✅ **CQ-5 coverage — SHIPPED + deployed** (#94, contract **v2.10.0**). Coverage the user can SEE:
+> a "7 of 12 covered" label, per-bullet state, "not covered yet", and Skip/Unskip. `Bullet.skipped`
+> is additive (old docs default to False — no migration).
+> **There is deliberately NO `QUANTIFIED` state.** It was built and then DELETED: text matching
+> cannot decide whether a story covers a bullet, and a false QUANTIFIED silently BURIES work the
+> user still has to do. Coverage now under-reports rather than lies. QUANTIFIED returns in CQ-5b,
+> decided by a LINK, not by prose.
 >
-> 🟡 **CQ-5 coverage — HALF shipped in #94 (open).** It makes coverage VISIBLE (the model, the
-> "7 of 12 covered" label, per-bullet state, and the Skip escape hatch; `Bullet.skipped`, additive,
-> **contract v2.10.0**). It deliberately does NOT let coverage steer the grill —
-> **see CQ-5b: doing that naively traps the grill in an INFINITE LOOP**, because coverage is matched
-> by TEXT CONTAINMENT and a story worded differently enough to match no bullet never advances it.
+> ⚠️ **REVIEW RULE UPDATE (2026-07-13): Copilot's premium review quota ran out.** Do NOT merge
+> unreviewed and do NOT self-review — get the adversarial review from a **DIFFERENT MODEL** via the
+> Agent tool (`model: sonnet`, then `model: fable`). On #94 they caught a false-positive that hid
+> the user's outstanding work, a "fix" that broke the opposite case, an edit path that demoted an
+> accepted rewrite, and three tests passing for the wrong reason. See the skill for how to brief them.
 >
 > 🔴 **THEN, IN ORDER — CQ-5b, then CQ-6** (full specs in [GROOMING.md](GROOMING.md)):
 > - **CQ-5b** — make coverage STEER the grill, safely: the grill must record WHICH bullet a story
