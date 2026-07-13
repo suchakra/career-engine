@@ -9,6 +9,20 @@ You are picking up autonomous work on CareerEngine, possibly after a session res
 **no memory of the previous session**. Everything you need is on disk. Do not ask the
 operator what to do next — the answer is in the docs. Just start.
 
+## 0. ONE TICKET = ONE FRESH SESSION (Sumanta, 2026-07-13 — do not drift from this)
+
+**Start a new session for every ticket.** When a ticket is merged, deployed, and its docs are
+reconciled, **stop and end the session** — do not roll straight into the next ticket in the same
+thread.
+
+This is the whole point of `docs/HANDOFF.md`, and it had stopped being used as designed: tickets
+were being chained in one enormous thread, so by ticket #3 the context was mostly the archaeology
+of tickets #1 and #2. **A cold session that reads HANDOFF costs a fraction of turn #400 in a
+1M-token thread, and it reasons better** — it sees the ticket, not the debris.
+
+The obligation this creates: **HANDOFF must be true before you stop** (§4). If the banner is
+wrong, the next cold session starts wrong. The handoff *is* the deliverable, not a chore after it.
+
 ## 1. Orient (in this order, always)
 
 1. `docs/HANDOFF.md` — the **"👉 YOU ARE HERE"** banner is the resume point. It names the
@@ -33,19 +47,25 @@ anything new.**
   - Find unresolved threads (GraphQL, substituting the repo you are in):
     `gh api graphql -f query='{ repository(owner:"{owner}", name:"{repo}") { pullRequest(number:{N}) { reviewThreads(first:30) { nodes { id isResolved path } } } } }'`
   - Resolve: `gh api graphql -f query='mutation { resolveReviewThread(input:{threadId:"{thread_id}"}) { thread { isResolved } } }'`
-- **Merging + deploying qa is authorized** without asking, *provided the PR got an adversarial
-  review first*. The review is the CONDITION of the merge authority, not a nicety.
-  - Preferred: **Copilot** — `gh pr edit {N} --add-reviewer copilot-pull-request-reviewer`, then
-    **wait**. If that errors, use
-    `gh api repos/{owner}/{repo}/pulls/{N}/requested_reviewers -X POST -f 'reviewers[]=copilot-pull-request-reviewer[bot]'`.
-  - **If Copilot does not review** — concretely: **no review after ~3 requests over ~20 minutes**
-    (its premium quota runs out; this HAS happened) — do **not**
-    merge unreviewed, and do **not** self-review. Get the review from a **DIFFERENT MODEL** via
-    the Agent tool (`model: sonnet`, then `model: fable` for a second pass). Give it the diff, tell
-    it the author is an overconfident AI, tell it to attack specific claims, and demand concrete
-    failing inputs. This is not a formality — on PR #94 the two of them found a false-positive
-    that silently HID the user's outstanding work, a fix that broke the opposite case, and three
-    tests passing for the wrong reason. Treat every finding as real until you disprove it.
+- **Merging + deploying qa is authorized** without asking, *provided the PR got its reviews*
+  (§3 step 0 plan review + §3 step 5 diff review). The reviews are the CONDITION of the merge
+  authority, not a nicety.
+- **The review budget — ONE diff review, not two (Sumanta, 2026-07-13).** The waste was never the
+  reviewer, it was the *redundancy*, plus letting a reviewer re-audit the whole repo from scratch.
+  - **Plan review stays exactly as it is (§3 step 0) — do not touch it.** It is the cheapest,
+    highest-leverage step we have: short input, high value. It killed the `_covers` deletion (would
+    have double-listed every existing user's résumé), the CQ-5b re-open bug, and the CQ-6b undo
+    design — all *before any code existed*.
+  - **Diff review: exactly one, `model: opus`, with a TIGHT BRIEF.** Hand it (a) the diff, (b) the
+    **3–5 specific risks you are actually worried about**, and (c) an explicit instruction: *do not
+    re-derive repo context, do not audit unrelated code, answer the named risks and anything that
+    would break a user*. An unbriefed reviewer spends its budget rediscovering the codebase.
+  - **Escalate to a SECOND reviewer only when the PR touches persisted state, auth, or money** —
+    the places where a miss is *unrecoverable*. A rendering bug can be fixed next deploy; a
+    migration that mangles a real portfolio cannot.
+  - Copilot is no longer part of the loop (premium quota exhausted). Do not wait on it.
+  - Still true regardless of count: **never self-review**, treat every finding as real until you
+    disprove it, and tell the reviewer the author is an overconfident AI.
   (`{N}` = the PR number; `{owner}`/`{repo}` = the repo you are in — substitute, don't run literally.)
 - **`dev` is BLOCKADED.** Never deploy there without an explicit go-ahead
   (`-f confirm_dev_cutover=true`). It is Kaggle-visible and holds real user data.
@@ -79,23 +99,25 @@ For each ticket, in GROOMING order:
 3. Gate (both lanes). Fix everything.
 4. Commit with a message that explains **why**, not just what. Push, open a PR whose body
    states the failure being fixed.
-5. **Get an adversarial review and WAIT for it.** Request Copilot; if no review lands after ~3
-   requests over ~20 minutes, fall back to a **different-model** review via the Agent tool (§2).
-   Address every comment, reply on each thread, resolve them. **Never merge with an open thread,
-   and never self-review.**
+5. **ONE adversarial diff review — `model: opus`, tight brief** (§2). Give it the diff + the 3–5
+   risks you are actually worried about + "do not re-derive repo context". Address every finding,
+   reply on each thread, resolve them. **Never merge with an open thread, and never self-review.**
+   A second reviewer only if the PR touches **persisted state, auth, or money**.
 6. Merge when CI is green *and* zero threads are unresolved.
 7. Deploy qa: `gh workflow run deploy.yml --ref master -f environment=qa`, wait, verify
    `/api/health` and the new routes in the served `/openapi.json`.
-8. **Update `docs/HANDOFF.md` + `docs/PROGRESS.md` before moving on** — that is what makes
-   the *next* cold start work. Docs go through a PR too.
+8. **Update `docs/HANDOFF.md` + `docs/PROGRESS.md`, then STOP — end the session** (§0). Do not
+   start the next ticket in this thread. The banner you leave behind is what the next cold session
+   runs on.
 
-## 4. Before you stop (or run out of budget)
+## 4. Before you stop — and you STOP at the end of every ticket (§0)
 
 Leave the tree **clean** and the docs **true**:
 - Commit or push everything; no half-edits.
 - `docs/HANDOFF.md`'s banner must name the next action precisely enough that a session with
   zero memory can continue from it.
 - If a PR is open and mid-review, say so in the banner with its number.
+- Then **end the session**. The next ticket starts cold, from HANDOFF. That is the design.
 
 ## 5. Deployment / qa facts
 

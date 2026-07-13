@@ -67,8 +67,13 @@ export function ToastProvider({ children }: { children: ReactNode }): JSX.Elemen
         aria-atomic="true"
         // `w-full` on a FIXED element is 100vw — so with `right-4` the left edge landed at
         // −16px and every route that toasts had a horizontal scrollbar on a phone, with the
-        // toast itself clipped. Pin both edges instead and let it shrink.
-        className="pointer-events-none fixed inset-x-4 bottom-4 z-50 flex flex-col gap-2 sm:left-auto sm:right-4 sm:w-full sm:max-w-sm"
+        // toast itself clipped. Pin both edges instead and let it shrink. (`sm:max-w-sm` is
+        // load-bearing: it is what stops `sm:w-full` becoming 100vw again. Don't "simplify" it.)
+        //
+        // `z-[60]` puts it above the mobile nav drawer (`z-50`). They used to tie, and a portal
+        // appends AFTER the toast container in the DOM — so the drawer won, and at 360px it
+        // covered ~83% of any toast that fired while the menu was open.
+        className="pointer-events-none fixed inset-x-4 bottom-4 z-[60] flex flex-col gap-2 sm:left-auto sm:right-4 sm:w-full sm:max-w-sm"
       >
         {toasts.map((toast) => (
           <div

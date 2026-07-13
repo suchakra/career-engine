@@ -69,12 +69,21 @@
 > every later overwrite silently PATCHed a dead id and wrote nothing, forever. Fixed with a server-truth
 > snapshot, **positional** line keys, and an undo **per line** (not one page-level slot).
 >
-> 🔴 **NEXT — ⬜ UX-1: the app has NO navigation on mobile.** Reported from the field
-> (*"in mobile the left menu never shows up"*). `AppShell`'s sidebar is `hidden … md:flex` with **nothing**
-> replacing it below 768px — no hamburger, no drawer — and the home link lives *inside* that hidden
-> `<aside>`. On a phone **no route is reachable at all** except by typing a URL. Spec in
-> [GROOMING.md](GROOMING.md). Then ⬜ **CLEAN-2** (`make check` never lints `api/` — the layer where the
-> contract lives, and where the #87 stale-contract bug shipped).
+> ✅ **UX-1 — the app had NO navigation on a phone — SHIPPED + deployed to qa** (PR #102, merged
+> `3967a2a`). Reported from the field (*"in mobile the left menu never shows up"*): `AppShell`'s sidebar was
+> `hidden … md:flex` with **nothing** replacing it below 768px, and the home link lived *inside* that hidden
+> `<aside>` — on a phone **no route was reachable at all** except by typing a URL. Now: hamburger + drawer,
+> plus a `not-found.tsx` that isn't a dead end.
+>
+> ⚠️ **The review caught a showstopper that would have FROZEN the app.** Rotate the phone to landscape with
+> the drawer open and the CSS hid the drawer while React still held it **open**: the scrim kept
+> `pointer-events: none` over the page and the scroll lock stayed on — **no way out but reloading the tab**.
+> The lesson is the one this file keeps re-learning: *hiding a thing in CSS does not close it in state.*
+> Fixed (state closes on the breakpoint change, not just the paint) and **mutation-tested** — delete the
+> guard and a test goes red.
+>
+> 🔴 **NEXT — ⬜ CLEAN-2** (`make check` never lints `api/` — the layer where the contract lives, and where
+> the #87 stale-contract bug shipped), then ⬜ **CQ-7** (spec ready, below).
 >
 > Then: ⬜ **CQ-7** bullet variants — **UNBLOCKED, spec is READY** (Sumanta decided 2026-07-13): an
 > **accordion on the master portfolio** — the master shows only the **Primary** phrasing so the document
@@ -119,16 +128,30 @@
 > finished portfolio**. Both were visible in the DESIGN. Reviewing the diff caught them; reviewing
 > the plan would have caught them for free.
 >
-> ⚠️ **REVIEW RULE — Copilot's premium quota is exhausted.** Do NOT merge unreviewed, and do NOT
-> self-review: get the adversarial review from a **DIFFERENT MODEL** via the Agent tool
-> (`model: sonnet`, then `model: fable`) — see [the skill](../skills/resume-careerengine/SKILL.md) §2
-> for how to brief them. **This is not ceremony.** On CQ-5 they found a false positive that silently
-> BURIED the user's outstanding work, a "fix" for it that broke the opposite case, an edit path that
-> demoted an accepted rewrite, and three tests passing for the wrong reason. On CQ-5b they proved the
-> feature was **completely inert** — the grill node held its frontier, but the ROUTER still abandoned
-> the entry — and caught a cross-entry corruption that filed a user's answer under the **WRONG JOB**.
-> The whole suite was green over a feature that did nothing: **green CI proves nothing about a gate
-> the tests never drive.**
+> ⚠️ **REVIEW RULE — ONE diff review, not two (Sumanta, 2026-07-13).** Copilot is out of the loop
+> (premium quota exhausted); do NOT merge unreviewed and do NOT self-review. But the old two-model diff
+> review (`sonnet` *then* `fable`) is **retired** — the waste was never the reviewer, it was the
+> **redundancy** plus letting a reviewer re-audit the whole repo from cold.
+> - **Diff review: exactly one, `model: opus`, TIGHTLY BRIEFED.** Hand it the diff + the **3–5 specific
+>   risks you are actually worried about** + *"do not re-derive repo context, do not audit unrelated
+>   code."* An unbriefed reviewer burns its budget rediscovering the codebase.
+> - **A second reviewer ONLY when the PR touches persisted state, auth, or money** — where a miss is
+>   *unrecoverable*. A rendering bug is fixable next deploy; a migration that mangles a real portfolio
+>   is not.
+> - Briefing instructions: [the skill](../skills/resume-careerengine/SKILL.md) §2.
+>
+> **The review itself is not ceremony** — that is why one survives. On CQ-5 it found a false positive that
+> silently BURIED the user's outstanding work, a "fix" that broke the opposite case, and three tests passing
+> for the wrong reason. On CQ-5b it proved the feature was **completely inert** (the grill node held its
+> frontier; the ROUTER still abandoned the entry) and caught a cross-entry corruption filing a user's answer
+> under the **WRONG JOB**. On UX-1 it caught the landscape-rotation freeze. **Green CI proves nothing about a
+> gate the tests never drive.**
+>
+> 🧊 **ONE TICKET = ONE FRESH SESSION (Sumanta, 2026-07-13 — we were not doing this).** When a ticket is
+> merged, deployed, and its docs are reconciled: **STOP and end the session.** Do not chain the next ticket
+> into the same thread. **This file is what makes that cheap** — a cold session that reads HANDOFF costs a
+> fraction of turn #400 in a 1M-token thread and reasons better, because it sees the ticket instead of the
+> archaeology of the two before it. The obligation: **this banner must be TRUE before you stop.**
 >
 > (superseded list below) — CQ-4, then CQ-5, then CQ-6 (full specs in [GROOMING.md](GROOMING.md)):
 > - **CQ-4 copywriter in the grill.** THE point of all of the above. A résumé bullet is `story.result`
