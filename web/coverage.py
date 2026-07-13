@@ -8,8 +8,13 @@ happily drill a "favourite project" while the material they actually gave us wen
 A bullet reaches a **terminal** state when we can say — from a FACT, never a guess — that it
 has been dealt with:
 
-- ``QUANTIFIED``   — a validated STAR story records this bullet's id in ``answers_bullet_id``.
-  The grill was asking about THIS line and the user answered it. A **link**, not a text match.
+- ``QUANTIFIED``   — a validated STAR story records this bullet's id in ``answers_bullet_id``:
+  the grill was asking about THIS line, and a metric came back. A **link**, not a text match.
+  (Honestly stated: the link records what the grill ASKED about. A user who is asked about
+  "Ran CI" and answers with a metric about something else still retires that line. That is a
+  far weaker failure than the text heuristic's — it needs the user to answer off-topic, and
+  they can always re-open the line by editing it — but it is not omniscience, and this module
+  should not pretend otherwise.)
 - ``STRENGTHENED`` — reworded and the user accepted it (``source="grilled"``), or superseded by
   such a rewrite. We know, because they clicked Keep.
 - ``SKIPPED``      — the user explicitly said it does not matter.
@@ -84,7 +89,8 @@ class EntryCoverage:
 def bullet_state(
     bullet: Bullet, stories: list[StarStory], *, superseded: set[str] | None = None
 ) -> CoverageState:
-    """Classify ONE bullet. Every state here is determined by a FACT, never by a guess."""
+    """Classify ONE bullet. Every state is determined by a RECORDED EVENT, never by guessing
+    at prose. See the module docstring for the one honest caveat on QUANTIFIED."""
     if bullet.skipped:
         return CoverageState.SKIPPED
     if bullet.source is BulletSource.GRILLED:

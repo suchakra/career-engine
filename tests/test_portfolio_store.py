@@ -179,6 +179,39 @@ class TestSetGrillFrontier:
         assert state.grill_frontier == str(entry.entry_id)
         assert state.current_question == ""
 
+    def test_pinning_a_new_entry_clears_the_PREVIOUS_entrys_grill_state(self) -> None:
+        """Otherwise the user's answer is filed under the WRONG JOB.
+
+        Found by adversarial review, and it needs no race — just the ordinary API sequence:
+        POST /api/grill {action:"answer"} records the answer WITHOUT running the graph, then
+        the user pins entry B from the Portfolio, then the stream runs the turn. The answer
+        (about entry A) was committed as a story on entry B, carrying answers_bullet_id of a
+        bullet that belongs to entry A — a cross-entry coverage link marking the wrong line
+        covered.
+        """
+        service = _service()
+        a = Entry(type=ExperienceType.PROJECT, title="A", bullets=[Bullet(text="line")])
+        b = Entry(type=ExperienceType.PROJECT, title="B")
+        _seed(
+            service,
+            CareerEngineState(
+                reference_date=_REF,
+                work_timeline=[a, b],
+                grill_frontier=str(a.entry_id),
+                grill_bullet_frontier=str(a.bullets[0].bullet_id),
+                current_question="What did that save?",
+                pending_user_answer="We cut latency 40%",
+            ),
+        )
+
+        set_grill_frontier(service, app_name=_APP, user_id=_UID, entry_id=str(b.entry_id))
+
+        state = _read_latest(service)
+        assert state.grill_frontier == str(b.entry_id)
+        assert state.current_question == ""
+        assert state.pending_user_answer == ""  # must not be consumed as B's answer
+        assert state.grill_bullet_frontier == ""  # must not link B's story to A's bullet
+
     def test_returns_none_when_no_session(self) -> None:
         service = _service()
         result = set_grill_frontier(

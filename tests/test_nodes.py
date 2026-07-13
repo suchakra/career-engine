@@ -33,6 +33,7 @@ from models.registry import (
     set_registry,
 )
 from schema import (
+    Bullet,
     Capability,
     CareerEngineState,
     Entry,
@@ -1432,3 +1433,95 @@ class TestFrontierPrioritization:
         nodes._apply_entry_status_rules([cert, job], "2026-06-29")
         assert cert.status == EntryStatus.SUMMARIZED  # recorded, not grilled for metrics
         assert job.status == EntryStatus.NEEDS_QUANTIFYING  # real work still grilled
+
+
+class TestCoverageSteersTheGrill:
+    """CQ-5b, through the REAL production path.
+
+    The first cut of this shipped green with 839 tests over a feature that did not work: the
+    grill node held its frontier on an uncovered entry, but the ROUTER and `_get_frontier_entry`
+    were still status-only, so the run finalized anyway and the entry was abandoned. The tests
+    only exercised helpers. These go through the router and the node.
+    """
+
+    def _entry_with(self, n: int) -> Entry:
+        return Entry(
+            title="Staff Engineer",
+            org="Acme",
+            status=EntryStatus.GRILLED,  # already "done" by the OLD status-only rule
+            bullets=[Bullet(text=f"line {i}") for i in range(n)],
+        )
+
+    def test_the_router_does_not_FINALIZE_an_entry_with_uncovered_lines(self) -> None:
+        """The gate that made the whole feature inert."""
+        from workflows.discovery_graph import _has_pending_work
+
+        entry = self._entry_with(3)
+        state = CareerEngineState(work_timeline=[entry], current_phase=PhaseStatus.GRILLING)
+
+        assert _has_pending_work(state) is True  # 3 lines nobody has dealt with
+
+    def test_the_router_DOES_finalize_once_every_line_is_dealt_with(self) -> None:
+        """Steering must terminate."""
+        from workflows.discovery_graph import _has_pending_work
+
+        entry = Entry(
+            title="Staff Engineer",
+            status=EntryStatus.GRILLED,
+            bullets=[Bullet(text="line", skipped=True)],
+        )
+        state = CareerEngineState(work_timeline=[entry])
+
+        assert _has_pending_work(state) is False
+
+    def test_the_frontier_picker_accepts_a_PINNED_uncovered_entry(self) -> None:
+        """'Grill me about this' was a no-op on exactly the entries the UI pointed users at."""
+        from workflows.nodes import _get_frontier_entry
+
+        pinned = self._entry_with(2)
+        other = Entry(title="Side project", status=EntryStatus.NEEDS_QUANTIFYING)
+        state = CareerEngineState(
+            work_timeline=[pinned, other], grill_frontier=str(pinned.entry_id)
+        )
+
+        picked = _get_frontier_entry(state)
+
+        assert picked is not None
+        assert picked.entry_id == pinned.entry_id  # not silently swapped for `other`
+
+    def test_a_story_retires_the_bullet_the_grill_ASKED_about(self) -> None:
+        """The link is written by the node, not just by the test helpers.
+
+        No test asserted this before — `answers_bullet_id` appeared only in the coverage unit
+        tests and the version string, which is how a broken feature stayed green.
+        """
+        from web.coverage import CoverageState, bullet_state
+
+        entry = self._entry_with(2)
+        target = entry.bullets[0]
+        state = CareerEngineState(
+            reference_date="2026-07-13",
+            work_timeline=[entry],
+            grill_frontier=str(entry.entry_id),
+            grill_bullet_frontier=str(target.bullet_id),
+            current_question="What did that save?",
+            pending_user_answer="It cut deploy failures by 40%",
+            current_phase=PhaseStatus.GRILLING,
+        )
+        client = ScriptedClient(
+            responses={
+                "data extraction assistant": json.dumps(
+                    {"result": "Cut deploy failures 40%", "metrics_found": True, "pillar": "delivery"}
+                )
+            }
+        )
+        _install_client(client)
+
+        result = execute_grill_turn_node(state)
+
+        assert isinstance(result, CareerEngineState)
+        [story] = result.extracted_star_stories
+        assert story.answers_bullet_id == str(target.bullet_id)  # THE LINK
+        assert bullet_state(target, [story]) is CoverageState.QUANTIFIED
+        # …and the grill stays on this entry, because a second line is still outstanding.
+        assert result.grill_frontier == str(entry.entry_id)
