@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
+import sys
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -29,8 +31,10 @@ from setuptools import find_packages
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-# Vendored or generated trees — not our source, never gated.
-PRUNED_DIRS: frozenset[str] = frozenset({"node_modules", "__pycache__", "dist", "build"})
+# Vendored, generated, or local-environment trees — not our source, never gated.
+PRUNED_DIRS: frozenset[str] = frozenset(
+    {"node_modules", "__pycache__", "dist", "build", "venv", "env", ".tox", "site-packages"}
+)
 
 # Source roots deliberately left out of the gate. Empty on purpose: an exemption must show
 # up as a visible diff with a reason, never as a silent skip.
@@ -85,12 +89,29 @@ def _source_modules() -> set[str]:
     return {path.stem for path in REPO_ROOT.glob("*.py")}
 
 
+def _src_dirs_raw() -> list[str]:
+    """The raw SRC_DIRS entries, as ruff and mypy receive them on the command line."""
+    makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+    matches = re.findall(r"^SRC_DIRS\s*[:?+]?=\s*(.+)$", makefile, re.MULTILINE)
+    assert matches, "No SRC_DIRS assignment in the Makefile — was it renamed?"
+    # A later re-assignment silently wins in make. One list, or the parse below is a lie.
+    assert len(matches) == 1, f"SRC_DIRS is assigned {len(matches)} times — make uses the last"
+    entries: list[str] = matches[0].split()
+    return entries
+
+
 def _src_dirs() -> set[str]:
     """The SRC_DIRS list that ``make lint`` and ``make typecheck`` hand to ruff and mypy."""
+    return {entry.rstrip("/").removesuffix(".py") for entry in _src_dirs_raw()}
+
+
+def _gate_recipes() -> str:
+    """The bodies of the `lint` and `typecheck` targets."""
     makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
-    match = re.search(r"^SRC_DIRS\s*[:?+]?=\s*(.+)$", makefile, re.MULTILINE)
-    assert match is not None, "No SRC_DIRS assignment in the Makefile — was it renamed?"
-    return {entry.rstrip("/").removesuffix(".py") for entry in match.group(1).split()}
+    bodies = re.findall(r"^(?:lint|typecheck):.*\n((?:\t.*\n)+)", makefile, re.MULTILINE)
+    assert len(bodies) == 2, f"Expected `lint` and `typecheck` targets, found {len(bodies)}"
+    joined: str = "".join(bodies)
+    return joined
 
 
 def _setuptools_config() -> dict[str, Any]:
@@ -139,6 +160,50 @@ def test_the_parsers_are_not_vacuous() -> None:
     assert "config" in _distributed_modules(), "pyproject's py-modules parsed to something wrong"
     assert _source_dirs() >= {"api", "web"}, "source-root discovery is not finding the repo"
     assert _source_modules() >= {"config"}, "module discovery is not finding the repo"
+
+
+def test_the_gate_targets_actually_use_src_dirs() -> None:
+    """A perfect SRC_DIRS is worthless if the recipe that runs ruff ignores it.
+
+    Every assertion in this file reasons about SRC_DIRS. If `lint:` hardcoded its own list
+    of directories, SRC_DIRS could name every package on disk while ruff checked a subset —
+    CLEAN-2 again, one layer up, with this file's tests all green.
+    """
+    recipes = _gate_recipes()
+    assert recipes.count("$(SRC_DIRS)") == 2, (
+        "`lint` and `typecheck` must both run over $(SRC_DIRS). One of them is using a "
+        "hardcoded path list, so what this file checks is not what the gate checks."
+    )
+
+
+def test_the_linters_do_not_exclude_a_source_root() -> None:
+    """Ask ruff what it would actually check — don't trust the config to be honest.
+
+    Today an `extend-exclude` cannot hide a source root, because ruff ignores exclusions for
+    paths named explicitly on the command line and `make lint` names them (verified: a real
+    error in an "excluded" api/ is still caught). But `force-exclude = true` — a stock
+    setting, and what pre-commit users reach for — flips exactly that, at which point a
+    one-line pyproject edit could silently drop this layer again while SRC_DIRS still names
+    it. This test asks the tool what it would really check, so that edit fails loudly.
+    """
+    completed = subprocess.run(
+        [sys.executable, "-m", "ruff", "check", "--show-files", *_src_dirs_raw()],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    checked = {
+        Path(line).resolve().relative_to(REPO_ROOT).parts[0]
+        for line in completed.stdout.splitlines()
+        if line.strip()
+    }
+    assert checked, f"ruff reported no files at all: {completed.stderr.strip()}"
+    skipped = (_source_dirs() | _source_modules()) - {name.removesuffix(".py") for name in checked}
+    assert not skipped, (
+        f"ruff would not check {sorted(skipped)} even though SRC_DIRS names them — an "
+        f"`exclude` / `extend-exclude` in pyproject.toml is overriding the gate."
+    )
 
 
 def test_every_source_root_is_linted_and_typechecked() -> None:
