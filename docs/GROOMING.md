@@ -352,8 +352,12 @@ they diverge. Python-only, Node-free, so it lives in the `make check` lane that 
 Then decide whether `types.gen.ts` needs the same treatment (it is generated *from* `openapi.json`, so
 gating the source may be enough).
 
-**Care:** the comparison must be stable — key order, and any dict the app builds fresh per process. If
-it flaps, it will be deleted within a week and the hole reopens.
+**Care:** the comparison must be stable — key order, and any dict the app builds fresh per process. If it
+flaps, it will be deleted within a week and the hole reopens. `app.openapi()` is cached and
+route-insertion-ordered, so it is deterministic per code version. **Known gotcha, verified against the repo:**
+the committed artefact ends in a trailing newline (the gen script uses `print`), so it equals
+`json.dumps(app.openapi())` byte-for-byte *except* for that `\n` — compare **parsed JSON**
+(`json.loads(committed) == app.openapi()`), not raw strings, or the first run fails for the wrong reason.
 
 ### ✅ CLEAN-2 — `make check` did not lint `api/` AT ALL — SHIPPED (PR #103)
 `SRC_DIRS` omitted `api/`, so ruff never ran over the FastAPI layer — every route and every wire DTO.
