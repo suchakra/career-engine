@@ -47,7 +47,7 @@ def load_plugins(app: FastAPI) -> list[str]:
         try:
             register = entry.load()
             register(app)
-        except Exception as exc:  # noqa: BLE001 — isolate a broken plugin from the core
+        except Exception as exc:  # isolate a broken plugin from the core
             # Preserve the "a broken plugin can't crash the core" guarantee, but log it
             # so "plugin present but broken" is distinguishable from "no plugins".
             _log.warning(

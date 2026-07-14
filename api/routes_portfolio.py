@@ -41,11 +41,11 @@ from web.copywriter import accept as accept_proposal
 from web.copywriter import copywrite_entry
 from web.portfolio_store import (
     accept_bullets,
-    set_bullet_skipped,
     add_entry_bullet,
     delete_entry,
     delete_entry_bullet,
     delete_star_story,
+    set_bullet_skipped,
     set_entry_highlight,
     set_grill_frontier,
     update_entry_bullet,
