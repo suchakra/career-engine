@@ -21,7 +21,7 @@ Presentation/transport over the existing deterministic résumé assembly + rende
   back the résumé it got from ``/api/tailor`` or a master résumé) rather than a cached
   ``GET``. Adding server-side caching would be new persistence infra (deferred).
 
-Async discipline (mirrors 10.2–10.4): the sync model call + renderers run in a
+Async discipline (mirrors 10.2-10.4): the sync model call + renderers run in a
 threadpool so the event loop never blocks.
 """
 

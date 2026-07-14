@@ -17,8 +17,11 @@ VENV_DIR    ?= .venv
 VENV_PYTHON  = $(VENV_DIR)/bin/python
 VENV_PIP     = $(VENV_DIR)/bin/pip
 
-# Source roots that ruff and mypy should check
-SRC_DIRS    = config.py schema.py main.py models/ auth/ database/ discovery/ tools/ workflows/ integration/ cli/ jobs/ web/ evaluation/ tests/
+# Source roots that ruff and mypy should check.
+# Every top-level Python package belongs here — tests/test_gate_coverage.py fails if one
+# is missing. `api/` was absent until CLEAN-2, so the FastAPI layer (every route and wire
+# DTO — where the contract lives) was never linted.
+SRC_DIRS    = config.py schema.py main.py models/ auth/ api/ database/ discovery/ tools/ workflows/ integration/ cli/ jobs/ web/ evaluation/ tests/
 
 # ── Environment setup ─────────────────────────────────────────────────────────
 

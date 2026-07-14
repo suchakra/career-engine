@@ -31,7 +31,7 @@ class VerifiedIdentity:
             the claims is retained.
     """
 
-    __slots__ = ("user_id", "email")
+    __slots__ = ("email", "user_id")
 
     def __init__(self, user_id: str, email: str | None) -> None:
         """Store the verified user id and optional display email."""

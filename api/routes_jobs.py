@@ -83,6 +83,6 @@ async def dismiss_company(
     """
     try:
         await run_in_threadpool(ledger_store.add_rejected_company, user_id, body.company)
-    except Exception as exc:  # noqa: BLE001 — transport boundary: any store fault → 502
+    except Exception as exc:  # transport boundary: any store fault becomes a 502
         raise HTTPException(status_code=502, detail="Couldn't record the dismissal.") from exc
     return Response(status_code=204)

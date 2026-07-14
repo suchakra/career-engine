@@ -53,6 +53,11 @@ dev = [
     # Testing
     "pytest==9.1.1",
     "pytest-asyncio==1.4.0",
+    # tests/test_gate_coverage.py asks setuptools which packages a build would actually
+    # ship, rather than re-reading pyproject and hoping. It is a build-system requirement
+    # (above), but a build requirement is not installed into the test env — CI has no
+    # setuptools at runtime, so it must be declared here too.
+    "setuptools>=74.0.0",
     # Type stubs for cloud libs (mypy strict)
     "types-requests==2.32.4.20250611",
 ]
@@ -70,6 +75,7 @@ py-modules = ["config", "schema", "main"]
 
 [tool.setuptools.packages.find]
 include = [
+    "api*",
     "auth*",
     "cli*",
     "database*",
@@ -91,6 +97,24 @@ line-length = 100
 select = ["E", "F", "W", "I", "UP", "B", "C4", "RUF"]
 ignore = [
     "E501",   # line-length handled by formatter
+]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection idiom is a call in an argument default, which B008 flags.
+# These callables return immutable markers, so the pattern is correct — but whitelisting the
+# callables (rather than silencing B008 across api/) keeps B008 live there for a genuine
+# mutable default. fastapi is imported nowhere outside api/ and tests/, so this is inert
+# elsewhere.
+extend-immutable-calls = [
+    "fastapi.Body",
+    "fastapi.Cookie",
+    "fastapi.Depends",
+    "fastapi.File",
+    "fastapi.Form",
+    "fastapi.Header",
+    "fastapi.Path",
+    "fastapi.Query",
+    "fastapi.Security",
 ]
 
 [tool.ruff.lint.isort]
