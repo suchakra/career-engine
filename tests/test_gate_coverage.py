@@ -19,6 +19,7 @@ re-reading ``include`` — an ``exclude`` entry can drop a package that ``includ
 
 from __future__ import annotations
 
+import os
 import re
 import tomllib
 from pathlib import Path
@@ -28,6 +29,9 @@ from setuptools import find_packages
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+# Vendored or generated trees — not our source, never gated.
+PRUNED_DIRS: frozenset[str] = frozenset({"node_modules", "__pycache__", "dist", "build"})
+
 # Source roots deliberately left out of the gate. Empty on purpose: an exemption must show
 # up as a visible diff with a reason, never as a silent skip.
 ALLOWED_UNGATED: frozenset[str] = frozenset()
@@ -35,16 +39,44 @@ ALLOWED_UNGATED: frozenset[str] = frozenset()
 # Gated by ruff/mypy, but not shipped in an installed build.
 NOT_DISTRIBUTED: frozenset[str] = frozenset({"tests"})
 
+# Build/test scaffolding: linted like everything else, but it is not a distributable module.
+# Demanding these appear in `py-modules` would tell the author to ship pytest plumbing in
+# the wheel, which is wrong.
+NOT_DISTRIBUTED_MODULES: frozenset[str] = frozenset({"conftest", "setup", "noxfile", "tasks"})
+
+
+def _holds_python(root: Path) -> bool:
+    """Does this tree hold Python source anywhere, ignoring vendored/generated dirs?
+
+    The search is DEEP on purpose. A shallow "*.py directly inside" check misses a root
+    whose Python starts one level down (``<root>/core/thing.py``) — that root is then never
+    discovered, never demanded in SRC_DIRS, and never linted: CLEAN-2 all over again, under
+    a green test.
+    """
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [
+            name
+            for name in dirnames
+            if name not in PRUNED_DIRS
+            and not name.startswith(".")
+            and not name.endswith(".egg-info")
+        ]
+        del dirpath
+        if any(name.endswith(".py") for name in filenames):
+            return True
+    return False
+
 
 def _source_dirs() -> set[str]:
-    """Every top-level directory holding Python source.
-
-    Presence of a ``.py`` file, not of an ``__init__.py`` — see the module docstring.
-    """
+    """Every top-level directory holding Python source, at any depth."""
     return {
         path.name
         for path in REPO_ROOT.iterdir()
-        if path.is_dir() and not path.name.startswith(".") and any(path.glob("*.py"))
+        if path.is_dir()
+        and not path.name.startswith(".")
+        and not path.name.endswith(".egg-info")
+        and path.name not in PRUNED_DIRS
+        and _holds_python(path)
     }
 
 
@@ -76,11 +108,17 @@ def _distributed_packages() -> set[str]:
     package that ``include`` appears to name.
     """
     find = _setuptools_config()["packages"]["find"]
-    found = find_packages(
-        where=str(REPO_ROOT),
-        include=find.get("include", ("*",)),
-        exclude=find.get("exclude", ()),
-    )
+    # `where` must be honoured, not assumed: pointing it at a directory that does not exist
+    # ships NOTHING, and a guard that keeps scanning the repo root would report every
+    # package as present while the real build is empty.
+    where = find.get("where", ["."])
+    found: list[str] = []
+    for root in where:
+        found += find_packages(
+            where=str(REPO_ROOT / root),
+            include=find.get("include", ("*",)),
+            exclude=find.get("exclude", ()),
+        )
     return {name.split(".")[0] for name in found}
 
 
@@ -120,7 +158,9 @@ def test_every_source_root_is_distributed() -> None:
         f"[tool.setuptools.packages.find].include in pyproject.toml (a package also needs an "
         f"__init__.py to be shipped at all), or to NOT_DISTRIBUTED with a reason."
     )
-    orphan_modules = _source_modules() - _distributed_modules() - NOT_DISTRIBUTED
+    orphan_modules = (
+        _source_modules() - _distributed_modules() - NOT_DISTRIBUTED - NOT_DISTRIBUTED_MODULES
+    )
     assert not orphan_modules, (
         f"{sorted(orphan_modules)} are absent from [tool.setuptools] py-modules, so they are "
         f"missing from an installed build."
