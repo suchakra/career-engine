@@ -53,6 +53,11 @@ dev = [
     # Testing
     "pytest==9.1.1",
     "pytest-asyncio==1.4.0",
+    # tests/test_gate_coverage.py asks setuptools which packages a build would actually
+    # ship, rather than re-reading pyproject and hoping. It is a build-system requirement
+    # (above), but a build requirement is not installed into the test env — CI has no
+    # setuptools at runtime, so it must be declared here too.
+    "setuptools>=74.0.0",
     # Type stubs for cloud libs (mypy strict)
     "types-requests==2.32.4.20250611",
 ]
