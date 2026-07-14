@@ -334,23 +334,35 @@ nav shipped past a green suite.
 
 ## Cleanups (non-blocking, do when convenient)
 
-### ⬜ CLEAN-2 — `make check` does not lint `api/` AT ALL
-`SRC_DIRS` in the Makefile omits `api/`, so **ruff never runs on the FastAPI layer** — every route
-and every wire DTO, i.e. the files where the contract actually lives. (`mypy --strict` *does* cover
-them and is clean; it is only the lint lane that is blind.)
+### ⬜ CLEAN-3 — NOTHING gates the generated contract (this is the actual #87 bug)
+**Split out of CLEAN-2, which did not fix it.** CLEAN-2 closed the lint hole over `api/` — but the bug
+it kept citing as motivation, #87, would have sailed straight through it. Worth being precise about,
+because the two are easy to conflate:
 
-**Why it happened:** 39 of the 44 findings in `api/` are `B008` *function-call-in-default-argument* —
-which is FastAPI's `Depends()` idiom, a false positive. The whole directory was excluded to silence one
-noisy rule, and lost lint coverage as collateral.
+- **#87 was staleness of committed ARTEFACTS**, not a lint defect in any `api/*.py`. `openapi.json` and
+  `types.gen.ts` disagreed with the deployed server, and `tsc` couldn't see it because `apiFetch`'s body
+  is typed `unknown`.
+- Those files are produced by a **manual** `npm run gen:openapi` (`frontend/scripts/gen-openapi.sh`) and
+  are checked by **no lane at all** — not `make check`, not `make frontend-check`, not CI. Both are
+  committed precisely so the frontend never needs Python to typecheck, which is also what lets them rot.
 
-**Why it matters:** this is the layer where a stale generated contract shipped in #87 — `openapi.json`
-and `types.gen.ts` disagreed with the deployed server, and `tsc` couldn't see it because `apiFetch`'s
-body is typed `unknown`. A gate that skips the contract layer is a gate with a hole exactly where the
-contract lives.
+**Change:** a pytest that builds the app's schema and compares it to the committed artefact —
+`json.dumps(app.openapi())` vs `frontend/openapi.json` — failing with "run `npm run gen:openapi`" when
+they diverge. Python-only, Node-free, so it lives in the `make check` lane that already runs everywhere.
+Then decide whether `types.gen.ts` needs the same treatment (it is generated *from* `openapi.json`, so
+gating the source may be enough).
 
-**Change:** add `api/` to `SRC_DIRS`, add a `per-file-ignores` entry for `B008` in `api/` (the idiom is
-correct there), then fix the 5 genuine findings (2 × unused-noqa, 1 × unsorted-imports, 1 ×
-ambiguous-unicode, 1 × unsorted-dunder-slots). Small, and it closes a real hole.
+**Care:** the comparison must be stable — key order, and any dict the app builds fresh per process. If
+it flaps, it will be deleted within a week and the hole reopens.
+
+### ✅ CLEAN-2 — `make check` did not lint `api/` AT ALL — SHIPPED (PR #103)
+`SRC_DIRS` omitted `api/`, so ruff never ran over the FastAPI layer — every route and every wire DTO.
+Fixed by whitelisting the FastAPI DI callables (`extend-immutable-calls`) rather than the blanket `B008`
+ignore this ticket originally prescribed: a blanket ignore silences a **genuine** mutable-default bug in
+`api/` too, re-opening a smaller version of the same hole. Also fixed a second instance of the identical
+bug that this spec never mentioned — `api*` was missing from `[tool.setuptools.packages.find].include`,
+so `import api` fails from an installed build. Guarded by `tests/test_gate_coverage.py`. Full account in
+[PROGRESS.md](PROGRESS.md); it does **not** fix #87 — see **CLEAN-3** above.
 
 ### ⬜ CLEAN-1 — Rename the async store functions: `a<name>` → `<name>_async`
 The store's async functions are named by **prepending `a`**: `aadd_manual_entry`,
