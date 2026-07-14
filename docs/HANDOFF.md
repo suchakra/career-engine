@@ -82,16 +82,38 @@
 > Fixed (state closes on the breakpoint change, not just the paint) and **mutation-tested** — delete the
 > guard and a test goes red.
 >
-> 🔴 **NEXT — ⬜ CLEAN-2** (`make check` never lints `api/` — the layer where the contract lives, and where
-> the #87 stale-contract bug shipped), then ⬜ **CQ-7** (spec ready, below).
+> ✅ **CLEAN-2 — `make check` never linted `api/` at all — SHIPPED + deployed to qa** (PR #103, merged
+> `975e2e1`). `SRC_DIRS` omitted `api/`, so **ruff never ran over the FastAPI layer** — every route and every
+> wire DTO, the files where the contract lives. It had been excluded to silence one noisy rule (39 of its 44
+> findings are `B008`, FastAPI's `Depends()` idiom) and lost lint coverage as collateral. Fixed by
+> whitelisting the FastAPI callables (`extend-immutable-calls`), **not** GROOMING's blanket `B008` ignore —
+> a blanket ignore would also silence a *genuine* mutable-default bug in `api/`, i.e. re-open a smaller
+> version of the hole the ticket exists to close. Plan review found a **second instance of the same bug**:
+> `api*` was missing from `[tool.setuptools.packages.find].include`, so `import api` fails from an installed
+> build.
 >
-> Then: ⬜ **CQ-7** bullet variants — **UNBLOCKED, spec is READY** (Sumanta decided 2026-07-13): an
+> ⚠️ **The regression guard was itself the hard part, and review broke it three times.** Each break was
+> CLEAN-2 *re-created under a green test*: v1 keyed discovery on `__init__.py`, so a **namespace package**
+> (no `__init__.py`) was born ungated and invisible; v2 looked only for `.py` directly inside a root, so a
+> root whose Python starts **one level down** was never seen (demonstrated with a file carrying 3 real ruff
+> errors that `make lint` sailed past); v3 checked the *lists* but never that the tools **obey** them — a
+> hardcoded `lint:` recipe, or a second `SRC_DIRS =` that make silently prefers, defeats every assertion.
+> Now mutation-tested 11 ways. **The lesson is the one this file keeps re-learning, applied to a test:** a
+> guard that constructs its own notion of "package" can pass while the thing it guards is wide open.
+>
+> 🔴 **NEXT — ⬜ CQ-7** bullet variants — **UNBLOCKED, spec is READY** (Sumanta decided 2026-07-13): an
 > **accordion on the master portfolio** — the master shows only the **Primary** phrasing so the document
 > stays a clean résumé; a bullet with saved variants gets a **▶ and a count badge**; expanding reveals the
 > alternates indented, with **Promote** to make one the new Primary. Full spec + the four rules in
 > [GROOMING.md](GROOMING.md). **The trap to avoid:** a variant must NOT count as its own uncovered bullet,
 > or adding one to a finished entry re-opens it and the grill demands a metric for a line the user just
 > wrote — the CQ-5b failure, and the likeliest way to get this ticket wrong.
+>
+> Then the cleanups: ⬜ **CLEAN-3** — **nothing gates the generated contract, and this is the actual #87
+> bug.** CLEAN-2 kept citing #87 as its motivation but would **not** have caught it: #87 was staleness of the
+> committed *artefacts* (`openapi.json` / `types.gen.ts` disagreed with the deployed server), not a lint
+> defect in any `api/*.py`. Those files come from a **manual** `npm run gen:openapi` and are checked by **no
+> lane at all**. Spec in [GROOMING.md](GROOMING.md). Then ⬜ **CLEAN-1** (rename the `a`-prefixed async fns).
 >
 > (superseded) ⬜ **CQ-7** bullet variants — **BLOCKED ON A PRODUCT DECISION (ask Sumanta).** GROOMING's third
 > destination ("persist as a new variant, original kept") is underspecified: a variant is an *alternate
